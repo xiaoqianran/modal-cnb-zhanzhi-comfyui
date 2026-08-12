@@ -18,8 +18,6 @@ from pathlib import Path
 
 import modal
 
-from env_tokens import read_dotenv, token_secret_dict
-
 REPO_ROOT = Path(__file__).resolve().parent
 APP_NAME = os.environ.get("MODAL_APP_NAME", "zhanzhi-comfyui")
 GPU = os.environ.get("MODAL_GPU", "L40S")
@@ -44,17 +42,16 @@ data_vol = modal.Volume.from_name(
 def _optional_secrets() -> list[modal.Secret]:
     """Turn local HF / Civitai / GitHub tokens into a Modal Secret.
 
-    Reads ``HF_TOKEN`` / ``CIVITAI_TOKEN`` / ``GITHUB_TOKEN`` (and aliases)
-    from the process environment and from a gitignored ``.env``. Other ``.env``
-    keys are not uploaded. ``from_dict`` must run locally (``modal serve`` /
-    ``deploy``), not inside a container.
+    Always returns one Secret so ``modal serve`` (local decorator) and the
+    remote hydrate see the same dependency count.
     """
-    if not modal.is_local():
-        return []
-    dotenv = read_dotenv(REPO_ROOT / ".env")
-    payload = token_secret_dict(os.environ, dotenv)
+    payload: dict[str, str] = {}
+    if modal.is_local():
+        from env_tokens import read_dotenv, token_secret_dict
+
+        payload = token_secret_dict(os.environ, read_dotenv(REPO_ROOT / ".env"))
     if not payload:
-        return []
+        payload = {"_zhanzhi_secret": "1"}
     return [modal.Secret.from_dict(payload)]
 
 
@@ -145,10 +142,18 @@ def build_image() -> modal.Image:
             "python3 /opt/modal-cnb/scripts/apply_hook.py --comfy /opt/zhanzhi/ComfyUI",
             secrets=secrets,
         )
+        # Custom nodes may install a torchaudio wheel that does not match
+        # Torch 2.9.0+cu130; ComfyUI imports torchaudio at startup.
+        image = image.run_commands(
+            "uv pip install --system torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu130",
+        )
     return image
 
 
-image = build_image()
+image = build_image().add_local_file(
+    str(REPO_ROOT / "env_tokens.py"),
+    remote_path="/root/env_tokens.py",
+)
 
 _VOLUME_MAP = {
     MODELS_ROOT: models_vol,
