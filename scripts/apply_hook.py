@@ -73,7 +73,12 @@ def install_hook_files(comfy: Path) -> None:
         src = _PATCHES / name
         if not src.is_file():
             raise SystemExit(f"missing {src}")
-        shutil.copy2(src, comfy / name)
+        dst = comfy / name
+        # CNB's hook is a symlink to /workspace/assets/hook_cnb_xu.py, which
+        # does not exist on Modal. copy2 cannot overwrite a dangling symlink.
+        if dst.is_symlink() or dst.exists():
+            dst.unlink()
+        shutil.copy2(src, dst)
 
 
 def main(argv: list[str] | None = None) -> int:
