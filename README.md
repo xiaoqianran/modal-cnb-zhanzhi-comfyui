@@ -23,7 +23,9 @@ CNB 真正在做的事只有四层：
 | `extra_model_paths.yaml` **再加** `ComfyUI/models -> /models` | CNB 扫了两遍同一棵树；这里只保留软链 |
 | 把 `source.json` / `初始化下载` 复制进本仓库 | 运行时从绽知仓库读取，避免和上游漂移 |
 
-上游 ComfyUI、74 个插件、107 个工作流、模型目录 **仍然来自绽知仓库**，由 `scripts/clone_cnb.sh` 浅克隆（跳过 LFS / venv）。
+上游 ComfyUI、74 个插件、107 个工作流 **仍然来自绽知仓库**。GitHub Action `mirror-cnb` 每天用 `scripts/clone_cnb.sh` 从 `cnb.cool` 浅拉一份（不拉 LFS / venv / `git_backup`），推到本仓库的 **`cnb-mirror` 分支**。Modal 默认从这条 GitHub 分支克隆，避免构建机直连 CNB。
+
+合并后请先在 Actions 里手动 **Run workflow** 一次，等 `cnb-mirror` 出现后再 `modal serve`。
 
 ## 对应关系
 
@@ -64,7 +66,10 @@ flowchart LR
 
 ```
 app.py                 Modal App（镜像、Volume、UI、prefetch）
-scripts/clone_cnb.sh   浅克隆绽知仓库（无 LFS、无 venv）
+scripts/clone_cnb.sh   浅克隆绽知仓库：depth=1、blob:none、按插件分片、HTTP/1.1 重试
+scripts/sanitize_cnb_tree.sh  去掉 git_backup / venv / 超大文件
+scripts/publish_cnb_mirror.sh 把浅克隆快照提交到分支 cnb-mirror
+.github/workflows/mirror-cnb.yml  每天从 cnb.cool 拉一次，推到 cnb-mirror
 scripts/bootstrap.sh   布局软链 + hook + 后台预取 + 启动
 scripts/start_comfyui.sh
 scripts/prefetch.py    解析并执行「初始化下载」
@@ -80,6 +85,7 @@ config/prefetch.extra.sh
 ```bash
 pip install -r requirements.txt
 modal setup
+# 合并后先在 GitHub Actions 跑一次 mirror-cnb，生成 cnb-mirror 分支
 
 # 1) （推荐）先在 CPU 上把「初始化下载」写进 Volume，避免 GPU 空转
 modal run app.py --action prefetch
@@ -102,14 +108,26 @@ modal run app.py --action status
 MODAL_GPU=H100 modal deploy app.py
 ```
 
-只更新绽知仓库里的插件/工作流：改 `CNB_REPO_REF` 后重新 deploy（镜像层会重克隆）。不要把那 50GB+ 的 Git LFS 推进本仓库。
+只更新绽知仓库里的插件/工作流：等每日 `mirror-cnb` 跑完（或手动 Run workflow），再重新 deploy。不要把那 50GB+ 的 Git LFS 推进 `main`。
+
+### 每日镜像（GitHub Action）
+
+公开 workflow：`.github/workflows/mirror-cnb.yml`。
+
+- 每天 02:00（北京时间）从 `https://cnb.cool/zhan_zhi/ComfyUI.git` 浅克隆
+- 去掉 `venv312`、`models`、插件里的 `git_backup`、超过 90MB 的文件
+- 推到本仓库分支 **`cnb-mirror`**（不碰 `main`）
+- 也可在 Actions 页手动 **Run workflow**
+
+不需要额外 Secret，用仓库自带的 `GITHUB_TOKEN` 即可。`cnb-mirror` 是快照分支，不要往上面开功能 PR。
 
 ### 环境变量
 
 见 `.env.example`。常用：
 
 - `MODAL_GPU` — 默认 `L40S`
-- `CNB_REPO_URL` / `CNB_REPO_REF` — 绽知仓库；可换成你自己的 fork / GitHub 镜像
+- `CNB_REPO_URL` / `CNB_REPO_REF` — 默认本仓库的 `cnb-mirror`（每日 Action 从 CNB 同步）。要直连绽知可改回 `https://cnb.cool/zhan_zhi/ComfyUI.git` + `main`
+- `CNB_CLONE_RETRIES` — 每个分片 fetch 失败后的重试次数，默认 `5`
 - `MODAL_BAKE_CNB=0` — 镜像里不克隆，容器启动时再克隆（冷启动更慢，镜像更小）
 - `PREFETCH=0` — UI 启动时不要后台预取（你已经跑过 `prefetch` 时很有用）
 - `COMFY_EXTRA_ARGS` — 追加给 `main.py`，例如 `--use-flash-attention`
@@ -150,7 +168,7 @@ pytest -q
 
 ## 限制
 
-- Modal 构建机必须能访问 `cnb.cool`（克隆 + 下 LFS 模型 URL）。若被墙，把 `CNB_REPO_URL` 换成镜像，并把 `source_2.json` 改成 Hugging Face 地址。  
+- Modal 构建机默认克隆本仓库的 `cnb-mirror`（由 GitHub Action 每天从 `cnb.cool` 同步）。镜像分支还不存在时，先在 Actions 跑 `mirror-cnb`。模型 URL 仍可能指向 CNB LFS；若被墙，把 `source_2.json` 改成 Hugging Face 地址。  
 - SageAttention / flash-attn 没有默认编进镜像（CNB 自己也说 flash-attn 很难装）。需要时自行加进 Image 或 `COMFY_EXTRA_ARGS`。  
 - 部分插件的 `requirements.txt` 在镜像构建时是 best-effort，冲突不会让整镜像失败；缺依赖时看 Modal 日志再补。  
 - ComfyUI Manager 在运行时新装的插件写在镜像层，容器回收即消失。要把插件固化，请改绽知 fork 后重构建，或自行把 `custom_nodes` 挂到 Volume。

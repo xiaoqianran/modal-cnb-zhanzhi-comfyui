@@ -1,0 +1,65 @@
+# Daily (and manual) mirror of zhan_zhi/ComfyUI from cnb.cool onto branch
+# cnb-mirror of this repository. Modal clones that branch instead of CNB.
+#
+# The workflow is public; CNB is a public git URL. No extra secrets.
+# GITHUB_TOKEN (contents: write) is enough to push cnb-mirror.
+
+name: mirror-cnb
+
+on:
+  schedule:
+    # 02:00 Asia/Shanghai
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+    inputs:
+      cnb_ref:
+        description: "CNB branch or tag to mirror"
+        required: false
+        default: "main"
+
+concurrency:
+  group: mirror-cnb
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      CNB_REPO_URL: https://cnb.cool/zhan_zhi/ComfyUI.git
+      CNB_REPO_REF: ${{ github.event.inputs.cnb_ref || 'main' }}
+      CNB_HTTP_VERSION: HTTP/1.1
+      CNB_CLONE_RETRIES: "8"
+      GIT_LFS_SKIP_SMUDGE: "1"
+      MIRROR_BRANCH: cnb-mirror
+    steps:
+      - name: Checkout deploy scripts
+        uses: actions/checkout@v4
+        with:
+          path: deploy-scripts
+
+      - name: Checkout or init cnb-mirror
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$REPO" "$MIRROR_BRANCH"; then
+            git clone --depth 1 --branch "$MIRROR_BRANCH" "$REPO" cnb-mirror
+          else
+            mkdir cnb-mirror
+            git -C cnb-mirror init
+            git -C cnb-mirror checkout -B "$MIRROR_BRANCH"
+            git -C cnb-mirror remote add origin "$REPO"
+          fi
+
+      - name: Shallow-clone CNB
+        run: bash deploy-scripts/scripts/clone_cnb.sh "$GITHUB_WORKSPACE/zhanzhi"
+
+      - name: Publish cnb-mirror
+        env:
+          MIRROR_PUSH: "1"
+        run: bash deploy-scripts/scripts/publish_cnb_mirror.sh "$GITHUB_WORKSPACE/zhanzhi" "$GITHUB_WORKSPACE/cnb-mirror"

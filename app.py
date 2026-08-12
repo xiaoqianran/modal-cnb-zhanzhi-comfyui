@@ -57,8 +57,11 @@ def build_image() -> modal.Image:
         "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04",
     )
     torch_index = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    repo_url = os.environ.get("CNB_REPO_URL", "https://cnb.cool/zhan_zhi/ComfyUI.git")
-    repo_ref = os.environ.get("CNB_REPO_REF", "main")
+    repo_url = os.environ.get(
+        "CNB_REPO_URL",
+        "https://github.com/xiaoqianran/modal-cnb-zhanzhi-comfyui.git",
+    )
+    repo_ref = os.environ.get("CNB_REPO_REF", "cnb-mirror")
     bake_cnb = os.environ.get("MODAL_BAKE_CNB", "1") != "0"
     secrets = _optional_secrets()
 
@@ -92,6 +95,8 @@ def build_image() -> modal.Image:
                 "MODAL_CNB": "/opt/modal-cnb",
                 "CNB_REPO_URL": repo_url,
                 "CNB_REPO_REF": repo_ref,
+                "CNB_CLONE_RETRIES": os.environ.get("CNB_CLONE_RETRIES", "5"),
+                "CNB_HTTP_VERSION": os.environ.get("CNB_HTTP_VERSION", "HTTP/1.1"),
                 "GIT_LFS_SKIP_SMUDGE": "1",
                 "PYTHONUNBUFFERED": "1",
                 "UV_SYSTEM_PYTHON": "1",
