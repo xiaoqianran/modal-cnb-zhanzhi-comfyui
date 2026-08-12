@@ -26,7 +26,7 @@ export GIT_TERMINAL_PROMPT=0
 export GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-1000}"
 export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-60}"
 
-CONE_TOP_DIRS=(ComfyUI 工作流 assets)
+HERE="$(cd "$(dirname "$0")" && pwd)"
 
 log() { echo "[clone] $*"; }
 
@@ -118,6 +118,8 @@ list_custom_nodes() {
   git_tree FETCH_HEAD:custom_nodes 2>/dev/null || true
 }
 
+CONE_TOP_DIRS=(ComfyUI 工作流 assets)
+
 materialize() {
   local dir
   for dir in "${CONE_TOP_DIRS[@]}"; do
@@ -138,15 +140,6 @@ materialize() {
   log "custom_nodes materialized: ${count}"
 }
 
-drop_unused() {
-  rm -rf \
-    "$DEST/venv312" \
-    "$DEST/ComfyUI/.git_backup" \
-    "$DEST/assets/tools/cache" \
-    "$DEST/models" \
-    "$DEST/输入"
-}
-
 configure_github_https
 mkdir -p "$(dirname "$DEST")"
 
@@ -162,7 +155,7 @@ else
 fi
 
 materialize
-drop_unused
+bash "$HERE/sanitize_cnb_tree.sh" "$DEST"
 
 if [[ ! -f "$DEST/ComfyUI/main.py" ]]; then
   log "ComfyUI/main.py missing after clone"

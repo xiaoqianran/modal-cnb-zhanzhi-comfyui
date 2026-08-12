@@ -23,6 +23,8 @@ def make_remote(tmp_path: Path) -> Path:
     (remote / "ComfyUI" / ".git_backup" / "x").write_text("backup\n", encoding="utf-8")
     (remote / "custom_nodes" / "NodeA").mkdir(parents=True)
     (remote / "custom_nodes" / "NodeB").mkdir(parents=True)
+    (remote / "custom_nodes" / "NodeA" / "git_backup" / "objects").mkdir(parents=True)
+    (remote / "custom_nodes" / "NodeA" / "git_backup" / "objects" / "pack.bin").write_text("pack\n", encoding="utf-8")
     (remote / "custom_nodes" / "NodeA" / "__init__.py").write_text("a\n", encoding="utf-8")
     (remote / "custom_nodes" / "NodeB" / "__init__.py").write_text("b\n", encoding="utf-8")
     (remote / "工作流").mkdir()
@@ -82,6 +84,7 @@ def test_shallow_clone_skips_heavy_trees_and_keeps_nodes(tmp_path):
     assert not (dest / "models").exists()
     assert not (dest / "输入").exists()
     assert not (dest / "ComfyUI" / ".git_backup").exists()
+    assert not (dest / "custom_nodes" / "NodeA" / "git_backup").exists()
     assert not (dest / "assets" / "tools" / "cache").exists()
 
 
