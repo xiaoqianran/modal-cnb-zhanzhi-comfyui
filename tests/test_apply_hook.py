@@ -23,3 +23,15 @@ def test_install_hook_files(tmp_path):
     install_hook_files(comfy)
     assert (comfy / "hook_cnb_xu.py").is_file()
     assert (comfy / "catalog.py").is_file()
+
+
+def test_install_hook_files_replaces_dangling_cnb_symlink(tmp_path):
+    comfy = tmp_path / "ComfyUI"
+    comfy.mkdir()
+    dangling = comfy / "hook_cnb_xu.py"
+    dangling.symlink_to("/workspace/assets/hook_cnb_xu.py")
+    assert dangling.is_symlink()
+    install_hook_files(comfy)
+    assert dangling.is_file()
+    assert not dangling.is_symlink()
+    assert "hook_cnb_xu" in dangling.read_text(encoding="utf-8")
