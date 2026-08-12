@@ -85,7 +85,8 @@ config/prefetch.extra.sh
 ```bash
 pip install -r requirements.txt
 modal setup
-# 合并后先在 GitHub Actions 跑一次 mirror-cnb，生成 cnb-mirror 分支
+# 把 HF_TOKEN / CIVITAI_TOKEN / GITHUB_TOKEN 写进 .env（不要写 MODAL_SECRETS）
+# Modal 从本仓库 cnb-mirror 拉 ComfyUI；该分支由 Action 每天从 CNB 同步
 
 # 1) （推荐）先在 CPU 上把「初始化下载」写进 Volume，避免 GPU 空转
 modal run app.py --action prefetch
@@ -131,7 +132,7 @@ MODAL_GPU=H100 modal deploy app.py
 - `MODAL_BAKE_CNB=0` — 镜像里不克隆，容器启动时再克隆（冷启动更慢，镜像更小）
 - `PREFETCH=0` — UI 启动时不要后台预取（你已经跑过 `prefetch` 时很有用）
 - `COMFY_EXTRA_ARGS` — 追加给 `main.py`，例如 `--use-flash-attention`
-- `MODAL_SECRETS` — 默认挂载 Modal Secret `huggingface`、`civitai`、`github`（提供 `HF_TOKEN` / `CIVITAI_TOKEN` / `GITHUB_TOKEN`）
+- `HF_TOKEN` / `CIVITAI_TOKEN` / `GITHUB_TOKEN` — 写进 gitignored 的 `.env` 即可。`modal serve` / `modal deploy` 会把这三个 token（以及 `HUGGING_FACE_HUB_TOKEN` / `CIVITAI_API_TOKEN` / `GH_TOKEN` 别名）做成 Modal Secret 注入镜像构建和容器；**不必**写 `MODAL_SECRETS`，也不必先在 Dashboard 建 named secret。`.env` 里的其它键（如 `MODAL_GPU`）不会被上传。
 - `TORCH_INDEX_URL` — 默认 cu130；若驱动不够新，可改 `https://download.pytorch.org/whl/cu128`
 
 ### 自己的模型
