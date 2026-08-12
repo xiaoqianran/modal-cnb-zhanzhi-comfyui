@@ -27,9 +27,19 @@ def test_sanitize_drops_nested_git_and_oversized_files(tmp_path):
     dest = tmp_path / "tree"
     (dest / "ComfyUI").mkdir(parents=True)
     (dest / "ComfyUI" / "main.py").write_text("ok\n", encoding="utf-8")
+    git_dir = dest / ".git" / "objects" / "pack"
+    git_dir.mkdir(parents=True)
+    pack = git_dir / "pack-big.pack"
+    pack.write_bytes(b"\0")
+    os.truncate(pack, 91 * 1024 * 1024)
     (dest / "custom_nodes" / "NodeA" / "git_backup" / "objects").mkdir(parents=True)
     (dest / "custom_nodes" / "NodeA" / "git_backup" / "objects" / "pack.bin").write_text("pack\n", encoding="utf-8")
     (dest / "custom_nodes" / "NodeA" / "__init__.py").write_text("a\n", encoding="utf-8")
+    pointer = dest / "custom_nodes" / "NodeA" / "weights.safetensors"
+    pointer.write_text(
+        "version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 1\n",
+        encoding="utf-8",
+    )
     (dest / "venv312" / "lib").mkdir(parents=True)
     (dest / "venv312" / "lib" / "foo").write_text("venv\n", encoding="utf-8")
     big = dest / "custom_nodes" / "NodeA" / "weights.bin"
@@ -41,6 +51,8 @@ def test_sanitize_drops_nested_git_and_oversized_files(tmp_path):
     assert not (dest / "custom_nodes" / "NodeA" / "git_backup").exists()
     assert not (dest / "venv312").exists()
     assert not big.exists()
+    assert not pointer.exists()
+    assert pack.is_file()
 
 
 def test_publish_commits_rsync_snapshot(tmp_path):
@@ -49,6 +61,7 @@ def test_publish_commits_rsync_snapshot(tmp_path):
     (src / "ComfyUI" / "main.py").write_text("comfy\n", encoding="utf-8")
     (src / "custom_nodes" / "NodeA").mkdir(parents=True)
     (src / "custom_nodes" / "NodeA" / "__init__.py").write_text("a\n", encoding="utf-8")
+    (src / ".gitattributes").write_text("*.tar filter=lfs diff=lfs merge=lfs -text\n*.py text\n", encoding="utf-8")
     _git(src, "init", "--quiet")
     _git(src, "config", "user.email", "t@t")
     _git(src, "config", "user.name", "t")
@@ -65,6 +78,9 @@ def test_publish_commits_rsync_snapshot(tmp_path):
         env={**os.environ, "MIRROR_PUSH": "0", "CNB_REPO_REF": "main"},
     )
     assert (mirror / "ComfyUI" / "main.py").is_file()
+    attrs = (mirror / ".gitattributes").read_text(encoding="utf-8")
+    assert "filter=lfs" not in attrs
+    assert "*.py text" in attrs
     assert (mirror / ".cnb-mirror-meta").read_text(encoding="utf-8").find(sha) >= 0
     assert "committed" in result.stdout
     log = _git(mirror, "log", "-1", "--oneline").stdout
