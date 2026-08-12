@@ -1,0 +1,11 @@
+.gitattributes
+.github/workflows/publish.yml
+.gitignore
+__init__.py
+example_workflows/melband_example.json
+model/mel_band_roformer.py
+model/mel_converter.py
+nodes.py
+pyproject.toml
+readme.md
+requirements.txt

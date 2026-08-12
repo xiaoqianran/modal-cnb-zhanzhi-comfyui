@@ -1,0 +1,55 @@
+.github/workflows/publish.yml
+.gitignore
+.prettierrc
+Compositor3.py
+Compositor4.py
+Compositor4MasksOutput.py
+Compositor4TransformsOut.py
+CompositorColorPicker.py
+CompositorConfig3.py
+CompositorConfig4.py
+CompositorMasksOutputV3.py
+CompositorTools3.py
+CompositorTransformsOut3.py
+ImageColorSampler.py
+LICENSE
+README.md
+__init__.py
+assets/bear.jpg
+assets/forest.jpg
+assets/gallerySamples.jpg
+assets/output examples/ComfyUI_00286_.png
+assets/output examples/ComfyUI_00356_.png
+assets/output examples/ComfyUI_00360_.png
+assets/output examples/ComfyUI_00369_.png
+assets/output examples/ComfyUI_00370_.png
+assets/output examples/ComfyUI_00392_.png
+assets/showreel1.jpg
+assets/showreel1.png
+assets/v3.0.2.PNG
+assets/v3.1.PNG
+assets/v3.1.json
+assets/v3.PNG
+assets/v4.png
+assets/v4_out.png
+assets/warrior.jpg
+assets/weak.png
+assets/wolf.jpg
+assets/workflows/compositorMasksV3_sample.json
+assets/workflows/compositorMasksV3_sample_assets/ComfyUI_00159_.png
+assets/workflows/compositorMasksV3_sample_assets/ComfyUI_00160_.png
+assets/workflows/compositorMasksV3_sample_assets/ComfyUI_00161_.png
+assets/workflows/compositorMasksV3_sample_assets/ComfyUI_00162_.png
+assets/workflows/v3.1.0_multiple_instances_with_lettering.json
+assets/workflows/v3.json
+pyproject.toml
+web/colorPicker.js
+web/compositor3.js
+web/compositor4.js
+web/empty.png
+web/fabric.js
+web/fabricNew.js
+web/imageSampler.js
+web/test.png
+web/test_2.png
+web/tools.js

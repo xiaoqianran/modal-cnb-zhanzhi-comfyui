@@ -1,0 +1,180 @@
+{
+    "PromptEnhancerPreset": {
+        "title": "提示词增强预设",
+        "inputs": {},
+        "widgets": {
+            "preset": "预设"
+        },
+        "outputs": {
+            "system_prompt": "系统提示词"
+        }
+    },
+    "bbox_to_mask": {
+        "title": "边界框转遮罩",
+        "inputs": {
+            "image": "图像"
+        },
+        "widgets": {
+            "bboxes": "边界框集合",
+            "dilation": "膨胀",
+            "feather": "羽化"
+        },
+        "outputs": {
+            "mask": "遮罩"
+        }
+    },
+    "bbox_to_segs": {
+        "title": "边界框转分割数据",
+        "inputs": {
+            "image": "图像"
+        },
+        "widgets": {
+            "bboxes": "边界框集合",
+            "dilation": "膨胀",
+            "feather": "羽化"
+        },
+        "outputs": {
+            "output_0": "分割数据"
+        }
+    },
+    "bboxes_to_bbox": {
+        "title": "边界框集合转单个边界框",
+        "inputs": {},
+        "widgets": {
+            "bbox_index": "边界框索引",
+            "bboxes": "边界框集合",
+            "image_index": "图像索引"
+        },
+        "outputs": {
+            "bbox": "单个边界框"
+        }
+    },
+    "json_to_bbox": {
+        "title": "JSON转边界框集合",
+        "inputs": {
+            "image": "图像",
+            "json": "JSON数据"
+        },
+        "widgets": {
+            "label": "标签",
+            "mode": "模式"
+        },
+        "outputs": {
+            "bboxes": "边界框集合",
+            "image_list": "图像列表"
+        }
+    },
+    "llama_cpp_clean_states": {
+        "title": "Llama-cpp 清理状态",
+        "inputs": {},
+        "widgets": {
+            "any": "任意输入",
+            "state_uid": "状态UID"
+        },
+        "outputs": {
+            "any": "任意输出"
+        }
+    },
+    "llama_cpp_instruct_adv": {
+        "title": "Llama-cpp 指令处理",
+        "inputs": {
+            "images": "图像"
+        },
+        "widgets": {
+            "custom_prompt": "自定义提示词",
+            "force_offload": "强制卸载",
+            "inference_mode": "推理模式",
+            "llama_model": "Llama模型",
+            "max_frames": "最大帧数",
+            "max_size": "最大尺寸",
+            "parameters": "参数集",
+            "preset_prompt": "预设提示词",
+            "queue_handler": "队列处理器",
+            "save_states": "保存状态",
+            "seed": "随机种子",
+            "system_prompt": "系统提示词"
+        },
+        "outputs": {
+            "output": "输出结果",
+            "output_list": "输出列表",
+            "state_uid": "状态UID"
+        }
+    },
+    "llama_cpp_model_loader": {
+        "title": "Llama-cpp 模型加载器",
+        "inputs": {},
+        "widgets": {
+            "chat_handler": "对话处理器",
+            "image_max_tokens": "图像最大令牌数",
+            "image_min_tokens": "图像最小令牌数",
+            "mmproj": "多模态投影文件",
+            "model": "模型文件",
+            "n_ctx": "上下文窗口大小",
+            "vram_limit": "显存限制"
+        },
+        "outputs": {
+            "llama_model": "Llama模型"
+        }
+    },
+    "llama_cpp_parameters": {
+        "title": "Llama-cpp 参数设置",
+        "inputs": {},
+        "widgets": {
+            "frequency_penalty": "频率惩罚",
+            "max_tokens": "最大令牌数",
+            "min_p": "最小概率阈值",
+            "mirostat_eta": "Mirostat 学习率",
+            "mirostat_mode": "Mirostat 模式",
+            "mirostat_tau": "Mirostat 目标值",
+            "presence_penalty": "出现惩罚",
+            "repeat_penalty": "重复惩罚",
+            "state_uid": "状态UID",
+            "temperature": "温度系数",
+            "top_k": "采样候选数",
+            "top_p": "核采样阈值",
+            "typical_p": "典型采样阈值"
+        },
+        "outputs": {
+            "parameters": "参数集"
+        }
+    },
+    "llama_cpp_unload_model": {
+        "title": "Llama-cpp 卸载模型",
+        "inputs": {},
+        "widgets": {
+            "any": "任意输入"
+        },
+        "outputs": {
+            "any": "任意输出"
+        }
+    },
+    "parse_json_node": {
+        "title": "解析JSON",
+        "inputs": {
+            "input": "输入"
+        },
+        "widgets": {
+            "default": "默认值",
+            "key": "键"
+        },
+        "outputs": {
+            "any": "任意类型",
+            "boolean": "布尔值",
+            "float": "浮点数",
+            "int": "整数",
+            "string": "字符串"
+        }
+    },
+    "remove_code_block": {
+        "title": "解包代码块",
+        "inputs": {
+            "input": "输入"
+        },
+        "widgets": {
+            "label": "标签"
+        },
+        "outputs": {
+            "output": "输出"
+        }
+    }
+}

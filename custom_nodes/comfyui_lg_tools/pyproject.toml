@@ -1,0 +1,14 @@
+[project]
+name = "comfyui_lg_tools"
+description = "This is a toolset designed for ComfyUI by LAOGOU-666, providing a series of practical image processing and operation nodes, making our operation more intuitive and convenient"
+version = "1.4.2"
+license = { text = "MIT License" }
+dependencies = ["opencv-contrib-python"]
+
+[project.urls]
+Repository = "https://github.com/LAOGOU-666/Comfyui_LG_Tools"
+
+[tool.comfy]
+PublisherId = "laogou666" 
+DisplayName = "Comfyui_LG_Tools"
+Icon = ""

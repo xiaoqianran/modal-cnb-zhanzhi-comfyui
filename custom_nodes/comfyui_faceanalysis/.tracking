@@ -1,0 +1,12 @@
+faceanalysis.py
+__init__.py
+face_analysis.json
+Inconsolata.otf
+README.md
+LICENSE
+requirements.txt
+.gitignore
+face_analysis.jpg
+pyproject.toml
+.github/workflows/publish.yml
+dlib/dlib_models_here.txt

@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# 将需要在初始化阶段执行的下载命令写在这里，一个命令一行，环境启动后会自动按顺序下载模型
+# 例如：
+# aria2c -x 4 -s 4 -c -d "/workspace/models/checkpoints" -o "ace_step_v1_3.5b.safetensors" "https://cnb.cool/ai-models/Comfy-Org/ACE-Step_ComfyUI_repackaged/-/lfs/f07cad74c4adce52ca14ca1bdf74cf3c14cbafb0823b95eca4459467fa369f40"
+# 注意添加下载命令后需要在终端运行提交命令： add 初始化下载
+aria2c -x 4 -s 4 -c -d "/models/SEEDVR2" -o "seedvr2_ema_3b_fp8_e4m3fn.safetensors" "https://cnb.cool/fuliai/comfyui_pro/-/lfs/3bf1e43ebedd570e7e7a0b1b60d6a02e105978f505c8128a241cde99a8240cff"
+aria2c -x 4 -s 4 -c -d "/models/SEEDVR2" -o "ema_vae_fp16.safetensors" "https://cnb.cool/fuliai/comfyui_pro/-/lfs/20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"
+aria2c -x 4 -s 4 -c -d "/models/detection" -o "vitpose-l-wholebody.onnx" "https://cnb.cool/hujuyingz/comfyui_pro/-/lfs/89bdf6692d9224dbd5004dcef23a9ba2d54c5776212b359d5a5b5068ac14fd08"
+aria2c -x 4 -s 4 -c -d "/models/detection" -o "yolov10m.onnx" "https://cnb.cool/hujuyingz/comfyui_pro/-/lfs/89b526498a6d55f869a6ab52e3a2eb20ad45b3711c1f7de3dd9ca0b399dfd6d7"

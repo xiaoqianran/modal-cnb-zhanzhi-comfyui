@@ -1,0 +1,30 @@
+{
+    "自定义下载链接说明：": "该文件需严格遵守json格式，主要是标点符号，格式不对无法加载。支持多级文件夹前缀。",
+    "checkpoints": {
+        "多级文件夹示例/multi-level folders/majicmixRealistic_v7.safetensors": "https://cnb.cool/ai-models/digiplay/majicMIX_realistic_v7/-/lfs/7c819b6d13663ed720c2254f4fe18373107dfef2448d337913c8fc545640881e"
+    },
+    "clip": {
+        
+    },
+    "clip_vision": {
+        
+    },
+    "controlnet": {
+        
+    },
+    "diffusion_models": {
+        
+    },
+    "loras": {
+        
+    },
+    "text_encoders": {
+        
+    },
+    "upscale_models": {
+        
+    },
+    "vae": {
+        
+    }
+}

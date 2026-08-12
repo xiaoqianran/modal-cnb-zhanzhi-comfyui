@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# =================================================================================================
+#  ComfyUI 启动脚本 (V15.1 深度融合优化版)
+#  优化点：保留 L40 异步性能 | 吸收 V13.3 安全绑定 | 修复 RAM 溢出风险
+#  更新说明：移除 SoX 检测逻辑（已并入镜像系统级依赖）
+# =================================================================================================
+
+set -e
+
+# --- 1. 进程清理 (防止端口占用或残留进程) ---
+echo "🧹 Cleaning up previous processes..."
+pkill -f "python main.py" || true
+pkill -f "comfyui" || true
+sleep 1
+
+# --- 2. 环境变量极速配置 ---
+export PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
+export PIP_TRUSTED_HOST="mirrors.aliyun.com"
+export HF_ENDPOINT="https://hf-mirror.com" 
+
+# 【新增优化 1】：启用延迟加载，进一步缩短启动初期的显存/内存峰值占用
+export CUDA_MODULE_LOADING=LAZY
+
+# 激活虚拟环境
+VENV_ACTIVATE_PATH="/workspace/venv312/bin/activate"
+[ -f "$VENV_ACTIVATE_PATH" ] && source "$VENV_ACTIVATE_PATH"
+
+# --- 3. 硬件策略引擎 (核心优化) ---
+GPU_NAME_RAW=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+echo "🔍 Detected GPU: $GPU_NAME_RAW"
+
+ARGS_VRAM="--normalvram" 
+ARGS_VAE="" 
+
+# NVIDIA L40 (48GB) 专属深度定制策略
+if echo "$GPU_NAME_RAW" | grep -iq "L40"; then
+    echo "⚡ Configuration: NVIDIA L40 (High Performance Mode)"
+    
+    # 显式绑定 0 号 GPU，避免多卡环境下的驱动冲突
+    export CUDA_VISIBLE_DEVICES=0
+    
+    # 【核心显存优化】：使用 Async 分配器 + 动态显存扩展 + 积极回收碎片
+    export PYTORCH_CUDA_ALLOC_CONF="backend:cudaMallocAsync,expandable_segments:True,garbage_collection_threshold:0.6"
+    
+    # 线程策略：L40 (AMD EPYC 环境) 锁定 8 线程可获得最佳上下文切换效率
+    export OMP_NUM_THREADS=8
+    export MKL_NUM_THREADS=8
+    export NUMEXPR_NUM_THREADS=8
+    
+    # 【内存管理】：解决容器内 64GB RAM 容易被 glibc 缓存占满的问题
+    export MALLOC_TRIM_THRESHOLD_=67108864
+
+# NVIDIA H20 策略
+elif echo "$GPU_NAME_RAW" | grep -iq "H20"; then
+    export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:1024"
+    export OMP_NUM_THREADS=32
+else
+    export OMP_NUM_THREADS=$(nproc)
+    export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128"
+fi
+
+# --- 4. 目录与环境预处理 ---
+cd "/workspace/ComfyUI"
+
+# 确保核心目录存在
+mkdir -p output input /workspace/输出 /workspace/输入
+
+# 静默维护软链接，兼容中文路径习惯
+ln -snf /workspace/ComfyUI/output /workspace/输出 >/dev/null 2>&1
+rm -rf /workspace/ComfyUI/input
+ln -snf /workspace/输入 /workspace/ComfyUI/input >/dev/null 2>&1
+
+# --- 5. 启动 ---
+# --disable-cuda-malloc: 禁用自带驱动分配器，以启用 PYTORCH_CUDA_ALLOC_CONF 配置的高级 backend
+ARGS_EXTRA="--disable-cuda-malloc"
+
+echo "RUNNING: python main.py $ARGS_VRAM $ARGS_VAE $ARGS_EXTRA"
+
+# 使用 exec 确保 Python 进程成为主进程，正确接收系统信号
+exec python main.py \
+    --listen \
+    --port 8188 \
+    --enable-cors-header \
+    --preview-method auto \
+    $ARGS_VRAM \
+    $ARGS_VAE \
+    $ARGS_EXTRA

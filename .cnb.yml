@@ -1,0 +1,32 @@
+$:
+  vscode:
+    - docker:
+        image:
+          name: docker.cnb.cool/zhan_zhi/docker/ubuntu24.04-py3.12-cu13.0.2-zh:v1.6
+          dockerUser: $CNB_TOKEN_USER_NAME
+          dockerPassword: $CNB_TOKEN
+        volumes:
+          - /models    
+      runner:
+        tags: cnb:arch:amd64:gpu:L40
+        # 浅层克隆：仅拉取最新1条历史，减少数据传输
+        fetch-depth: 1
+        GIT_CLONE_DEPTH: "1"
+        # 并行拉取：适配CNB平台带宽，提升并发数
+        GIT_PARALLEL_FETCH: "16"
+        # 协议优化：启用HTTP/2多路复用，CNB平台支持
+        GIT_HTTP_VERSION: "HTTP/2"
+        # LFS并发传输：提升至32线程，匹配CNB网络能力
+        GIT_LFS_CONCURRENT_TRANSFERS: "32"
+        # 分块大小：4GB大分块减少CNB对象存储请求次数
+        GIT_LFS_DOWNLOAD_SIZE: "4g"
+        # 超时设置：适配CNB跨节点传输可能的延迟
+        GIT_FETCH_TIMEOUT: "3600"
+        GIT_LFS_FETCH_TIMEOUT: "10800"
+        maxWorkspacePerGit: 1
+      # 其他配置保持不变
+      env:
+        CNB_WELCOME_EXECUTE_COMMAND: bash /workspace/assets/welcome.sh
+      services:
+        - vscode
+        - docker

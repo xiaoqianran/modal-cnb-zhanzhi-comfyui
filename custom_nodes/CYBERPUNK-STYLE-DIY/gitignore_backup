@@ -1,0 +1,19 @@
+*.pyc
+__pycache__/
+.DS_Store
+Thumbs.db
+*.log
+
+*.tmp
+*.cache
+*.bak
+*~
+node_modules/
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation images (stored externally)
+images/

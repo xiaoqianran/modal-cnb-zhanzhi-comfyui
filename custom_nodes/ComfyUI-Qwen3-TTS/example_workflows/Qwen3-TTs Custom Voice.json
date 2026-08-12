@@ -1,0 +1,150 @@
+{
+  "id": "6bbd3374-8f9b-4fab-b971-196326e9241c",
+  "revision": 0,
+  "last_node_id": 41,
+  "last_link_id": 56,
+  "nodes": [
+    {
+      "id": 22,
+      "type": "Qwen3TTSLoader",
+      "pos": [
+        -823.9279221050331,
+        -1506.8443837459558
+      ],
+      "size": [
+        325.40390625,
+        154
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model_obj",
+          "type": "QWEN3_MODEL",
+          "links": [
+            55
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSLoader"
+      },
+      "widgets_values": [
+        "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+        "ModelScope",
+        "bf16",
+        "sdpa",
+        true
+      ]
+    },
+    {
+      "id": 26,
+      "type": "SaveAudio",
+      "pos": [
+        -19.105296622181186,
+        -1506.8443837459558
+      ],
+      "size": [
+        270,
+        112
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 56
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "audio/qwen3-tts"
+      ]
+    },
+    {
+      "id": 41,
+      "type": "Qwen3TTSCustomVoice",
+      "pos": [
+        -458.81465623860714,
+        -1506.8443837459558
+      ],
+      "size": [
+        400,
+        382
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model_obj",
+          "type": "QWEN3_MODEL",
+          "link": 55
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            56
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSCustomVoice"
+      },
+      "widgets_values": [
+        "其实我真的有发现，我是一个特别善于观察别人情绪的人。\n",
+        "Vivian (Chinese - Bright, Sharp, Young Female)",
+        "Auto",
+        "Batch (Separate)",
+        0,
+        "randomize",
+        "",
+        1024,
+        0.7,
+        0.8,
+        50,
+        1.05
+      ]
+    }
+  ],
+  "links": [
+    [
+      55,
+      22,
+      0,
+      41,
+      0,
+      "QWEN3_MODEL"
+    ],
+    [
+      56,
+      41,
+      0,
+      26,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.0731501738840283,
+      "offset": [
+        857.4779600100343,
+        1820.8731266014909
+      ]
+    },
+    "frontendVersion": "1.37.11",
+    "workflowRendererVersion": "LG"
+  },
+  "version": 0.4
+}

@@ -1,0 +1,118 @@
+{
+  "__config_version": "2.0",
+  "__comment": "提示词小助手配置文件模板",
+  "baidu_translate": {
+    "app_id": "20231229001924751",
+    "secret_key": "BHniX4QQ7TzQhoBZGZr7"
+  },
+  "model_services": [
+    {
+      "id": "zhipu",
+      "type": "openai_compatible",
+      "name": "智谱",
+      "description": "免费GLM系列模型",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "api_key": "b26a4c515d6241c9ba9ec8d896980d58.Paxm0khgR4HscAkP",
+      "disable_thinking": true,
+      "enable_advanced_params": true,
+      "filter_thinking_output": true,
+      "llm_models": [
+        {
+          "name": "GLM-4.5-Flash",
+          "display_name": "",
+          "is_default": true,
+          "temperature": 0.7,
+          "max_tokens": 1000,
+          "top_p": 0.9
+        }
+      ],
+      "vlm_models": [
+        {
+          "name": "glm-4v-flash",
+          "display_name": "",
+          "is_default": true,
+          "temperature": 0.7,
+          "max_tokens": 500,
+          "top_p": 0.9
+        }
+      ]
+    },
+    {
+      "id": "xFlow",
+      "type": "openai_compatible",
+      "name": "xFlow-API聚合",
+      "description": "免魔法Gemini、Grok、chatGPT...",
+      "base_url": "https://api.xflow.cc/v1",
+      "api_key": "",
+      "disable_thinking": true,
+      "enable_advanced_params": true,
+      "filter_thinking_output": true,
+      "llm_models": [
+        {
+          "name": "gemini-2.5-pro-nothinking",
+          "display_name": "",
+          "is_default": true,
+          "temperature": 0.7,
+          "max_tokens": 1000,
+          "top_p": 0.9
+        }
+      ],
+      "vlm_models": [
+        {
+          "name": "grok-4-1-fast-non-reasoning",
+          "display_name": "",
+          "is_default": true,
+          "temperature": 0.7,
+          "max_tokens": 500,
+          "top_p": 0.9
+        }
+      ]
+    },
+    {
+      "id": "ollama",
+      "type": "ollama",
+      "name": "Ollama",
+      "description": "调用本地模型",
+      "base_url": "http://localhost:11434/v1",
+      "api_key": "ollama",
+      "auto_unload": true,
+      "disable_thinking": true,
+      "enable_advanced_params": true,
+      "filter_thinking_output": true,
+      "llm_models": [
+        {
+          "name": "huihui_ai/qwen3-abliterated:14b",
+          "display_name": "",
+          "is_default": true,
+          "temperature": 0.7,
+          "max_tokens": 1000,
+          "top_p": 0.9
+        }
+      ],
+      "vlm_models": [
+        {
+          "name": "aha2025/llama-joycaption-beta-one-hf-llava:Q6_K",
+          "display_name": "",
+          "is_default": true,
+          "temperature": 0.7,
+          "max_tokens": 500,
+          "top_p": 0.9
+        }
+      ]
+    }
+  ],
+  "current_services": {
+    "llm": {
+      "service": "zhipu",
+      "model": "glm-4.5-flash"
+    },
+    "vlm": {
+      "service": "zhipu",
+      "model": "glm-4v-flash"
+    },
+    "translate": {
+      "service": "baidu",
+      "model": ""
+    }
+  }
+}

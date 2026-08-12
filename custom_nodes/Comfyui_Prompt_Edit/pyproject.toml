@@ -1,0 +1,17 @@
+[project]
+name = "Comfyui_Prompt_Edit"
+description = "Prompt Edit is a custom node designed for ComfyUI that allows you to pause, edit text prompts, and then continue during workflow execution. This is extremely useful for scenarios where prompts need to be dynamically adjusted during the generation process."
+version = "2.0.0"
+license = {file = "LICENSE"}
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/xuchenxu168/Comfyui_Prompt_Edit"
+"Bug Tracker" = "https://github.com/xuchenxu168/Comfyui_Prompt_Edit/issues"
+#  Used by Comfy Registry https://registry.comfy.org
+
+[tool.comfy]
+PublisherId = "xuchenxu168"
+DisplayName = "Comfyui_Prompt_Edit"
+Icon = ""
+includes = []

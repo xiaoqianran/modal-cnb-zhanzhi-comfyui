@@ -1,0 +1,76 @@
+{
+    "Qwen3_VQA_Plus": {
+        "title": "Qwen3 VQA Plus",
+        "inputs": {
+            "source_path": "源路径",
+            "image": "图像"
+        },
+        "widgets": {
+            "text": "文本",
+            "text2": "文本2",
+            "model": "模型",
+            "quantization": "量化",
+            "keep_model_loaded": "保持模型加载",
+            "temperature": "温度",
+            "max_new_tokens": "最大新令牌数",
+            "min_pixels": "最小像素",
+            "max_pixels": "最大像素",
+            "seed": "随机种子",
+            "attention": "注意力",
+            "NSFW": "不适宜内容"
+        },
+        "outputs": {
+            "output_0": "输出0"
+        }
+    },
+    "ImageLoaderPlus": {
+        "title": "加载图像高级版",
+        "inputs": {},
+        "widgets": {
+            "image": "图像"
+        },
+        "outputs": {
+            "output_0": "输出0",
+            "output_1": "输出1",
+            "output_2": "输出2"
+        }
+    },
+    "VideoLoaderPlus": {
+        "title": "加载视频高级版",
+        "inputs": {},
+        "widgets": {
+            "file": "文件"
+        },
+        "outputs": {
+            "output_0": "输出0",
+            "output_1": "输出1"
+        }
+    },
+    "VideoLoaderPathPlus": {
+        "title": "加载视频高级版(路径)",
+        "inputs": {},
+        "widgets": {
+            "file": "文件"
+        },
+        "outputs": {
+            "output_0": "输出0",
+            "output_1": "输出1"
+        }
+    },
+    "MultiplePathsInputPlus": {
+        "title": "多路径输入版",
+        "inputs": {
+            "path_1": "路径1"
+        },
+        "widgets": {
+            "inputcount": "输入数量",
+            "sample_fps": "采样帧率",
+            "max_frames": "最大帧数",
+            "use_total_frames": "使用总帧数",
+            "use_original_fps_as_sample_fps": "使用原始帧率作为采样帧率"
+        },
+        "outputs": {
+            "paths": "路径"
+        }
+    }
+}

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+/workspace/venv312/bin/python /workspace/assets/patch.py
+/workspace/venv312/bin/python /workspace/assets/tools/patch/safe_patch_nodes_Apt.py
+/workspace/venv312/bin/python /workspace/assets/tools/patch/safe_patch_nodes_GGUF.py
+/workspace/venv312/bin/python /workspace/assets/tools/patch/safe_patch_nodes_KJ.py
+ln -sf /workspace/assets/hook_cnb_xu.py /workspace/ComfyUI/hook_cnb_xu.py

@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "created_at": "2025-11-22T15:50:08.320482",
+  "templates": [
+    {
+      "id": "user_20260103_022828_0",
+      "title": "随便写个标题",
+      "prompt": {
+        "zh": "随便写一个",
+        "en": "随便写一个"
+      },
+      "description": {
+        "zh": "",
+        "en": ""
+      },
+      "category": "肖像 产品",
+      "tags": [
+        "Qwen-Image-Edit"
+      ],
+      "created_at": "2026-01-03T02:28:28.615241",
+      "updated_at": "2026-01-03T02:34:18.677652",
+      "source": "user_created"
+    }
+  ],
+  "updated_at": "2026-01-03T02:34:18.677676"
+}

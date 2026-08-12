@@ -1,0 +1,148 @@
+{
+    "easy downloadIndexTTSAndLoadModel": {
+        "title": "IndexTTS 模型加载器",
+        "inputs": {
+            "model": "模型",
+            "download_from": "下载来源",
+            "start": "开始"
+        },
+        "widgets": {},
+        "outputs": {
+            "indextts_model": "IndexTTS 模型"
+        }
+    },
+    "easy indexTTSGenerate": {
+        "title": "IndexTTS 生成",
+        "inputs": {
+            "indextts_model": "IndexTTS 模型",
+            "reference_audio": "参考音频",
+            "reference_audios": "参考音频组",
+            "emotions": "情感配置"
+        },
+        "widgets": {
+            "text": "text",
+            "unload_model": "卸载模型",
+            "do_sample": "启用采样",
+            "temperature": "温度",
+            "top_p": "顶级概率",
+            "top_k": "顶级K值",
+            "num_beams": "束数",
+            "repetition_penalty": "重复惩罚",
+            "length_penalty": "长度惩罚",
+            "max_mel_tokens": "最大Mel标记数",
+            "max_tokens_per_sentence": "每句最大标记数",
+            "seed": "随机种子"
+        },
+        "outputs": {
+            "audio": "音频",
+            "seed": "随机种子",
+            "subtitle": "字幕"
+        }
+    },
+    "easy indexTTSGenerateSimple": {
+        "title": "IndexTTS简单生成",
+        "inputs": {
+            "indextts_model": "IndexTTS模型",
+            "reference_audio": "参考音频",
+            "reference_audios": "参考音频组",
+            "emotions": "情感配置"
+        },
+        "widgets": {
+            "text": "文本",
+            "unload_model": "卸载模型",
+            "seed": "随机种子"
+        },
+        "outputs": {
+            "audio": "音频",
+            "seed": "随机种子",
+            "subtitle": "字幕"
+        }
+    },
+    "easy indexTTSEmotionAudio": {
+        "title": "音色情感音频",
+        "inputs": {
+            "reference_audio": "参考音频",
+            "emotion_ref_audio": "情感参考音频"
+        },
+        "widgets": {
+            "voice_name": "音色名称",
+            "emo_weight": "情感权重"
+        },
+        "outputs": {
+            "emotions": "情感配置"
+        }
+    },
+    "easy indexTTSEmotionVector": {
+        "title": "音色情感向量",
+        "inputs": {
+            "reference_audio": "参考音频"
+        },
+        "widgets": {
+            "voice_name": "音色名称",
+            "use_random": "随机情感",
+            "Happy": "高兴",
+            "Angry": "愤怒",
+            "Sad": "悲伤",
+            "Fear": "恐惧",
+            "Hate": "反感",
+            "Low": "低落",
+            "Surprise": "惊讶",
+            "Neutral": "自然"
+        },
+        "outputs": {
+            "emotions": "情感配置"
+        }
+    },
+    "easy indexTTSEmotionText": {
+        "title": "语音情感文本",
+        "inputs": {
+            "reference_audio": "参考音频"
+        },
+        "widgets": {
+            "voice_name": "音色名称",
+            "description": "描述",
+            "use_random": "随机情感"
+        },
+        "outputs": {
+            "emotions": "情感配置"
+        }
+    },
+    "easy indexTTSEmotionMerge": {
+        "title": "合并音色情感",
+        "inputs": {
+            "emotion1": "情感配置1",
+            "emotion2": "情感配置2",
+            "emotion3": "情感配置3",
+            "emotion4": "情感配置4",
+            "emotion5": "情感配置",
+            "emotion6": "情感配置6",
+            "emotion7": "情感配置7",
+            "emotion8": "情感配置8",
+            "emotion9": "情感配置9",
+            "emotion10": "情感配置10"
+        },
+        "widgets": {},
+        "outputs": {
+            "emotions": "情感配置"
+        }
+    },
+    "easy indexTTSAudioMerge": {
+        "title": "合并音色音频",
+        "inputs": {
+            "audio1": "音频1",
+            "audio2": "音频2",
+            "audio3": "音频3",
+            "audio4": "音频4",
+            "audio5": "音频5",
+            "audio6": "音频6",
+            "audio7": "音频7",
+            "audio8": "音频8",
+            "audio9": "音频9",
+            "audio10": "音频10"
+        },
+        "widgets": {},
+        "outputs": {
+            "audios": "音频组"
+        }
+    }
+}

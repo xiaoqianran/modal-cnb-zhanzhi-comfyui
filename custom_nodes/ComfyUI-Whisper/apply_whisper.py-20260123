@@ -1,0 +1,157 @@
+import whisper
+import os
+import folder_paths
+import uuid
+import torch
+import logging
+import numpy as np
+from scipy.io import wavfile
+
+import comfy.model_management as mm
+import comfy.model_patcher
+
+# 这里的导入仅用于数据结构参考，不调用它的 save 函数
+import torchaudio 
+
+WHISPER_MODEL_SUBDIR = os.path.join("stt", "whisper")
+logger = logging.getLogger(__name__)
+WHISPER_PATCHER_CACHE = {}
+
+class WhisperModelWrapper(torch.nn.Module):
+    def __init__(self, model_name, download_root):
+        super().__init__()
+        self.model_name = model_name
+        self.download_root = download_root
+        self.whisper_model = None
+        self.model_loaded_weight_memory = 0
+
+    def load_model(self, device):
+        self.whisper_model = whisper.load_model(
+            self.model_name,
+            download_root=self.download_root,
+            device=device
+        )
+        model_size = sum(p.numel() * p.element_size() for p in self.whisper_model.parameters())
+        self.model_loaded_weight_memory = model_size
+
+class WhisperPatcher(comfy.model_patcher.ModelPatcher):
+    def __init__(self, model, *args, **kwargs):
+        super().__init__(model, *args, **kwargs)
+
+    def patch_model(self, device_to=None, *args, **kwargs):
+        target_device = self.load_device
+        if self.model.whisper_model is None:
+            logger.info(f"Loading Whisper model '{self.model.model_name}' to {target_device}...")
+            self.model.load_model(target_device)
+            self.size = self.model.model_loaded_weight_memory
+        else:
+            logger.info(f"Whisper model '{self.model.model_name}' already in memory.")
+        return super().patch_model(device_to=target_device, *args, **kwargs)
+
+    def unpatch_model(self, device_to=None, unpatch_weights=True, *args, **kwargs):
+        if unpatch_weights:
+            logger.info(f"Offloading Whisper model '{self.model.model_name}' to {device_to}...")
+            self.model.whisper_model = None
+            self.model.model_loaded_weight_memory = 0
+            mm.soft_empty_cache()
+        return super().unpatch_model(device_to, unpatch_weights, *args, **kwargs)
+
+
+class ApplyWhisperNode:
+    languages_by_name = None
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio": ("AUDIO",),
+                "model": (['tiny.en', 'tiny', 'base.en', 'base', 'small.en', 'small', 'medium.en', 'medium', 'large-v1', 'large-v2', 'large-v3', 'large', 'large-v3-turbo', 'turbo'],),
+            },
+            "optional": {
+                "language": (
+                    ["auto"] +
+                    [s.capitalize() for s in sorted(list(whisper.tokenizer.LANGUAGES.values())) ],
+                ),
+                "prompt": ("STRING", {"default":""}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "whisper_alignment", "whisper_alignment")
+    RETURN_NAMES = ("text", "segments_alignment", "words_alignment")
+    FUNCTION = "apply_whisper"
+    CATEGORY = "whisper"
+
+    def apply_whisper(self, audio, model, language, prompt):
+        # 创建临时目录
+        temp_dir = folder_paths.get_temp_directory()
+        os.makedirs(temp_dir, exist_ok=True)
+        audio_save_path = os.path.join(temp_dir, f"{uuid.uuid1()}.wav")
+
+        # --- 核心修复：完全绕过 torchaudio.save ---
+        try:
+            # 获取原始波形数据 [Channels, Samples]
+            waveform = audio['waveform'].squeeze(0)
+            sample_rate = audio["sample_rate"]
+            
+            # Whisper 要求单声道（Mono），如果是多声道则取平均值
+            if waveform.shape[0] > 1:
+                waveform = torch.mean(waveform, dim=0)
+            else:
+                waveform = waveform.squeeze(0)
+            
+            # 转为 CPU 上的 Numpy 数组，并确保数据类型为 float32 (Whisper 标准)
+            audio_np = waveform.cpu().numpy().astype(np.float32)
+            
+            # 使用 scipy 保存为 WAV 格式，这个操作不依赖任何外部 Codec 库
+            wavfile.write(audio_save_path, sample_rate, audio_np)
+            logger.info(f"Audio saved to {audio_save_path} using scipy (bypassing torchaudio)")
+            
+        except Exception as e:
+            logger.error(f"Failed to save audio using scipy: {e}")
+            raise RuntimeError(f"Whisper audio save failed: {e}")
+
+        # 模型加载与推理部分保持不变
+        cache_key = model
+        if cache_key not in WHISPER_PATCHER_CACHE:
+            load_device = mm.get_torch_device()
+            download_root = os.path.join(folder_paths.models_dir, WHISPER_MODEL_SUBDIR)
+            logger.info(f"Creating Whisper ModelPatcher for {model} on device {load_device}")
+            
+            model_wrapper = WhisperModelWrapper(model, download_root)
+            patcher = WhisperPatcher(
+                model=model_wrapper,
+                load_device=load_device,
+                offload_device=mm.unet_offload_device(),
+                size=0
+            )
+            WHISPER_PATCHER_CACHE[cache_key] = patcher
+
+        patcher = WHISPER_PATCHER_CACHE[cache_key]
+        mm.load_model_gpu(patcher)
+        whisper_model = patcher.model.whisper_model
+
+        if whisper_model is None:
+            logger.error("Whisper model failed to load.")
+            raise RuntimeError(f"Failed to load Whisper model: {model}")
+
+        transcribe_args = {"initial_prompt": prompt}
+        if language != "auto":
+            if ApplyWhisperNode.languages_by_name is None:
+                ApplyWhisperNode.languages_by_name = {v.lower(): k for k, v in whisper.tokenizer.LANGUAGES.items()}
+            transcribe_args['language'] = ApplyWhisperNode.languages_by_name[language.lower()]
+        
+        # Whisper 推理
+        result = whisper_model.transcribe(audio_save_path, word_timestamps=True, **transcribe_args)
+
+        segments = result['segments']
+        segments_alignment = []
+        words_alignment = []
+
+        for segment in segments:
+            segment_dict = {'value': segment['text'].strip(), 'start': segment['start'], 'end': segment['end']}
+            segments_alignment.append(segment_dict)
+            for word in segment["words"]:
+                word_dict = {'value': word["word"].strip(), 'start': word["start"], 'end': word['end']}
+                words_alignment.append(word_dict)
+
+        return (result["text"].strip(), segments_alignment, words_alignment)

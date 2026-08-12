@@ -1,0 +1,11 @@
+__pycache__/
+.idea/
+.vscode/
+.tmp
+.cache
+tests/
+/*.json
+*.config.json
+*.local.json
+.claude/
+CLAUDE.md

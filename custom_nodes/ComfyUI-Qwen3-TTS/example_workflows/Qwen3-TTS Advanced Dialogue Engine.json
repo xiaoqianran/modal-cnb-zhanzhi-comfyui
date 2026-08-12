@@ -1,0 +1,512 @@
+{
+  "id": "c662d39f-8d05-448c-891c-fb82f0a6a996",
+  "revision": 0,
+  "last_node_id": 30,
+  "last_link_id": 37,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Qwen3TTSLoader",
+      "pos": [
+        -36.55540577916161,
+        -1785.4134617935188
+      ],
+      "size": [
+        376.3025164249925,
+        187.4698793816484
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model_obj",
+          "type": "QWEN3_MODEL",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSLoader"
+      },
+      "widgets_values": [
+        "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+        "ModelScope",
+        "bf16",
+        "sdpa",
+        true
+      ]
+    },
+    {
+      "id": 3,
+      "type": "Qwen3TTSAdvancedDialogue",
+      "pos": [
+        -34.4131147411058,
+        -1521.0096468334486
+      ],
+      "size": [
+        384.5552734375,
+        302
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model_obj",
+          "type": "QWEN3_MODEL",
+          "link": 2
+        },
+        {
+          "name": "texts",
+          "type": "LIST",
+          "link": 3
+        },
+        {
+          "name": "instructs",
+          "type": "LIST",
+          "link": 4
+        },
+        {
+          "name": "roles",
+          "type": "LIST",
+          "link": 5
+        },
+        {
+          "name": "pauses",
+          "type": "LIST",
+          "link": 6
+        },
+        {
+          "name": "role_bank",
+          "type": "QWEN3_ROLE_BANK",
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            10
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSAdvancedDialogue"
+      },
+      "widgets_values": [
+        800139374903558,
+        "randomize",
+        1024,
+        0.7,
+        0.8,
+        50,
+        1.05
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Qwen3TTSScriptProcessor",
+      "pos": [
+        -732.6667405947558,
+        -1843.0913166793619
+      ],
+      "size": [
+        396.2791787233764,
+        219.8443801419926
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "texts",
+          "type": "LIST",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "instructs",
+          "type": "LIST",
+          "links": [
+            4
+          ]
+        },
+        {
+          "name": "roles",
+          "type": "LIST",
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "pauses",
+          "type": "LIST",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSScriptProcessor"
+      },
+      "widgets_values": [
+        "旁白: [低语] 在一个风雨交加的夜晚。\n[pause:1.5]\n角色A: [恐惧] 谁？谁在那里？\n角色B: [冷酷] 是我...",
+        ""
+      ]
+    },
+    {
+      "id": 7,
+      "type": "Qwen3TTSAudioPostProcess",
+      "pos": [
+        392.69206695132345,
+        -1673.7888234948132
+      ],
+      "size": [
+        337.394140625,
+        106
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSAudioPostProcess"
+      },
+      "widgets_values": [
+        10,
+        50,
+        44100
+      ]
+    },
+    {
+      "id": 10,
+      "type": "Qwen3TTSRoleBank",
+      "pos": [
+        -349.34747900196345,
+        -1442.2134918349623
+      ],
+      "size": [
+        272.1177734375,
+        166
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "prev_role_bank",
+          "shape": 7,
+          "type": "QWEN3_ROLE_BANK",
+          "link": null
+        },
+        {
+          "name": "prompt_1",
+          "shape": 7,
+          "type": "QWEN3_PROMPT",
+          "link": 36
+        },
+        {
+          "name": "prompt_2",
+          "shape": 7,
+          "type": "QWEN3_PROMPT",
+          "link": 33
+        },
+        {
+          "name": "prompt_3",
+          "shape": 7,
+          "type": "QWEN3_PROMPT",
+          "link": 37
+        }
+      ],
+      "outputs": [
+        {
+          "name": "role_bank",
+          "type": "QWEN3_ROLE_BANK",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSRoleBank"
+      },
+      "widgets_values": [
+        "旁白",
+        "角色A",
+        "角色B"
+      ]
+    },
+    {
+      "id": 14,
+      "type": "SaveAudio",
+      "pos": [
+        396.641311273826,
+        -1514.7131306491788
+      ],
+      "size": [
+        270,
+        112
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 14
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "audio/ComfyUI"
+      ]
+    },
+    {
+      "id": 26,
+      "type": "Qwen3TTSPromptManager",
+      "pos": [
+        -724.3535991085995,
+        -1387.7723452308724
+      ],
+      "size": [
+        332.00390625,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "voice_clone_prompt",
+          "shape": 7,
+          "type": "QWEN3_PROMPT",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "voice_clone_prompt",
+          "type": "QWEN3_PROMPT",
+          "links": [
+            33
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSPromptManager"
+      },
+      "widgets_values": [
+        "Load",
+        "角色A.qwen3tts",
+        "my_voice_01"
+      ]
+    },
+    {
+      "id": 29,
+      "type": "Qwen3TTSPromptManager",
+      "pos": [
+        -727.4106341181487,
+        -1220.9749771444988
+      ],
+      "size": [
+        332.00390625,
+        106
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "voice_clone_prompt",
+          "shape": 7,
+          "type": "QWEN3_PROMPT",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "voice_clone_prompt",
+          "type": "QWEN3_PROMPT",
+          "links": [
+            37
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSPromptManager"
+      },
+      "widgets_values": [
+        "Load",
+        "角色B.qwen3tts",
+        "my_voice_01"
+      ]
+    },
+    {
+      "id": 30,
+      "type": "Qwen3TTSPromptManager",
+      "pos": [
+        -723.6509078770231,
+        -1554.569713317246
+      ],
+      "size": [
+        332.00390625,
+        106
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "voice_clone_prompt",
+          "shape": 7,
+          "type": "QWEN3_PROMPT",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "voice_clone_prompt",
+          "type": "QWEN3_PROMPT",
+          "links": [
+            36
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen3TTSPromptManager"
+      },
+      "widgets_values": [
+        "Load",
+        "旁白.qwen3tts",
+        "my_voice_01"
+      ]
+    }
+  ],
+  "links": [
+    [
+      2,
+      1,
+      0,
+      3,
+      0,
+      "QWEN3_MODEL"
+    ],
+    [
+      3,
+      4,
+      0,
+      3,
+      1,
+      "LIST"
+    ],
+    [
+      4,
+      4,
+      1,
+      3,
+      2,
+      "LIST"
+    ],
+    [
+      5,
+      4,
+      2,
+      3,
+      3,
+      "LIST"
+    ],
+    [
+      6,
+      4,
+      3,
+      3,
+      4,
+      "LIST"
+    ],
+    [
+      10,
+      3,
+      0,
+      7,
+      0,
+      "AUDIO"
+    ],
+    [
+      11,
+      10,
+      0,
+      3,
+      5,
+      "QWEN3_ROLE_BANK"
+    ],
+    [
+      14,
+      7,
+      0,
+      14,
+      0,
+      "AUDIO"
+    ],
+    [
+      33,
+      26,
+      0,
+      10,
+      2,
+      "QWEN3_PROMPT"
+    ],
+    [
+      36,
+      30,
+      0,
+      10,
+      1,
+      "QWEN3_PROMPT"
+    ],
+    [
+      37,
+      29,
+      0,
+      10,
+      3,
+      "QWEN3_PROMPT"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.88690097015209,
+      "offset": [
+        938.4826774466134,
+        2064.699389658873
+      ]
+    },
+    "workflowRendererVersion": "LG",
+    "frontendVersion": "1.37.11"
+  },
+  "version": 0.4
+}

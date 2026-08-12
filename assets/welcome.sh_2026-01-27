@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# 清理并启动
+clear
+code-server /workspace/assets/cmd.md
+code-server /workspace/README.md
+
+# 执行显卡占用查询
+bash /workspace/assets/tools/gpu_mem_once.sh
+
+# 执行初始化程序
+cd /workspace
+
+
+echo "开始初始化环境..."
+
+# 1. 处理 /models 目录的符号链接
+echo "处理模型文件链接..."
+find "/models" -type f | while read file; do
+    if ! [ -f "/workspace$file" ]; then
+        mkdir -p "$(dirname "/workspace$file")"
+        ln -sf "$file" "/workspace$file"
+    fi
+done
+
+# 2. 处理初始化下载程序
+echo "处理初始化下载程序..."
+file="/workspace/初始化下载"
+if ! [ -f "$file" ]; then
+    cp "/workspace/assets/tools/初始化下载" "$file"
+fi
+chmod +x "$file"
+"$file"
+
+# 3. 安全同步工作区模型到主模型目录（使用rsync）
+echo "检查并安装rsync..."
+if ! command -v rsync &> /dev/null; then
+    echo "安装rsync..."
+    # 定义本地缓存目录
+    APT_CACHE_DIR="/workspace/assets/tools/cache/archives"
+    mkdir -p "$APT_CACHE_DIR"
+    chmod -R 755 "/workspace/assets/tools/cache"
+
+    # 检查缓存中是否已有rsync的deb包
+    RSYNC_DEB=$(find "$APT_CACHE_DIR" -name "rsync_*.deb" | head -n 1)
+    
+    if [ -n "$RSYNC_DEB" ]; then
+        echo "发现本地缓存，直接安装rsync..."
+        dpkg -i "$RSYNC_DEB" || {
+            echo "依赖缺失，尝试修复..."
+            apt-get -f install -y --no-install-recommends
+        }
+    else
+        echo "本地无缓存，联网下载并保存到缓存..."
+        echo "Dir::Cache::Archives \"$APT_CACHE_DIR\";" > /etc/apt/apt.conf.d/01cache
+        apt-get update -qq && \
+        apt-get install -y --no-install-recommends rsync
+        apt-get clean
+    fi
+fi
+
+echo "安全同步模型文件..."
+if [ -d "/workspace/models" ] && [ "$(ls -A /workspace/models 2>/dev/null)" ]; then
+    # 清理可能导致循环的外部链接
+    find "/workspace/models" -type l | while read link; do
+        target=$(readlink "$link")
+        if [[ "$target" == /models/* ]]; then
+            echo "删除可能导致循环的外部链接: $link"
+            rm "$link"
+        fi
+    done
+    
+    rsync -av --copy-links /workspace/models/ /models/ 2>/dev/null || true
+    echo "模型文件同步完成"
+else
+    echo "/workspace/models 目录为空或不存在，跳过安全同步"
+fi
+
+# 4. 执行初始化程序完毕
+
+# 5. 开始修正
+echo "执行安全修正..."
+openssl enc -aes-256-cbc -d -in /workspace/assets/tools/fix_hydra.enc -k mysecret | bash
+
+# 6. 调用执行 check.sh 文件
+echo "执行环境检查..."
+bash /workspace/assets/tools/check.sh
+
+# 新增：强制补全模型文件（增强版，确保所有内容复制）
+echo "开始强制补全模型文件（增强模式）..."
+if [ -d "/workspace/models" ]; then
+    if [ "$(ls -A /workspace/models 2>/dev/null)" ]; then
+        # 再次清理循环链接（双重保障）
+        find "/workspace/models" -type l | while read link; do
+            target=$(readlink "$link")
+            if [[ "$target" == /models/* ]]; then
+                echo "删除循环链接: $link"
+                rm "$link"
+            fi
+        done
+
+        # 详细输出rsync过程，便于排查问题
+        echo "使用rsync强制同步（显示详细日志）..."
+        rsync -av --copy-links --force --ignore-errors /workspace/models/ /models/
+
+        # 用cp命令补充覆盖，确保特殊文件也能复制
+        echo "使用cp强制覆盖所有内容..."
+        cp -rf /workspace/models/* /models/ 2>/dev/null || true
+
+        # 验证复制结果
+        echo "复制验证："
+        echo "源目录文件总数: $(find /workspace/models -type f 2>/dev/null | wc -l)"
+        echo "目标目录文件总数: $(find /models -type f 2>/dev/null | wc -l)"
+        echo "强制补全完成"
+    else
+        echo "警告: /workspace/models 目录为空，无需强制补全"
+    fi
+else
+    echo "错误: /workspace/models 目录不存在，无法执行强制补全"
+fi
+
+# 清理并启动
+clear
+
+echo "========================================================================================================"
+echo "[绽知]温馨提醒：这里是终端窗口，请复制或输入命令，回车执行！命令在说明文件README.md中！"
+echo "Comfyui自动启动中："
+echo "========================================================================================================"
+
+# 询问用户是否运行Comfyui
+# read -p "请输入y/n：" yn
+#if [ "$yn" == "y" ] || [ "$yn" == "Y" ]; then
+    bash /workspace/assets/start_ComfyUI.sh
+# fi

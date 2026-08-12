@@ -1,0 +1,15 @@
+.github/workflows/publish.yml
+.gitignore
+README.md
+__init__.py
+example_workflows/Long video + segmented prompt words.json
+example_workflows/SVI pro.json
+example_workflows/Unlimited_3Segment.json
+example_workflows/Wan22FMLF-1109update.json
+js/wan_multi_image_loader.js
+pyproject.toml
+wan_4_frame_ultimate.py
+wan_advanced_i2v.py
+wan_first_middle_last.py
+wan_multi_frame.py
+wan_multi_image_loader.py

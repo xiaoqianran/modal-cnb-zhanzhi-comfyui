@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>环境检查报告</title>
+<meta charset="UTF-8">
+<style>
+  body {
+    background-color: #1e1e1e;
+    color: #dcdcdc;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+    padding: 20px;
+  }
+  pre {
+    white-space: pre-wrap;
+    margin: 0;
+    padding: 0;
+  }
+  .title {
+    color: #4ec9b0;
+    font-weight: bold;
+    margin: 20px 0 10px;
+  }
+  .label {
+    color: #dcdc79;
+  }
+  .green {
+    color: #4ec9b0;
+  }
+  .red {
+    color: #f44747;
+  }
+  .yellow {
+    color: #dcdc79;
+  }
+</style>
+</head>
+<body>
+<pre>
+
+[1;36m════════════════════════════════════════════════════════════[0m
+🖥️  系统信息                                                
+[1;36m════════════════════════════════════════════════════════════[0m
+[1;33m┃ 系统类型    [0m Linux (6 19:24:58 CST 2025 x86_64 x86_64 x86_64 GNU/Linux)
+[1;33m┃ 主机名       [0m e98a1b1808ae
+[1;33m┃ 系统架构    [0m SMP
+[1;33m┃ 发行版本    [0m Ubuntu 24.04.1 LTS
+[1;33m┃ 内核版本    [0m 5.4.241
+[1;33m┃ 内核构建    [0m 1-tlinux4-0023.1
+[1;33m┃ 运行时间    [0m up 1 hour, 24 minutes
+
+[1;36m════════════════════════════════════════════════════════════[0m
+🧠 CPU / 内存 / 磁盘                                        
+[1;36m════════════════════════════════════════════════════════════[0m
+[1;33m┃ CPU             [0m 
+[1;33m┃ 内存          [0m 
+[1;33m┃ 根分区       [0m 18M / 256G (1% 已用)
+
+[1;36m════════════════════════════════════════════════════════════[0m
+🐍 Python & pip                                             
+[1;36m════════════════════════════════════════════════════════════[0m
+[1;33m┃ Python 路径   [0m /workspace/venv312/bin/python
+[1;33m┃ Python 版本   [0m $极客python --version 2>&1)
+[1;33m┃ pip 版本      [0m 25.3
+
+[1;36m════════════════════════════════════════════════════════════[0m
+📂 Python 安装路径                                          
+[1;36m════════════════════════════════════════════════════════════[0m
+  可执行文件        : /workspace/venv312/bin/python
+  site‑packages    : /workspace/venv312/lib/python3.12/site-packages
+  Python Prefix     : /workspace/venv312
+  Platform          : Linux-5.4.241-1-tlinux4-0023.1-x86_64-with-glibc2.39
+
+[1;36m════════════════════════════════════════════════════════════[0m
+🔍 PyTorch / torchvision / CUDA                             
+[1;36m════════════════════════════════════════════════════════════[0m
+  /workspace/venv312/lib/python3.12/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+    import pynvml  # type: ignore[import]
+  torch        : 2.8.0+cu128
+  CUDA 支持     : True
+  CUDA Runtime : 12.8
+  Traceback (most recent call last):
+    File "<stdin>", line 6, in <module>
+    File "/workspace/venv312/lib/python3.12/site-packages/torch/__init__.py", line 2745, in __getattr__
+      raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+  AttributeError: module 'torch' has no attribute 'c极客uda'
+
+[1;36m════════════════════════════════════════════════════════════[0m
+🧪 Triton / xformers / flash‑attn / apex / sageattention    
+[1;36m════════════════════════════════════════════════════════════[0m
+  <span class="green">✅</span> triton        版本: 3.4.0      📁 /workspace/venv312/lib/python3.12/site-packages/triton
+  /workspace/venv312/lib/python3.12/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+    import pynvml  # type: ignore[import]
+  <span class="green">✅</span> xformers      版本: 0.0.32.post2 📁 /workspace/venv312/lib/python3.12/site-packages/xformers
+  /workspace/venv312/lib/python3.12/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+    import pynvml  # type: ignore[import]
+  <span class="green">✅</span> flash_attn    版本: 2.8.2      📁 /workspace/venv312/lib/python3.12/site-packages/flash_attn
+  <span class="red">❌</span> apex          未安装
+  <span class="green">✅</span> sageattention 版本: 2.2.0      📁 /workspace/venv312/lib/python3.12/site-packages/sageattention
+
+[1;36m════════════════════════════════════════════════════════════[0m
+⚙️  CUDA 驱动 & 工具链                                      
+[1;36m════════════════════════════════════════════════════════════[0m
+  Sat Dec 27 16:57:29 2025       
+  +-----------------------------------------------------------------------------------------+
+  | NVIDIA-SMI 580.95.05              Driver Version: 580.95.05      CUDA Version: 13.0     |
+  +-----------------------------------------+------------------------+----------------------+
+  | GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+  | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+  |                                         |                        |               MIG M. |
+  |=========================================+========================+======================|
+  |   0  NVIDIA L40                     On  |   00000000:A3:00.0 Off |                    0 |
+  | N/A   59C    P0            275W /  300W |   45094MiB /  46068MiB |    100%      Default |
+  |                                         |                        |                  N/A |
+  +-----------------------------------------+------------------------+----------------------+
+  
+  +-----------------------------------------------------------------------------------------+
+  | Processes:                                                                              |
+  |  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+  |        ID   ID                                                               Usage      |
+  |=========================================================================================|
+  |  No running processes found                                                             |
+  +-----------------------------------------------------------------------------------------+
+  nvcc: NVIDIA (R) Cuda compiler driver
+  Copyright (c) 2005-2025 NVIDIA Corporation
+  Built on Fri_Feb_21_20:23:50_PST_2025
+  Cuda compilation tools, release 12.8, V12.8.93
+  Build cuda_12.8.r12.8/compiler.35583870_0
+
+[1;36m════════════════════════════════════════════════════════════[0m
+📁 当前路径 & 结构                                          
+[1;36m════════════════════════════════════════════════════════════[0m
+[1;33m┃ 当前目录    [0m /workspace/assets
+  总计 684K
+  -rw-r--r-- 1 root root  691 12月 17 15:51 自定义下载链接.json-back
+  -rw-r--r-- 1 root root 6.6K 12月 16 20:52 apply_patch.py
+  -rw-r--r-- 1 root root  833 12月 16 20:52 backup_git_dirs.sh
+  -rw-r--r-- 1 root root  592 12月 16 20:52 backup_gitignores.sh
+  -rw-r--r-- 1 root root  14K 12月 20 18:49 container_environment_query.sh
+  -rw-r--r-- 1 root root 8.9K 12月 27 16:57 environment_report.html
+  -rw-r--r-- 1 root root 2.1K 12月 19 00:23 git_push.sh
+  -rw-r--r-- 1 root root 9.5K 12月 27 15:32 hook_cnb_xu.py
+  -rw-r--r-- 1 root root  71K 12月 16 20:52 image.png
+  -rw-r--r-- 1 root root 2.6K 12月 16 20:52 patch.py
+  -rw-r--r-- 1 root root  741 12月 16 20:52 restore_git_dirs.sh
+  -rw-r--r-- 1 root root  634 12月 16 20:52 restore_gitignores.sh
+  -rw-r--r-- 1 root root  371 12月 27 15:32 source_2.json
+  -rw-r--r-- 1 root root  31K 12月 27 15:32 source.json
+  -rw-r--r-- 1 root root 3.3K 12月 27 15:32 start_ComfyUI.sh
+  -rw-r--r-- 1 root root 4.9K 12月 27 15:32 start_ComfyUI.sh-12.4
+  -rw-r--r-- 1 root root 8.0K 12月 27 15:32 start_ComfyUI.sh-12.9
+  -rw-r--r-- 1 root root 3.2K 12月 27 15:32 start_ComfyUI.sh-13.0
+  -rw-r--r-- 1 root root 8.9K 12月 23 22:26 start_ComfyUI.sh-2025-12-22
+  -rw-r--r-- 1 root root 8.6K 12月 27 15:32 start_ComfyUI.sh_2025-12-24
+  -rw-r--r-- 1 root root 1.1K 12月 16 20:52 switch_cnb_yaml.sh
+  drwxr-xr-x 1 root root   27 12月 26 08:58 tools
+  -rw-r--r-- 1 root root 1.4K 12月 16 20:52 update_ComfyUI.sh
+  -rw-r--r-- 1 root root 1.7K 12月 27 16:10 update.md
+  -rw-r--r-- 1 root root 3.9K 12月 16 20:52 update_nodes.sh
+  -rw-r--r-- 1 root root 3.7K 12月 27 15:32 update_workflow_index.sh
+  -rw-r--r-- 1 root root 3.9K 12月 27 15:32 update_workflow_index.sh-back
+  -rw-r--r-- 1 root root 411K 12月 16 20:52 welcome.gif
+  -rw-r--r-- 1 root root 4.5K 12月 16 20:52 welcome.sh
+  -rw-r--r-- 1 root root 5.8K 12月 27 16:07 workflow_index.md
+
+[1;36m════════════════════════════════════════════════════════════[0m
+🧩 ComfyUI 插件列表（一级目录）                             
+[1;36m════════════════════════════════════════════════════════════[0m
+  <span class="yellow">🔧</span> ComfyUI_AdvancedRefluxControl   /workspace/custom_nodes/ComfyUI_AdvancedRefluxControl
+  <span class="yellow">🔧</span> ComfyUI-Apt_Preset   /workspace/custom_nodes/ComfyUI-Apt_Preset
+  <span class="yellow">🔧</span> ComfyUI-audio-separation-nodes   /workspace/custom_nodes/ComfyUI-audio-separation-nodes
+  <span class="yellow">🔧</span> ComfyUI-AutoCropFaces   /workspace/custom_nodes/ComfyUI-AutoCropFaces
+  <span class="yellow">🔧</span> ComfyUI-Banzhang-Translator   /workspace/custom_nodes/ComfyUI-Banzhang-Translator
+  <span class="yellow">🔧</span> ComfyUI_Comfyroll_CustomNodes   /workspace/custom_nodes/ComfyUI_Comfyroll_CustomNodes
+  <span class="yellow">🔧</span> comfyui_controlnet_aux   /workspace/custom_nodes/comfyui_controlnet_aux
+  <span class="yellow">🔧</span> ComfyUI-Crystools   /workspace/custom_nodes/ComfyUI-Crystools
+  <span class="yellow">🔧</span> comfyui-custom-scripts   /workspace/custom_nodes/comfyui-custom-scripts
+  <span class="yellow">🔧</span> ComfyUI-DD-Translation   /workspace/custom_nodes/ComfyUI-DD-Translation
+  <span class="yellow">🔧</span> ComfyUI-Easy-IndexTTS2   /workspace/custom_nodes/ComfyUI-Easy-IndexTTS2
+  <span class="yellow">🔧</span> ComfyUI-Easy-Use   /workspace/custom_nodes/ComfyUI-Easy-Use
+  <span class="yellow">🔧</span> comfyui-enricos-nodes   /workspace/custom_nodes/comfyui-enricos-nodes
+  <span class="yellow">🔧</span> comfyui_essentials   /workspace/custom_nodes/comfyui_essentials
+  <span class="yellow">🔧</span> ComfyUI-EulerDiscreteScheduler   /workspace/custom_nodes/ComfyUI-EulerDiscreteScheduler
+  <span class="yellow">🔧</span> comfyui_faceanalysis   /workspace/custom_nodes/comfyui_faceanalysis
+  <span class="yellow">🔧</span> ComfyUI-FlashVSR_Ultra_Fast   /workspace/custom_nodes/ComfyUI-FlashVSR_Ultra_Fast
+  <span class="yellow">🔧</span> comfyui-frame-interpolation   /workspace/custom_nodes/comfyui-frame-interpolation
+  <span class="yellow">🔧</span> ComfyUI-Goohaitools   /workspace/custom_nodes/ComfyUI-Goohaitools
+  <span class="yellow">🔧</span> Comfyui-HunyuanFoley   /workspace/custom_nodes/Comfyui-HunyuanFoley
+  <span class="yellow">🔧</span> ComfyUI-Impact-Pack   /workspace/custom_nodes/ComfyUI-Impact-Pack
+  <span class="yellow">🔧</span> comfyui-inpaint-cropandstitch   /workspace/custom_nodes/comfyui-inpaint-cropandstitch
+  <span class="yellow">🔧</span> ComfyUI-IPAdapter-Flux   /workspace/custom_nodes/ComfyUI-IPAdapter-Flux
+  <span class="yellow">🔧</span> comfyui-kjnodes   /workspace/custom_nodes/comfyui-kjnodes
+  <span class="yellow">🔧</span> ComfyUI_LayerStyle   /workspace/custom_nodes/ComfyUI_LayerStyle
+  <span class="yellow">🔧</span> ComfyUI_LayerStyle_Advance   /workspace/custom_nodes/ComfyUI_LayerStyle_Advance
+  <span class="yellow">🔧</span> comfyui_lg_tools   /workspace/custom_nodes/comfyui_lg_tools
+  <span class="yellow">🔧</span> comfyui-lumi-batcher   /workspace/custom_nodes/comfyui-lumi-batcher
+  <span class="yellow">🔧</span> ComfyUI-Manager   /workspace/custom_nodes/ComfyUI-Manager
+  <span class="yellow">🔧</span> comfyui-post-processing-nodes   /workspace/custom_nodes/comfyui-post-processing-nodes
+  <span class="yellow">🔧</span> Comfyui_prompt_assistant   /workspace/custom_nodes/Comfyui_prompt_assistant
+  <span class="yellow">🔧</span> ComfyUI_Qwen3-VL-Instruct-Plus   /workspace/custom_nodes/ComfyUI_Qwen3-VL-Instruct-Plus
+  <span class="yellow">🔧</span> comfyui-rmbg   /workspace/custom_nodes/comfyui-rmbg
+  <span class="yellow">🔧</span> ComfyUI-SCAIL-Pose   /workspace/custom_nodes/ComfyUI-SCAIL-Pose
+  <span class="yellow">🔧</span> ComfyUI-SDPose-ood   /workspace/custom_nodes/ComfyUI-SDPose-ood
+  <span class="yellow">🔧</span> Comfyui-SecNodes   /workspace/custom_nodes/Comfyui-SecNodes
+  <span class="yellow">🔧</span> ComfyUI-SeedVR2_VideoUpscaler   /workspace/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler
+  <span class="yellow">🔧</span> ComfyUI-segment-anything-2   /workspace/custom_nodes/ComfyUI-segment-anything-2
+  <span class="yellow">🔧</span> comfyui_ttp_toolset   /workspace/custom_nodes/comfyui_ttp_toolset
+  <span class="yellow">🔧</span> Comfyui_turbodiffusion   /workspace/custom_nodes/Comfyui_turbodiffusion
+  <span class="yellow">🔧</span> ComfyUI-TutuBanana   /workspace/custom_nodes/ComfyUI-TutuBanana
+  <span class="yellow">🔧</span> comfyui-utils-nodes   /workspace/custom_nodes/comfyui-utils-nodes
+  <span class="yellow">🔧</span> comfyui-videohelpersuite   /workspace/custom_nodes/comfyui-videohelpersuite
+  <span class="yellow">🔧</span> ComfyUI-WanAnimatePreprocess   /workspace/custom_nodes/ComfyUI-WanAnimatePreprocess
+  <span class="yellow">🔧</span> ComfyUI-WanMoeKSampler   /workspace/custom_nodes/ComfyUI-WanMoeKSampler
+  <span class="yellow">🔧</span> ComfyUI-WanVideoWrapper   /workspace/custom_nodes/ComfyUI-WanVideoWrapper
+  <span class="yellow">🔧</span> ComfyUI-was-node-suite   /workspace/custom_nodes/ComfyUI-was-node-suite
+  <span class="yellow">🔧</span> Comfyui-zhenzhen   /workspace/custom_nodes/Comfyui-zhenzhen
+  <span class="yellow">🔧</span> ComfyUI-ZML-Image   /workspace/custom_nodes/ComfyUI-ZML-Image
+  <span class="yellow">🔧</span> LanPaint   /workspace/custom_nodes/LanPaint
+  <span class="yellow">🔧</span> __pycache__   /workspace/custom_nodes/__pycache__
+  <span class="yellow">🔧</span> qwen_camera_final   /workspace/custom_nodes/qwen_camera_final
+  <span class="yellow">🔧</span> qweneditutils   /workspace/custom_nodes/qweneditutils
+  <span class="yellow">🔧</span> RES4LYF   /workspace/custom_nodes/RES4LYF
+  <span class="yellow">🔧</span> rgthree-comfy   /workspace/custom_nodes/rgthree-comfy
+  <span class="yellow">🔧</span> soulx-podcast   /workspace/custom_nodes/soulx-podcast
+  <span class="yellow">🔧</span> wan22fmlf   /workspace/custom_nodes/wan22fmlf
+
+[1;36m════════════════════════════════════════════════════════════[0m
+🧠 模型 / LoRA 文件（含 .gguf）                             
+[1;36m════════════════════════════════════════════════════════════[0m
+     <span class="red">❌</span> [1;31m未发现模型文件[0m
+
+[1;36m════════════════════════════════════════════════════════════[0m
+📦 所有已安装 Python 包（pip list）                         
+[1;36m════════════════════════════════════════════════════════════[0m
+  <span class="yellow">📦</span> absl-py                        2.3.1
+  <span class="yellow">📦</span> accelerate                     1.12.0
+  <span class="yellow">📦</span> addict                         2.4.0
+  <span class="yellow">📦</span> aiofiles                       24.1.0
+  <span class="yellow">📦</span> aiohappyeyeballs               2.6.1
+  <span class="yellow">📦</span> aiohttp                        3.13.2
+  <span class="yellow">📦</span> aiohttp-cors                   0.8.1
+  <span class="yellow">📦</span> aiohttp_socks                  0.11.0
+  <span class="yellow">📦</span> aiosignal                      1.4.0
+  <span class="yellow">📦</span> albucore                       0.0.24
+  <span class="yellow">📦</span> albumentations                 2.0.8
+  <span class="yellow">📦</span> alembic                        1.17.2
+  <span class="yellow">📦</span> annotated-doc                  0.0.4
+  <span class="yellow">📦</span> annotated-types                0.7.0
+  <span class="yellow">📦</span> antlr4-python3-runtime         4.9.3
+  <span class="yellow">📦</span> anyio                          4.12.0
+  <span class="yellow">📦</span> argbind                        0.3.9
+  <span class="yellow">📦</span> asteval                        1.0.7
+  <span class="yellow">📦</span> asttokens                      3.0.1
+  <span class="yellow">📦</span> attrs                          25.4.0
+  <span class="yellow">📦</span> audioread                      3.1.0
+  <span class="yellow">📦</span> av                             16.0.1
+  <span class="yellow">📦</span> beautifulsoup4                 4.14.3
+  <span class="yellow">📦</span> bitsandbytes                   0.49.0
+  <span class="yellow">📦</span> blend_modes                    2.2.0
+  <span class="yellow">📦</span> blind-watermark                0.4.4
+  <span class="yellow">📦</span> blinker                        1.9.0
+  <span class="yellow">📦</span> cachetools                     6.2.4
+  <span class="yellow">📦</span> certifi                        2025.11.12
+  <span class="yellow">📦</span> cffi                           2.0.0
+  <span class="yellow">📦</span> cfgv                           3.5.0
+  <span class="yellow">📦</span> chardet                        5.2.0
+  <span class="yellow">📦</span> charset-normalizer             3.4.4
+  <span class="yellow">📦</span> click                          8.3.1
+  <span class="yellow">📦</span> clip-interrogator              0.6.0
+  <span class="yellow">📦</span> color-matcher                  0.6.0
+  <span class="yellow">📦</span> colorama                       0.4.6
+  <span class="yellow">📦</span> coloredlogs                    15.0.1
+  <span class="yellow">📦</span> colour-science                 0.4.7
+  <span class="yellow">📦</span> comfyui-embedded-docs          0.3.1
+  <span class="yellow">📦</span> comfyui_frontend_package       1.35.9
+  <span class="yellow">📦</span> comfyui_workflow_templates     0.7.64
+  <span class="yellow">📦</span> comfyui-workflow-templates-core 0.3.61
+  <span class="yellow">📦</span> comfyui-workflow-templates-media-api 0.3.34
+  <span class="yellow">📦</span> comfyui-workflow-templates-media-image 0.3.43
+  <span class="yellow">📦</span> comfyui-workflow-templates-media-other 0.3.62
+  <span class="yellow">📦</span> comfyui-workflow-templates-media-video 0.3.22
+  <span class="yellow">📦</span> configs                        3.0.3
+  <span class="yellow">📦</span> contourpy                      1.3.3
+  <span class="yellow">📦</span> cryptography                   46.0.3
+  <span class="yellow">📦</span> cycler                         0.12.1
+  <span class="yellow">📦</span> Cython                         3.2.3
+  <span class="yellow">📦</span> dashscope                      1.25.4
+  <span class="yellow">📦</span> ddt                            1.7.2
+  <span class="yellow">📦</span> decorator                      5.2.1
+  <span class="yellow">📦</span> decord                         0.6.0
+  <span class="yellow">📦</span> deepdiff                       8.6.1
+  <span class="yellow">📦</span> descript-audiotools            0.7.4
+  <span class="yellow">📦</span> diffusers                      0.36.0
+  <span class="yellow">📦</span> dill                           0.4.0
+  <span class="yellow">📦</span> distlib                        0.4.0
+  <span class="yellow">📦</span> distro                         1.9.0
+  <span class="yellow">📦</span> dlib                           20.0.0
+  <span class="yellow">📦</span> docstring_parser               0.17.0
+  <span class="yellow">📦</span> docutils                       0.22.3
+  <span class="yellow">📦</span> easydict                       1.13
+  <span class="yellow">📦</span> einops                         0.8.1
+  <span class="yellow">📦</span> et_xmlfile                     2.0.0
+  <span class="yellow">📦</span> executing                      2.2.1
+  <span class="yellow">📦</span> fastapi                        0.124.4
+  <span class="yellow">📦</span> ffmpy                          1.0.0
+  <span class="yellow">📦</span> filelock                       3.20.1
+  <span class="yellow">📦</span> filetype                       1.2.0
+  <span class="yellow">📦</span> fire                           0.7.1
+  <span class="yellow">📦</span> flash_attn                     2.8.2
+  <span class="yellow">📦</span> Flask                          3.1.2
+  <span class="yellow">📦</span> flatbuffers                    25.9.23
+  <span class="yellow">📦</span> flatten-dict                   0.4.2
+  <span class="yellow">📦</span> flet                           0.28.3
+  <span class="yellow">📦</span> fonttools                      4.61.1
+  <span class="yellow">📦</span> frozenlist                     1.8.0
+  <span class="yellow">📦</span> fsspec                         2025.12.0
+  <span class="yellow">📦</span> ftfy                           6.3.1
+  <span class="yellow">📦</span> future                         1.0.0
+  <span class="yellow">📦</span> fvcore                         0.1.5.post20221221
+  <span class="yellow">📦</span> gdown                          5.2.0
+  <span class="yellow">📦</span> gguf                           0.17.1
+  <span class="yellow">📦</span> gitdb                          4.0.12
+  <span class="yellow">📦</span> GitPython                      3.1.45
+  <span class="yellow">📦</span> google-ai-generativelanguage   0.6.15
+  <span class="yellow">📦</span> google-api-core                2.28.1
+  <span class="yellow">📦</span> google-api-python-client       2.187.0
+  <span class="yellow">📦</span> google-auth                    2.45.0
+  <span class="yellow">📦</span> google-auth-httplib2           0.3.0
+  <span class="yellow">📦</span> google-genai                   1.55.0
+  <span class="yellow">📦</span> google-generativeai            0.8.5
+  <span class="yellow">📦</span> googleapis-common-protos       1.72.0
+  <span class="yellow">📦</span> greenlet                       3.3.0
+  <span class="yellow">📦</span> groundingdino-py               0.4.0
+  <span class="yellow">📦</span> grpcio                         1.76.0
+  <span class="yellow">📦</span> grpcio-status                  1.62.3
+  <span class="yellow">📦</span> h11                            0.16.0
+  <span class="yellow">📦</span> h2                             4.3.0
+  <span class="yellow">📦</span> hf-xet                         1.2.0
+  <span class="yellow">📦</span> hpack                          4.1.0
+  <span class="yellow">📦</span> httpcore                       1.0.9
+  <span class="yellow">📦</span> httplib2                       0.31.0
+  <span class="yellow">📦</span> httpx                          0.28.1
+  <span class="yellow">📦</span> huggingface-hub                0.36.0
+  <span class="yellow">📦</span> humanfriendly                  10.0
+  <span class="yellow">📦</span> hydra-core                     1.3.2
+  <span class="yellow">📦</span> hyperframe                     6.1.0
+  <span class="yellow">📦</span> identify                       2.6.15
+  <span class="yellow">📦</span> idna                           3.11
+  <span class="yellow">📦</span> ImageIO                        2.37.2
+  <span class="yellow">📦</span> imageio-ffmpeg                 0.6.0
+  <span class="yellow">📦</span> importlib_metadata             8.7.0
+  <span class="yellow">📦</span> importlib_resources            6.5.2
+  <span class="yellow">📦</span> insightface                    0.7.3
+  <span class="yellow">📦</span> iopath                         0.1.10
+  <span class="yellow">📦</span> ipython                        9.8.0
+  <span class="yellow">📦</span> ipython_pygments_lexers        1.1.1
+  <span class="yellow">📦</span> itsdangerous                   2.2.0
+  <span class="yellow">📦</span> jax                            0.8.1
+  <span class="yellow">📦</span> jaxlib                         0.8.1
+  <span class="yellow">📦</span> jedi                           0.19.2
+  <span class="yellow">📦</span> Jinja2                         3.1.6
+  <span class="yellow">📦</span> jiter                          0.12.0
+  <span class="yellow">📦</span> joblib                         1.5.3
+  <span class="yellow">📦</span> jsonschema                     4.25.1
+  <span class="yellow">📦</span> jsonschema-specifications      2025.9.1
+  <span class="yellow">📦</span> julius                         0.2.7
+  <span class="yellow">📦</span> kiwisolver                     1.4.9
+  <span class="yellow">📦</span> kornia                         0.8.2
+  <span class="yellow">📦</span> kornia_rs                      0.1.10
+  <span class="yellow">📦</span> lark                           1.3.1
+  <span class="yellow">📦</span> lazy_loader                    0.4
+  <span class="yellow">📦</span> librosa                        0.10.2
+  <span class="yellow">📦</span> llvmlite                       0.46.0
+  <span class="yellow">📦</span> loguru                         0.7.3
+  <span class="yellow">📦</span> lxml                           6.0.2
+  <span class="yellow">📦</span> Mako                           1.3.10
+  <span class="yellow">📦</span> Markdown                       3.10
+  <span class="yellow">📦</span> markdown-it-py                 4.0.0
+  <span class="yellow">📦</span> markdown2                      2.5.4
+  <span class="yellow">📦</span> MarkupSafe                     3.0.3
+  <span class="yellow">📦</span> matplotlib                     3.10.8
+  <span class="yellow">📦</span> matplotlib-inline              0.2.1
+  <span class="yellow">📦</span> matrix-nio                     0.25.2
+  <span class="yellow">📦</span> mdurl                          0.1.2
+  <span class="yellow">📦</span> mediapipe                      0.10.14
+  <span class="yellow">📦</span> ml_dtypes                      0.5.4
+  <span class="yellow">📦</span> mmcv                           2.1.0
+  <span class="yellow">📦</span> mmdet                          3.3.0
+  <span class="yellow">📦</span> mmengine                       0.10.7
+  <span class="yellow">📦</span> moviepy                        2.2.1
+  <span class="yellow">📦</span> mpmath                         1.3.0
+  <span class="yellow">📦</span> msgpack                        1.1.2
+  <span class="yellow">📦</span> mss                            10.1.0
+  <span class="yellow">📦</span> multidict                      6.7.0
+  <span class="yellow">📦</span> munch                          4.0.0
+  <span class="yellow">📦</span> munkres                        1.1.4
+  <span class="yellow">📦</span> networkx                       3.6.1
+  <span class="yellow">📦</span> nodeenv                        1.9.1
+  <span class="yellow">📦</span> numba                          0.63.1
+  <span class="yellow">📦</span> numexpr                        2.14.1
+  <span class="yellow">📦</span> numpy                          2.2.6
+  <span class="yellow">📦</span> nvidia-cublas-cu12             12.8.4.1
+  <span class="yellow">📦</span> nvidia-cuda-cupti-cu12         12.8.90
+  <span class="yellow">📦</span> nvidia-cuda-nvrtc-cu12         12.8.93
+  <span class="yellow">📦</span> nvidia-cuda-runtime-cu12       12.8.90
+  <span class="yellow">📦</span> nvidia-cudnn-cu12              9.10.2.21
+  <span class="yellow">📦</span> nvidia-cufft-cu12              11.3.3.83
+  <span class="yellow">📦</span> nvidia-cufile-cu12             1.13.1.3
+  <span class="yellow">📦</span> nvidia-curand-cu12             10.3.9.90
+  <span class="yellow">📦</span> nvidia-cusolver-cu12           11.7.3.90
+  <span class="yellow">📦</span> nvidia-cusparse-cu12           12.5.8.93
+  <span class="yellow">📦</span> nvidia-cusparselt-cu12         0.7.1
+  <span class="yellow">📦</span> nvidia-ml-py                   13.590.44
+  <span class="yellow">📦</span> nvidia-nccl-cu12               2.27.3
+  <span class="yellow">📦</span> nvidia-nvjitlink-cu12          12.8.93
+  <span class="yellow">📦</span> nvidia-nvtx-cu12               12.8.90
+  <span class="yellow">📦</span> oauthlib                       3.3.1
+  <span class="yellow">📦</span> omegaconf                      2.3.0
+  <span class="yellow">📦</span> onnx                           1.20.0
+  <span class="yellow">📦</span> onnxruntime                    1.23.2
+  <span class="yellow">📦</span> open_clip_torch                3.2.0
+  <span class="yellow">📦</span> openai                         2.12.0
+  <span class="yellow">📦</span> opencv-contrib-python          4.12.0.88
+  <span class="yellow">📦</span> opencv-python                  4.12.0.88
+  <span class="yellow">📦</span> opencv-python-headless         4.12.0.88
+  <span class="yellow">📦</span> openpyxl                       3.1.5
+  <span class="yellow">📦</span> opt_einsum                     3.4.0
+  <span class="yellow">📦</span> optimum                        2.0.0
+  <span class="yellow">📦</span> orderly-set                    5.5.0
+  <span class="yellow">📦</span> packaging                      25.0
+  <span class="yellow">📦</span> pandas                         2.3.3
+  <span class="yellow">📦</span> parso                          0.8.5
+  <span class="yellow">📦</span> peft                           0.18.0
+  <span class="yellow">📦</span> pexpect                        4.9.0
+  <span class="yellow">📦</span> piexif                         1.1.3
+  <span class="yellow">📦</span> pillow                         11.3.0
+  <span class="yellow">📦</span> pip                            25.3
+  <span class="yellow">📦</span> platformdirs                   4.5.1
+  <span class="yellow">📦</span> polars                         1.36.1
+  <span class="yellow">📦</span> polars-runtime-32              1.36.1
+  <span class="yellow">📦</span> pooch                          1.8.2
+  <span class="yellow">📦</span> portalocker                    3.2.0
+  <span class="yellow">📦</span> pre_commit                     4.5.0
+  <span class="yellow">📦</span> prettytable                    3.17.0
+  <span class="yellow">📦</span> proglog                        0.1.12
+  <span class="yellow">📦</span> prompt_toolkit                 3.0.52
+  <span class="yellow">📦</span> propcache                      0.4.1
+  <span class="yellow">📦</span> proto-plus                     1.26.1
+  <span class="yellow">📦</span> protobuf                       4.25.8
+  <span class="yellow">📦</span> psd-tools                      1.12.1
+  <span class="yellow">📦</span> psutil                         7.1.3
+  <span class="yellow">📦</span> ptyprocess                     0.7.0
+  <span class="yellow">📦</span> pure_eval                      0.2.3
+  <span class="yellow">📦</span> py-cpuinfo                     9.0.0
+  <span class="yellow">📦</span> pyarrow                        22.0.0
+  <span class="yellow">📦</span> pyasn1                         0.6.1
+  <span class="yellow">📦</span> pyasn1_modules                 0.4.2
+  <span class="yellow">📦</span> pycocotools                    2.0.11
+  <span class="yellow">📦</span> pycparser                      2.23
+  <span class="yellow">📦</span> pycryptodome                   3.23.0
+  <span class="yellow">📦</span> pydantic                       2.12.5
+  <span class="yellow">📦</span> pydantic_core                  2.41.5
+  <span class="yellow">📦</span> pydantic-settings              2.12.0
+  <span class="yellow">📦</span> pydub                          0.25.1
+  <span class="yellow">📦</span> PyGithub                       2.8.1
+  <span class="yellow">📦</span> Pygments                       2.19.2
+  <span class="yellow">📦</span> PyJWT                          2.8.0
+  <span class="yellow">📦</span> pyloudnorm                     0.1.1
+  <span class="yellow">📦</span> PyMatting                      1.1.14
+  <span class="yellow">📦</span> PyNaCl                         1.6.1
+  <span class="yellow">📦</span> pynvml                         13.0.1
+  <span class="yellow">📦</span> pyparsing                      3.2.5
+  <span class="yellow">📦</span> PySocks                        1.7.1
+  <span class="yellow">📦</span> pystoi                         0.4.1
+  <span class="yellow">📦</span> python-dateutil                2.9.0.post0
+  <span class="yellow">📦</span> python-docx                    1.2.0
+  <span class="yellow">📦</span> python-dotenv                  1.2.1
+  <span class="yellow">📦</span> python-socks                   2.8.0
+  <span class="yellow">📦</span> pytz                           2025.2
+  <span class="yellow">📦</span> PyWavelets                     1.9.0
+  <span class="yellow">📦</span> PyYAML                         6.0.3
+  <span class="yellow">📦</span> pyzbar                         0.1.9
+  <span class="yellow">📦</span> qrcode                         8.2
+  <span class="yellow">📦</span> qwen-vl-utils                  0.0.14
+  <span class="yellow">📦</span> randomname                     0.2.1
+  <span class="yellow">📦</span> referencing                    0.37.0
+  <span class="yellow">📦</span> regex                          2025.11.3
+  <span class="yellow">📦</span> rembg                          2.0.69
+  <span class="yellow">📦</span> repath                         0.9.0
+  <span class="yellow">📦</span> requests                       2.32.5
+  <span class="yellow">📦</span> rich                           14.2.0
+  <span class="yellow">📦</span> rotary-embedding-torch         0.8.9
+  <span class="yellow">📦</span> rpds-py                        0.30.0
+  <span class="yellow">📦</span> rsa                            4.9.1
+  <span class="yellow">📦</span> s3tokenizer                    0.2.0
+  <span class="yellow">📦</span> safetensors                    0.7.0
+  <span class="yellow">📦</span> sageattention                  2.2.0
+  <span class="yellow">📦</span> SAM-2                          1.0
+  <span class="yellow">📦</span> scikit-image                   0.25.2
+  <span class="yellow">📦</span> scikit-learn                   1.8.0
+  <span class="yellow">📦</span> scipy                          1.16.3
+  <span class="yellow">📦</span> segment-anything               1.0
+  <span class="yellow">📦</span> sentencepiece                  0.2.1
+  <span class="yellow">📦</span> setuptools                     80.9.0
+  <span class="yellow">📦</span> shapely                        2.1.2
+  <span class="yellow">📦</span> shellingham                    1.5.4
+  <span class="yellow">📦</span> simsimd                        6.5.3
+  <span class="yellow">📦</span> six                            1.17.0
+  <span class="yellow">📦</span> smmap                          5.0.2
+  <span class="yellow">📦</span> sniffio                        1.3.1
+  <span class="yellow">📦</span> sortedcontainers               2.4.0
+  <span class="yellow">📦</span> sounddevice                    0.5.3
+  <span class="yellow">📦</span> soundfile                      0.13.1
+  <span class="yellow">📦</span> soupsieve                      2.8
+  <span class="yellow">📦</span> soxr                           1.0.0
+  <span class="yellow">📦</span> spandrel                       0.4.1
+  <span class="yellow">📦</span> spas_sage_attn                 0.1.0
+  <span class="yellow">📦</span> SQLAlchemy                     2.0.45
+  <span class="yellow">📦</span> stack-data                     0.6.3
+  <span class="yellow">📦</span> starlette                      0.50.0
+  <span class="yellow">📦</span> stringzilla                    4.5.1
+  <span class="yellow">📦</span> supervision                    0.6.0
+  <span class="yellow">📦</span> sympy                          1.14.0
+  <span class="yellow">📦</span> tabulate                       0.9.0
+  <span class="yellow">📦</span> taichi                         1.7.4
+  <span class="yellow">📦</span> tenacity                       9.1.2
+  <span class="yellow">📦</span> tensorboard                    2.20.0
+  <span class="yellow">📦</span> tensorboard-data-server        0.7.2
+  <span class="yellow">📦</span> termcolor                      3.2.0
+  <span class="yellow">📦</span> terminaltables                 3.1.10
+  <span class="yellow">📦</span> threadpoolctl                  3.6.0
+  <span class="yellow">📦</span> tifffile                       2025.12.12
+  <span class="yellow">📦</span> timm                           1.0.22
+  <span class="yellow">📦</span> tokenizers                     0.22.1
+  <span class="yellow">📦</span> toml                           0.10.2
+  <span class="yellow">📦</span> toolz                          1.1.0
+  <span class="yellow">📦</span> torch                          2.8.0+cu128
+  <span class="yellow">📦</span> torch-stoi                     0.2.3
+  <span class="yellow">📦</span> torchaudio                     2.8.0+cu128
+  <span class="yellow">📦</span> torchsde                       0.2.6
+  <span class="yellow">📦</span> torchvision                    0.23.0+cu128
+  <span class="yellow">📦</span> tqdm                           4.67.1
+  <span class="yellow">📦</span> traitlets                      5.14.3
+  <span class="yellow">📦</span> trampoline                     0.1.2
+  <span class="yellow">📦</span> transformers                   4.57.1
+  <span class="yellow">📦</span> transparent-background         1.3.4
+  <span class="yellow">📦</span> triton                         3.4.0
+  <span class="yellow">📦</span> turbodiffusion                 1.0.0
+  <span class="yellow">📦</span> typer                          0.20.0
+  <span class="yellow">📦</span> typer-config                   1.4.3
+  <span class="yellow">📦</span> typing_extensions              4.15.0
+  <span class="yellow">📦</span> typing-inspection              0.4.2
+  <span class="yellow">📦</span> tzdata                         2025.3
+  <span class="yellow">📦</span> ultralytics                    8.3.239
+  <span class="yellow">📦</span> ultralytics-thop               2.0.18
+  <span class="yellow">📦</span> unpaddedbase64                 2.1.0
+  <span class="yellow">📦</span> uritemplate                    4.2.0
+  <span class="yellow">📦</span> urllib3                        2.4.0
+  <span class="yellow">📦</span> uv                             0.9.17
+  <span class="yellow">📦</span> virtualenv                     20.35.4
+  <span class="yellow">📦</span> watchdog                       6.0.0
+  <span class="yellow">📦</span> wcwidth                        0.2.14
+  <span class="yellow">📦</span> websocket-client               1.9.0
+  <span class="yellow">📦</span> websockets                     15.0.1
+  <span class="yellow">📦</span> Werkzeug                       3.1.4
+  <span class="yellow">📦</span> wget                           3.2
+  <span class="yellow">📦</span> xformers                       0.0.32.post2
+  <span class="yellow">📦</span> yacs                           0.1.8
+  <span class="yellow">📦</span> yapf                           0.43.0
+  <span class="yellow">📦</span> yarl                           1.22.0
+  <span class="yellow">📦</span> zhipuai                        2.1.5.20250825
+  <span class="yellow">📦</span> zipp                           3.23.0
+
+  📊 总计: 338 个包
+
+[1;36m════════════════════════════════════════════════════════════[0m
+🌐 网络连通性检查（PyPI / HuggingFace / Civitai）           
+[1;36m════════════════════════════════════════════════════════════[0m
+   <span class="red">❌</span> ping 命令不可用
+  <span class="red">❌</span> HuggingFace  访问失败
+  <span class="red">❌</span> Civitai      访问失败
+
+[1;32m<span class="green">✅</span>   全面环境检查完毕！[0m
+</pre>
+</body>
+</html>

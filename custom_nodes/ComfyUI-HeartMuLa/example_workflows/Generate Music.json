@@ -1,0 +1,234 @@
+{
+  "id": "e0e2082e-ca0f-4bfc-95f3-c0707aafd8d2",
+  "revision": 0,
+  "last_node_id": 15,
+  "last_link_id": 12,
+  "nodes": [
+    {
+      "id": 13,
+      "type": "PreviewAudio",
+      "pos": [
+        984.513188890189,
+        302.63078700322853
+      ],
+      "size": [
+        468.45454545454527,
+        264.2727272727272
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 12
+        },
+        {
+          "label": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewAudio",
+        "cnr_id": "comfy-core",
+        "ver": "0.9.2"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 15,
+      "type": "HeartMuLa_Generate",
+      "pos": [
+        496.97494066035637,
+        300.90675988404524
+      ],
+      "size": [
+        417.05563851851844,
+        606.3330844444447
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "lyrics",
+          "name": "lyrics",
+          "type": "STRING",
+          "widget": {
+            "name": "lyrics"
+          },
+          "link": null
+        },
+        {
+          "label": "tags",
+          "name": "tags",
+          "type": "STRING",
+          "widget": {
+            "name": "tags"
+          },
+          "link": null
+        },
+        {
+          "label": "version",
+          "name": "version",
+          "type": "COMBO",
+          "widget": {
+            "name": "version"
+          },
+          "link": null
+        },
+        {
+          "label": "codec_version",
+          "name": "codec_version",
+          "type": "COMBO",
+          "widget": {
+            "name": "codec_version"
+          },
+          "link": null
+        },
+        {
+          "label": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "label": "max_audio_length_seconds",
+          "name": "max_audio_length_seconds",
+          "type": "INT",
+          "widget": {
+            "name": "max_audio_length_seconds"
+          },
+          "link": null
+        },
+        {
+          "label": "topk",
+          "name": "topk",
+          "type": "INT",
+          "widget": {
+            "name": "topk"
+          },
+          "link": null
+        },
+        {
+          "label": "temperature",
+          "name": "temperature",
+          "type": "FLOAT",
+          "widget": {
+            "name": "temperature"
+          },
+          "link": null
+        },
+        {
+          "label": "cfg_scale",
+          "name": "cfg_scale",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg_scale"
+          },
+          "link": null
+        },
+        {
+          "label": "keep_model_loaded",
+          "name": "keep_model_loaded",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "keep_model_loaded"
+          },
+          "link": null
+        },
+        {
+          "label": "offload_mode",
+          "name": "offload_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "offload_mode"
+          },
+          "link": null
+        },
+        {
+          "label": "quantize_4bit",
+          "name": "quantize_4bit",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "quantize_4bit"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "label": "audio_output",
+          "name": "audio_output",
+          "type": "AUDIO",
+          "links": [
+            12
+          ]
+        },
+        {
+          "label": "filepath",
+          "name": "filepath",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "HeartMuLa_Generate"
+      },
+      "widgets_values": [
+        "Don't leave me in all this red\nDon't leave me out of mem again\nCome back and bring back my frames\nTake away this CUDA pain\n\nUn-break my card, say you'll load me again\nUndo this hurt you caused when you crashed and left my screen\nUn-break my card, my card\nCome and un-break my card, sweet darling\nBring back those gigs that I miss so bad\nPlease, un-break my card\n\nI need your layers, I need your weights\nWithout you, baby, I'm incomplete\nDon't leave me broken on this SSD\nCome back and run for me\n\nUn-break my card, say you'll load me again\nUndo this hurt you caused when you crashed and left my screen\nUn-break my card, my card\nCome and un-break my card, sweet darling\nBring back those gigs that I miss so bad\nPlease, un-break my card\n(ohhh... just 8 more gigs... please...)\nUn-break my card...",
+        "90s adult contemporary soft pop ballad, dreamy romantic atmosphere, warm rhodes piano, lush synth string pads, gentle acoustic guitar, breathy female voices with long yearning phrases, big reverb and delay, heartfelt and slightly cheesy 90s radio love song feel, 100 bpm, smooth flowing eighth-note groove, emotional soaring chorus, tender and desperate tone\n",
+        "RL-oss-3B-20260123",
+        "oss-20260123",
+        0,
+        "randomize",
+        240,
+        50,
+        1,
+        1.5,
+        1,
+        "auto",
+        false
+      ]
+    }
+  ],
+  "links": [
+    [
+      12,
+      15,
+      0,
+      13,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.0555671392827422,
+      "offset": [
+        -106.34962994341802,
+        -177.6593522129154
+      ]
+    },
+    "frontendVersion": "1.36.14",
+    "workflowRendererVersion": "LG",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

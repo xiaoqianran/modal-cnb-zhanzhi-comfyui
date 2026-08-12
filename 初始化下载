@@ -1,0 +1,92 @@
+#!/bin/bash
+
+# 将需要在初始化阶段执行的下载命令写在这里，一个命令一行，环境启动后会自动按顺序下载模型
+# 例如：
+# aria2c -x 4 -s 4 -c -d "" -o "" ""
+# 注意添加下载命令后需要在终端运行提交命令： add 初始化下载
+aria2c -x 4 -s 4 -c -d "/models/sams" -o "SeC-4B-fp8.safetensors" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/71b968a02c2cd818b3c81d6c80f07f4fbd439478b7aa79b02273c120e8f4b6e4"
+aria2c -x 4 -s 4 -c -d "/models/sams" -o "sam_vit_b_01ec64.pth" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/ec2df62732614e57411cdcf32a23ffdf28910380d03139ee0f4fcbe91eb8c912"
+aria2c -x 4 -s 4 -c -d "/models/sam3" -o "sam3.pt" "https://cnb.cool/ai-models/facebook/sam3/-/lfs/9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+aria2c -x 4 -s 4 -c -d "/models/sam3" -o "model.safetensors" "https://cnb.cool/ai-models/facebook/sam3/-/lfs/6d06f0a5f84e435071fe6603e61d0b4cc7b40e0d39d487cfd4d67d8cc11cc14a"
+aria2c -x 4 -s 4 -c -d "/models/rembg" -o "BEN2_Base.pth" "https://cnb.cool/ai-models/PramaLLC/BEN2/-/lfs/926144a876bda06f125555b4f5a239ece89dc6eb838a863700ca9bf192161a1c"
+# Qwen3-VL-4B-Instruct-FP8
+# aria2c -x 4 -s 4 -c -d "/models/prompt_generator/Qwen3-VL-4B-Instruct-FP8" -o "model.safetensors" "https://cnb.cool/fuliai/comfyui_pro/-/lfs/69c94bb8382216e327c6a08064497609042d69baeeea6540348a8770f43c417c"
+# aria2c -x 4 -s 4 -c -d "/models/LLM/Qwen-VL" -o "Qwen3-VL-8B-Instruct-bf16.gguf" "https://cnb.cool/fuliai/comfyui_source/-/lfs/02bbb2d513c3e5ca076bc89be7e168fff0ff82d82f91488e53433a5c95cae378"
+# aria2c -x 4 -s 4 -c -d "/models/LLM/Qwen-VL" -o "Qwen3-VL-8B-Instruct-bf16.mmproj.gguf" "https://cnb.cool/fuliai/comfyui_source/-/lfs/92edc5b207d4cfe8d65a88ee336ebd7e5946f4c0e61258e3469c8a33b02b4992"
+aria2c -x 4 -s 4 -c -d "/models/LLM/Qwen-VL" -o "Qwen3-VL-8B-Instruct-abliterated-v2.Q8_0.gguf" "https://cnb.cool/ai-models/prithivMLmods/Qwen3-VL-8B-Instruct-abliterated-v2-GGUF/-/lfs/9c381dacf22fe012decb14461585500e017c45b3a046943336c7923b48822a7c"
+aria2c -x 4 -s 4 -c -d "/models/LLM/Qwen-VL" -o "Qwen3-VL-8B-Instruct-abliterated-v2.mmproj-Q8_0.gguf" "https://cnb.cool/ai-models/prithivMLmods/Qwen3-VL-8B-Instruct-abliterated-v2-GGUF/-/lfs/08769ef6e39797a411c80524780d8261b07e1ab1e86b887ccb675b099e7ec53a"
+# detection
+aria2c -x 4 -s 4 -c -d "/models/detection" -o "vitpose-l-wholebody.onnx" "https://cnb.cool/ai-models/JunkyByte/easy_ViTPose/-/lfs/89bdf6692d9224dbd5004dcef23a9ba2d54c5776212b359d5a5b5068ac14fd08"
+aria2c -x 4 -s 4 -c -d "/models/detection" -o "vitpose_h_wholebody_data.bin" "https://cnb.cool/ai-models/Kijai/vitpose_comfy/-/lfs/f6a9e7cb3a87ed65a098b096029e70150408acfafc3d695019a66b289d7719e1"
+# clip vision
+aria2c -x 4 -s 4 -c -d "/models/clip_vision" -o "sigclip_vision_patch14_384.safetensors" "https://cnb.cool/hujuyingz/comfyui_pro/-/lfs/1fee501deabac72f0ed17610307d7131e3e9d1e838d0363aa3c2b97a6e03fb33"
+# SDPose_OOD
+aria2c -x 4 -s 4 -c -d "/models/SDPose_OOD/SDPose-Wholebody/unet" -o "diffusion_pytorch_model.safetensors" "https://cnb.cool/ai-models/teemosliang/SDPose-Wholebody/-/lfs/e951ac1802f004243bbbea6f0d86abfa08360776424f2d228c62ed63c5b1ab66"
+aria2c -x 4 -s 4 -c -d "/models/SDPose_OOD/SDPose-Wholebody/vae" -o "diffusion_pytorch_model.safetensors" "https://cnb.cool/ai-models/teemosliang/SDPose-Wholebody/-/lfs/a1d993488569e928462932c8c38a0760b874d166399b14414135bd9c42df5815"
+aria2c -x 4 -s 4 -c -d "/models/SDPose_OOD/SDPose-Body/unet" -o "diffusion_pytorch_model.safetensors" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/a75d358808e58cd5eb305dd3362d0d1457d243d787ac4bf1905b64da71d8934a"
+aria2c -x 4 -s 4 -c -d "/models/SDPose_OOD/SDPose-Body/vae" -o "diffusion_pytorch_model.safetensors" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/a1d993488569e928462932c8c38a0760b874d166399b14414135bd9c42df5815"
+# FlashVSR-v1.1
+aria2c -x 4 -s 4 -c -d "/models/FlashVSR-v1.1" -o "LQ_proj_in.ckpt" "https://cnb.cool/ai-models/JunhaoZhuang/FlashVSR-v1.1/-/lfs/d6d011cdaaba6a52645086caa08fa04124e746f6ca568140a24007591142bfd2"
+aria2c -x 4 -s 4 -c -d "/models/FlashVSR-v1.1" -o "TCDecoder.ckpt" "https://cnb.cool/ai-models/JunhaoZhuang/FlashVSR-v1.1/-/lfs/e224bdcf2f52745cbf4d393ff5374c2ba09e90285d5d19062d2bf63b915b6161"
+aria2c -x 4 -s 4 -c -d "/models/FlashVSR-v1.1" -o "Wan2.1_VAE.pth" "https://cnb.cool/ai-models/JunhaoZhuang/FlashVSR-v1.1/-/lfs/38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981"
+aria2c -x 4 -s 4 -c -d "/models/FlashVSR-v1.1" -o "diffusion_pytorch_model_streaming_dmd.safetensors" "https://cnb.cool/ai-models/JunhaoZhuang/FlashVSR-v1.1/-/lfs/bd28180edcf3446c028e32fc6b731a80bf7e4da2ab4caac3186b9499964d37be"
+# IndexTTS-2
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2/bigvgan/bigvgan_v2_22khz_80band_256x" -o "bigvgan_discriminator_optimizer.pt" "https://cnb.cool/ai-models/nvidia/bigvgan_v2_22khz_80band_256x/-/lfs/2d0960ae4abecc9a33cd989b8e124c13a436e54db8dc5ae32cd5a82e1bfc1a93"
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2/bigvgan/bigvgan_v2_22khz_80band_256x" -o "bigvgan_discriminator_optimizer_3msteps.pt" "https://cnb.cool/ai-models/nvidia/bigvgan_v2_22khz_80band_256x/-/lfs/3a6179837741c10337a8bd1a7fd2a2df3dfbc50d67c0be2c1567e09e58675d46"
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2/bigvgan/bigvgan_v2_22khz_80band_256x" -o "bigvgan_generator.pt" "https://cnb.cool/ai-models/nvidia/bigvgan_v2_22khz_80band_256x/-/lfs/e95ba25972d3de0628d99cd156e9315a9c018899bf739988959ebe3544080ced"
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2/bigvgan/bigvgan_v2_22khz_80band_256x" -o "bigvgan_generator_3msteps.pt" "https://cnb.cool/ai-models/nvidia/bigvgan_v2_22khz_80band_256x/-/lfs/ee7862b70ad758a26e61f9901f3d3cbd187c26ea52d8adf8bded12bfe0603edb"
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2/qwen0.6bemo4-merge" -o "model.safetensors" "https://cnb.cool/ai-models/IndexTeam/IndexTTS-2/-/lfs/11293257a8df593c154a8ecd5fc039f3076de35411e35f06d41b471e136f6641"
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2/w2v-bert-2.0" -o "conformer_shaw.pt" "https://cnb.cool/ai-models/facebook/w2v-bert-2.0/-/lfs/8310b4270a5b499e92e20c859892dbf7429619347debb5f8feba79eb88f99b4f"
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2/w2v-bert-2.0" -o "model.safetensors" "https://cnb.cool/ai-models/facebook/w2v-bert-2.0/-/lfs/eb890c9660ed6e3414b6812e27257b8ce5454365d5490d3ad581ea60b93be043"
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2" -o "gpt.pth" "https://cnb.cool/ai-models/IndexTeam/IndexTTS-2/-/lfs/baaaeb8b56328da81731dc540a85a7dee32eca9da28f174b05757cb651c602a4"
+# aria2c -x 4 -s 4 -c -d "/models/IndexTTS-2" -o "s2mel.pth" "https://cnb.cool/ai-models/IndexTeam/IndexTTS-2/-/lfs/aae1bb12017cbb47e7a5ce537fc82f40b6b1deb71acdb9b8f25686f32714b636"
+# SoulX-Podcast
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B-dialect" -o "flow.cache.pt" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B-dialect/-/lfs/3ebde248652c6eed855e08bb6a263af3847039a1361f8019bdb27f5f680a1dc4"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B-dialect" -o "flow.decoder.estimator.fp32.onnx" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B-dialect/-/lfs/cd54e4281701e6630730da64502d77b7e8b6e5c057cca65128bffb50f85cbf98"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B-dialect" -o "flow.pt" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B-dialect/-/lfs/ff4c2f867674411e0a08cee702996df13fa67c1cd864c06108da88d16d088541"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B-dialect" -o "model-00001-of-00003.safetensors" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B-dialect/-/lfs/4a89b39d9502f20ddc71b77bcee905b4ffeb45e2f3fa569ef7c1b2ed62ce47b0"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B-dialect" -o "model-00002-of-00003.safetensors" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B-dialect/-/lfs/209b6498a4b58afbe1377c7871cc1004583623e4b6853cde7731b828cf9034ef"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B-dialect" -o "model-00003-of-00003.safetensors" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B-dialect/-/lfs/e9e2b5ea54d61cfc726f98ea726104f9786313ec6890c8c07e9d121ef4e98e90"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B" -o "flow.cache.pt" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B/-/lfs/3ebde248652c6eed855e08bb6a263af3847039a1361f8019bdb27f5f680a1dc4"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B" -o "flow.decoder.estimator.fp32.onnx" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B/-/lfs/cd54e4281701e6630730da64502d77b7e8b6e5c057cca65128bffb50f85cbf98"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B" -o "flow.pt" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B/-/lfs/ff4c2f867674411e0a08cee702996df13fa67c1cd864c06108da88d16d088541"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B" -o "model-00001-of-00003.safetensors" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B/-/lfs/cf360d0e58425cd7f4b9e3d8c870bd283bb3d0f7df7c5e38b832da4bf819204f"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B" -o "model-00002-of-00003.safetensors" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B/-/lfs/dc178158351aae62c6c7366f2d452c38de9971f7bfcc20bfa31a1904cbb83f4f"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/SoulX-Podcast-1.7B" -o "model-00003-of-00003.safetensors" "https://cnb.cool/ai-models/Soul-AILab/SoulX-Podcast-1.7B/-/lfs/b5c932848d348967c9de240c4bf36c7a7ac414efef2ed4c06ed7c0497a23c70f"
+# siglip-so400m-patch14-384
+aria2c -x 4 -s 4 -c -d "/models/clip_vision/siglip-so400m-patch14-384" -o "model.safetensors" "https://cnb.cool/ai-models/google/siglip-so400m-patch14-384/-/lfs/ea2abad2b7f8a9c1aa5e49a244d5d57ffa71c56f720c94bc5d240ef4d6e1d94a"
+# hunyuanfoley
+# aria2c -x 4 -s 4 -c -d "/models/hunyuanfoley/larger_clap_general" -o "pytorch_model.bin" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/314eb00cce6ad68d25237b8446b659ccdb136ed4672c1bca470f142f72455026"
+# aria2c -x 4 -s 4 -c -d "/models/hunyuanfoley/siglip2-base-patch16-512" -o "model.safetensors" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/fe0e601c625e69eed8e73500d39e9b6164403fe03db8048e87913c3cefbbb3fe"
+# aria2c -x 4 -s 4 -c -d "/models/hunyuanfoley" -o "hunyuanvideo_foley.pth" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/2900021f8ee562a8175b2f1a3fafb06b9e9e848f11f4c6d4d5d72e126f7c0475"
+# aria2c -x 4 -s 4 -c -d "/models/hunyuanfoley" -o "synchformer_state_dict.pth" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/8aff082f2df5c3bc52759db0c865c7ee772ae6400b860d1b7e90413f2defb67c"
+# aria2c -x 4 -s 4 -c -d "/models/hunyuanfoley" -o "vae_128d_48k.pth" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/07e6139ff33bd21ba8a7a7f40ed24aab13ac0d100cd686f8a9f3e03dc5251cb1"
+# VAE
+# aria2c -x 4 -s 4 -c -d "/models/vae" -o "wan_2.1_vae.safetensors" "https://cnb.cool/ai-models/Comfy-Org/Wan_2.1_ComfyUI_repackaged/-/lfs/2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+# SEEDVR2
+aria2c -x 4 -s 4 -c -d "/models/SEEDVR2" -o "seedvr2_ema_7b_fp8_e4m3fn.safetensors" "https://cnb.cool/ai-models/numz/SeedVR2_comfyUI/-/lfs/1fdbf3877b7d1eb266038d3a165a977f17dbb4daa4a0f0d334d5461476963037"
+aria2c -x 4 -s 4 -c -d "/models/SEEDVR2" -o "seedvr2_ema_3b_fp8_e4m3fn.safetensors" "https://cnb.cool/ai-models/numz/SeedVR2_comfyUI/-/lfs/3bf1e43ebedd570e7e7a0b1b60d6a02e105978f505c8128a241cde99a8240cff"
+aria2c -x 4 -s 4 -c -d "/models/SEEDVR2" -o "ema_vae_fp16.safetensors" "https://cnb.cool/ai-models/numz/SeedVR2_comfyUI/-/lfs/20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"
+# LTX-2
+aria2c -x 4 -s 4 -c -d "/models/latent_upscale_models" -o "ltx-2-spatial-upscaler-x2-1.0.safetensors" "https://cnb.cool/ai-models/Lightricks/LTX-2/-/lfs/3160fabf8edf0bc4dd8de40353a180813b111ce586b655ad54af9a7b8c6736de"
+aria2c -x 4 -s 4 -c -d "/models/latent_upscale_models" -o "ltx-2.3-spatial-upscaler-x2-1.0.safetensors" "https://cnb.cool/ai-models/Lightricks/LTX-2.3/-/lfs/93800de87dbc448b5b31f3c5c3a1579ba6335151de061a564f6f026b0fc770ad"
+# HeartMula
+# aria2c -x 4 -s 4 -c -d "/models//HeartMuLa/HeartCodec-oss-20260123" -o "model-00001-of-00002.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartCodec-oss-20260123/-/lfs/50d2c022468a0e127992d99e02117d2efbad2b10fddc8ceaf09550f154e185d4"
+# aria2c -x 4 -s 4 -c -d "/models//HeartMuLa/HeartCodec-oss-20260123" -o "model-00002-of-00002.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartCodec-oss-20260123/-/lfs/6f319d0f5b31858dfe98bd8fc89d3083cbfff74ac75a0531f1a7b86949197917"
+# aria2c -x 4 -s 4 -c -d "/models//HeartMuLa/HeartCodec-oss" -o "model.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartCodec-oss/-/lfs/3ee7adb88916644d6e639d7ecb9c42cd328556ec8aacc58f0ee4551aee5057d5"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartMuLa-RL-oss-3B-20260123" -o "model-00001-of-00004.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartMuLa-RL-oss-3B-20260123/-/lfs/4bb9fa182c68f4a8205c006dfbf7da9686ac5c78b75b215538af2b97394b9eff"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartMuLa-RL-oss-3B-20260123" -o "model-00002-of-00004.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartMuLa-RL-oss-3B-20260123/-/lfs/eae31b37e40b0d6d2dc75ee313dde6a0687322d1430c6681bf8eb7d5ba394a70"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartMuLa-RL-oss-3B-20260123" -o "model-00003-of-00004.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartMuLa-RL-oss-3B-20260123/-/lfs/66676f07af6ce2739053c5edef585b50ab6c3ac709e74ab47b1c79773ccdbfda"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartMuLa-RL-oss-3B-20260123" -o "model-00004-of-00004.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartMuLa-RL-oss-3B-20260123/-/lfs/3f63bfe7120ece5bba84dbabc033167bf605b2ac38067f7040178377aaaaad8f"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartMuLa-oss-3B" -o "model-00001-of-00004.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartMuLa-oss-3B/-/lfs/211968cbe5178c7c7c0e26c79d41a49e53b906a7416b0a94e00ba20f8eaf5b26"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartMuLa-oss-3B" -o "model-00002-of-00004.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartMuLa-oss-3B/-/lfs/f7035a3f488acdcbdb95cad247c37c3acb7d0066c7458a6c58dc341ce186c359"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartMuLa-oss-3B" -o "model-00003-of-00004.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartMuLa-oss-3B/-/lfs/4ac4b0bc001498f267e077392d813bcd63ece2d9d230d1e1e5e4cc6f38d3636a"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartMuLa-oss-3B" -o "model-00004-of-00004.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartMuLa-oss-3B/-/lfs/7b934da1102acca846cdcbc7abd38a33be80a44891a9d84e03eff786738c4df6"
+# aria2c -x 4 -s 4 -c -d "/models/HeartMuLa/HeartTranscriptor-oss" -o "model.safetensors" "https://cnb.cool/ai-models/HeartMuLa/HeartTranscriptor-oss/-/lfs/9e09145b687c26330da96ad2d7ca1fe542d46247700a43a3156b924a6b6e6a07"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/Qwen/Qwen3-TTS-12Hz-1.7B-Base" -o "model.safetensors" "https://cnb.cool/ai-models/Qwen/Qwen3-TTS-12Hz-1.7B-Base/-/lfs/38fc7fc51c5e776e840414b6fd443962e9411b9654888fd7913e4da643cb857c"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/Qwen/Qwen3-TTS-12Hz-1.7B-Base/speech_tokenizer" -o "model.safetensors" "https://cnb.cool/ai-models/Qwen/Qwen3-TTS-12Hz-1.7B-Base/-/lfs/836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice" -o "model.safetensors" "https://cnb.cool/ai-models/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice/-/lfs/38b1d5971bdbd982b561cccec982669a53b0537c3cf5e9bd4778ed07bb2f5137"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice/speech_tokenizer" -o "model.safetensors" "https://cnb.cool/ai-models/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice/-/lfs/836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign" -o "model.safetensors" "https://cnb.cool/ai-models/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign/-/lfs/391e8db219f292c515297cdceeb43e4eae67cdde35fa57e79a6a8a532fca0522"
+# aria2c -x 4 -s 4 -c -d "/models/TTS/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign/speech_tokenizer" -o "model.safetensors" "https://cnb.cool/ai-models/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign/-/lfs/836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"
+# aria2c -x 4 -s 4 -c -d "/models/" -o "" ""

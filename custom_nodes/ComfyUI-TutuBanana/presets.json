@@ -1,0 +1,124 @@
+{
+  "gemini": [
+    {
+      "id": "portrait-studio",
+      "name": "Professional Portrait",
+      "description": "Studio portrait with professional lighting and composition",
+      "config": {
+        "prompt_template": "Create a professional headshot photograph of {prompt}, featuring studio lighting with a key light at 45-degree angle, soft fill lighting to reduce shadows, medium telephoto lens, clean seamless background, high resolution detail, commercial portrait quality"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "landscape-cinematic",
+      "name": "Cinematic Landscape",
+      "description": "Epic landscape photography with dramatic lighting",
+      "config": {
+        "prompt_template": "Capture a breathtaking landscape photograph of {prompt}, shot during golden hour with dramatic natural lighting, wide-angle composition, rich colors and contrast, professional landscape photography, award-winning quality"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "product-commercial",
+      "name": "Product Photography",
+      "description": "Commercial product photography with clean presentation",
+      "config": {
+        "prompt_template": "Professional product photography of {prompt}, featuring seamless white background, multi-point studio lighting system, high-resolution detail capture, commercial advertising quality, perfect for marketing materials"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "concept-digital",
+      "name": "Digital Concept Art",
+      "description": "High-quality digital concept art with fantasy elements",
+      "config": {
+        "prompt_template": "Create detailed digital concept art of {prompt}, featuring intricate illustration work with professional artstation-quality rendering, rich and vibrant color palette, fantasy aesthetic elements, trending digital art style with exceptional attention to detail"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "anime-illustration",
+      "name": "Anime Style Art",
+      "description": "Japanese anime-style illustration with vibrant colors",
+      "config": {
+        "prompt_template": "Anime style illustration of {prompt}, featuring cel-shaded artwork, vibrant colors, clean line art, detailed character design, high quality digital illustration, Japanese animation aesthetic"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "photorealistic-render",
+      "name": "Photorealistic Render",
+      "description": "Ultra-realistic 3D rendering with perfect detail",
+      "config": {
+        "prompt_template": "Photorealistic rendering of {prompt}, featuring ultra-high detail, 8K resolution, perfect lighting and shadows, professional 3D rendering quality, lifelike textures and materials"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "oil-classical",
+      "name": "Classical Oil Painting",
+      "description": "Traditional oil painting with masterpiece quality",
+      "config": {
+        "prompt_template": "Classical oil painting of {prompt}, featuring traditional art techniques, rich oil paint textures, masterpiece quality composition, museum-worthy artwork, detailed brushwork and color harmony"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "watercolor-artistic",
+      "name": "Watercolor Painting",
+      "description": "Delicate watercolor painting with soft, flowing colors",
+      "config": {
+        "prompt_template": "Watercolor painting of {prompt}, featuring soft flowing colors, delicate brushstrokes, artistic paper texture, transparent layering technique, elegant and refined artistic style"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "cyberpunk-futuristic",
+      "name": "Cyberpunk Future",
+      "description": "Futuristic cyberpunk aesthetic with neon and high-tech elements",
+      "config": {
+        "prompt_template": "Cyberpunk style image of {prompt}, featuring neon lighting, futuristic technology, high-tech environments, dystopian atmosphere, vibrant neon colors, urban sci-fi aesthetic"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "vintage-film",
+      "name": "Vintage Film Photography",
+      "description": "Classic film photography with nostalgic atmosphere",
+      "config": {
+        "prompt_template": "Vintage film photography of {prompt}, featuring classic film grain, nostalgic color grading, retro atmosphere, analog photography aesthetic, timeless composition"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "architecture-modern",
+      "name": "Architectural Photography",
+      "description": "Professional architectural photography with clean lines",
+      "config": {
+        "prompt_template": "Professional architectural photography of {prompt}, featuring clean geometric lines, perfect perspective correction, dramatic lighting, high contrast, modern architectural aesthetic, commercial quality"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    },
+    {
+      "id": "food-gourmet",
+      "name": "Gourmet Food Photography",
+      "description": "Appetizing food photography with perfect presentation",
+      "config": {
+        "prompt_template": "Gourmet food photography of {prompt}, featuring perfect plating presentation, appetizing colors, professional food styling, soft natural lighting, commercial restaurant quality, mouth-watering appeal"
+      },
+      "created_time": 1756253600.0,
+      "created_date": "2025-08-27 08:00:00"
+    }
+  ]
+}

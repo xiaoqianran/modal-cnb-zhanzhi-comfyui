@@ -1,0 +1,14 @@
+{
+  "自定义下载链接说明：": "该文件需严格遵守json格式，主要是标点符号，格式不对无法加载。支持多级文件夹前缀。",
+  "checkpoints": {},
+  "clip": {},
+  "clip_vision": {},
+  "controlnet": {},
+  "diy_models": {},
+  "unet": {},
+  "diffusion_models": {},
+  "loras": {},
+  "text_encoders": {},
+  "upscale_models": {},
+  "vae": {}
+}
