@@ -39,9 +39,16 @@ data_vol = modal.Volume.from_name(
 )
 
 
+_DEFAULT_SECRET_NAMES = ("huggingface", "civitai", "github")
+
+
 def _optional_secrets() -> list[modal.Secret]:
-    names = os.environ.get("MODAL_SECRETS", "")
-    return [modal.Secret.from_name(name.strip()) for name in names.split(",") if name.strip()]
+    raw = os.environ.get("MODAL_SECRETS")
+    if raw is None:
+        names = _DEFAULT_SECRET_NAMES
+    else:
+        names = tuple(part.strip() for part in raw.split(",") if part.strip())
+    return [modal.Secret.from_name(name) for name in names]
 
 
 def build_image() -> modal.Image:
@@ -53,6 +60,7 @@ def build_image() -> modal.Image:
     repo_url = os.environ.get("CNB_REPO_URL", "https://cnb.cool/zhan_zhi/ComfyUI.git")
     repo_ref = os.environ.get("CNB_REPO_REF", "main")
     bake_cnb = os.environ.get("MODAL_BAKE_CNB", "1") != "0"
+    secrets = _optional_secrets()
 
     image = (
         modal.Image.from_registry(cuda_image, add_python="3.12")
@@ -86,16 +94,15 @@ def build_image() -> modal.Image:
                 "CNB_REPO_REF": repo_ref,
                 "GIT_LFS_SKIP_SMUDGE": "1",
                 "PYTHONUNBUFFERED": "1",
+                "UV_SYSTEM_PYTHON": "1",
             }
         )
         .add_local_dir(str(REPO_ROOT / "scripts"), remote_path="/opt/modal-cnb/scripts", copy=True)
         .add_local_dir(str(REPO_ROOT / "patches"), remote_path="/opt/modal-cnb/patches", copy=True)
         .add_local_dir(str(REPO_ROOT / "config"), remote_path="/opt/modal-cnb/config", copy=True)
-        .run_commands(
-            "pip install --upgrade pip",
-            f"pip install torch==2.9.0 torchvision==0.24.0 --index-url {torch_index}",
-        )
-        .pip_install(
+        .uv_pip_install(
+            "torch==2.9.0",
+            "torchvision==0.24.0",
             "huggingface_hub",
             "requests",
             "tqdm",
@@ -112,15 +119,19 @@ def build_image() -> modal.Image:
             "opencv-python-headless",
             "aiohttp",
             "psutil",
+            extra_index_url=torch_index,
+            extra_options="--index-strategy unsafe-best-match",
+            secrets=secrets,
         )
     )
 
     if bake_cnb:
         image = image.run_commands(
             "bash /opt/modal-cnb/scripts/clone_cnb.sh /opt/zhanzhi",
-            "pip install -r /opt/zhanzhi/ComfyUI/requirements.txt",
+            "uv pip install --system -r /opt/zhanzhi/ComfyUI/requirements.txt",
             "python3 /opt/modal-cnb/scripts/install_node_deps.py",
             "python3 /opt/modal-cnb/scripts/apply_hook.py --comfy /opt/zhanzhi/ComfyUI",
+            secrets=secrets,
         )
     return image
 
