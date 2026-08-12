@@ -31,6 +31,9 @@ fi
 
 git -C "$MIRROR" config user.name "${GIT_AUTHOR_NAME:-github-actions[bot]}"
 git -C "$MIRROR" config user.email "${GIT_AUTHOR_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+git -C "$MIRROR" lfs uninstall --local >/dev/null 2>&1 || true
+git -C "$MIRROR" config lfs.fetchexclude "*"
+git -C "$MIRROR" config lfs.allowincompletepush true
 
 upstream_sha="unknown"
 if git -C "$SRC" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -54,6 +57,12 @@ tar -C "$SRC" \
   --exclude='.github' \
   --exclude='.cnb-mirror-meta' \
   -cf - . | tar -C "$MIRROR" -xf -
+
+# Keep CNB LFS *pointers* as regular files. Do not upload missing LFS blobs.
+if [[ -f "$MIRROR/.gitattributes" ]]; then
+  grep -v 'filter=lfs' "$MIRROR/.gitattributes" > "$MIRROR/.gitattributes.nolfs" || true
+  mv "$MIRROR/.gitattributes.nolfs" "$MIRROR/.gitattributes"
+fi
 
 git -C "$MIRROR" add -A -- . ':!.cnb-mirror-meta'
 if git -C "$MIRROR" diff --cached --quiet; then
