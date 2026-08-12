@@ -18,8 +18,6 @@ from pathlib import Path
 
 import modal
 
-from env_tokens import read_dotenv, token_secret_dict
-
 REPO_ROOT = Path(__file__).resolve().parent
 APP_NAME = os.environ.get("MODAL_APP_NAME", "zhanzhi-comfyui")
 GPU = os.environ.get("MODAL_GPU", "L40S")
@@ -51,6 +49,7 @@ def _optional_secrets() -> list[modal.Secret]:
     """
     if not modal.is_local():
         return []
+    from env_tokens import read_dotenv, token_secret_dict
     dotenv = read_dotenv(REPO_ROOT / ".env")
     payload = token_secret_dict(os.environ, dotenv)
     if not payload:
