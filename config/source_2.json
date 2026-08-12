@@ -1,0 +1,14 @@
+{
+  "自定义下载链接说明：": "Modal overlay. Same schema as CNB assets/source_2.json. Earlier keys win over the bundled source.json. HTTP URLs do not need a CNB /-/lfs/ digest.",
+  "checkpoints": {},
+  "clip": {},
+  "clip_vision": {},
+  "controlnet": {},
+  "diy_models": {},
+  "unet": {},
+  "diffusion_models": {},
+  "loras": {},
+  "text_encoders": {},
+  "upscale_models": {},
+  "vae": {}
+}

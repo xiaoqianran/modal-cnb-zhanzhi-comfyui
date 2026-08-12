@@ -1,0 +1,9 @@
+{
+  "自定义下载链接说明：": "overlay",
+  "checkpoints": {
+    "mine.safetensors": "https://huggingface.co/me/resolve/main/mine.safetensors"
+  },
+  "vae": {
+    "wan_2.1_vae.safetensors": "https://huggingface.co/me/resolve/main/wan.safetensors"
+  }
+}

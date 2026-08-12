@@ -1,0 +1,15 @@
+{
+  "path_dict": {
+    "Comfy-Org": {
+      "Wan_2.1_ComfyUI_repackaged": "workspace/models",
+      "Flux1": "workspace/models/checkpoints"
+    }
+  },
+  "Wan_2.1_ComfyUI_repackaged": {
+    "vae/wan_2.1_vae.safetensors": "https://cnb.cool/ai-models/Comfy-Org/Wan_2.1_ComfyUI_repackaged/-/lfs/wanvae",
+    "text_encoders/umt5.safetensors": "https://cnb.cool/ai-models/Comfy-Org/Wan_2.1_ComfyUI_repackaged/-/lfs/umt5"
+  },
+  "Flux1": {
+    "flux1-dev.safetensors": "https://cnb.cool/ai-models/Comfy-Org/Flux1/-/lfs/fluxdev"
+  }
+}
