@@ -15,8 +15,10 @@
 set -euo pipefail
 
 DEST="${1:-${ZHANZHI_ROOT:-/opt/zhanzhi}}"
-REPO_URL="${CNB_REPO_URL:-https://cnb.cool/zhan_zhi/ComfyUI.git}"
-REF="${CNB_REPO_REF:-main}"
+# Modal / local default: this repo's daily snapshot. The GitHub Action
+# overrides these to clone from cnb.cool when refreshing cnb-mirror.
+REPO_URL="${CNB_REPO_URL:-https://github.com/xiaoqianran/modal-cnb-zhanzhi-comfyui.git}"
+REF="${CNB_REPO_REF:-cnb-mirror}"
 RETRIES="${CNB_CLONE_RETRIES:-5}"
 RETRY_WAIT="${CNB_CLONE_RETRY_WAIT:-4}"
 HTTP_VERSION="${CNB_HTTP_VERSION:-HTTP/1.1}"
