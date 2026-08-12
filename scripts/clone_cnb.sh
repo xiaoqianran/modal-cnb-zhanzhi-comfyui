@@ -10,6 +10,10 @@ REF="${CNB_REPO_REF:-main}"
 export GIT_LFS_SKIP_SMUDGE=1
 export GIT_TERMINAL_PROMPT=0
 
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+fi
+
 mkdir -p "$(dirname "$DEST")"
 
 if [[ -d "$DEST/.git" ]]; then

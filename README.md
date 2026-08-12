@@ -113,7 +113,7 @@ MODAL_GPU=H100 modal deploy app.py
 - `MODAL_BAKE_CNB=0` — 镜像里不克隆，容器启动时再克隆（冷启动更慢，镜像更小）
 - `PREFETCH=0` — UI 启动时不要后台预取（你已经跑过 `prefetch` 时很有用）
 - `COMFY_EXTRA_ARGS` — 追加给 `main.py`，例如 `--use-flash-attention`
-- `MODAL_SECRETS=huggingface` — 挂上已有的 Modal Secret（如 `HF_TOKEN`）
+- `MODAL_SECRETS` — 默认挂载 Modal Secret `huggingface`、`civitai`、`github`（提供 `HF_TOKEN` / `CIVITAI_TOKEN` / `GITHUB_TOKEN`）
 - `TORCH_INDEX_URL` — 默认 cu130；若驱动不够新，可改 `https://download.pytorch.org/whl/cu128`
 
 ### 自己的模型

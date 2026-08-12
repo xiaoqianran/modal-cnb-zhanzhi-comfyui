@@ -21,7 +21,24 @@ def pip_cmd() -> list[str]:
     return [sys.executable, "-m", "pip", "install"]
 
 
+def configure_github_https() -> None:
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not token:
+        return
+    subprocess.run(
+        [
+            "git",
+            "config",
+            "--global",
+            f"url.https://x-access-token:{token}@github.com/.insteadOf",
+            "https://github.com/",
+        ],
+        check=False,
+    )
+
+
 def main() -> int:
+    configure_github_https()
     root = Path(os.environ.get("ZHANZHI_ROOT", "/opt/zhanzhi")) / "custom_nodes"
     if not root.is_dir():
         print(f"[deps] no custom_nodes at {root}")
