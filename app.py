@@ -92,6 +92,8 @@ def build_image() -> modal.Image:
                 "MODAL_CNB": "/opt/modal-cnb",
                 "CNB_REPO_URL": repo_url,
                 "CNB_REPO_REF": repo_ref,
+                "CNB_CLONE_RETRIES": os.environ.get("CNB_CLONE_RETRIES", "5"),
+                "CNB_HTTP_VERSION": os.environ.get("CNB_HTTP_VERSION", "HTTP/1.1"),
                 "GIT_LFS_SKIP_SMUDGE": "1",
                 "PYTHONUNBUFFERED": "1",
                 "UV_SYSTEM_PYTHON": "1",

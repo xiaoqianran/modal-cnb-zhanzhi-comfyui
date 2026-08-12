@@ -23,7 +23,7 @@ CNB 真正在做的事只有四层：
 | `extra_model_paths.yaml` **再加** `ComfyUI/models -> /models` | CNB 扫了两遍同一棵树；这里只保留软链 |
 | 把 `source.json` / `初始化下载` 复制进本仓库 | 运行时从绽知仓库读取，避免和上游漂移 |
 
-上游 ComfyUI、74 个插件、107 个工作流、模型目录 **仍然来自绽知仓库**，由 `scripts/clone_cnb.sh` 浅克隆（跳过 LFS / venv）。
+上游 ComfyUI、74 个插件、107 个工作流 **仍然来自绽知仓库**，由 `scripts/clone_cnb.sh` 在镜像构建时浅克隆：`--depth 1` + `blob:none`（先只拉 tree），再按目录 / 每个 custom node 分片 `sparse-checkout add`，HTTP/1.1 + 失败重试。不拉 LFS，也不物化 `venv312` / `models`。
 
 ## 对应关系
 
@@ -64,7 +64,7 @@ flowchart LR
 
 ```
 app.py                 Modal App（镜像、Volume、UI、prefetch）
-scripts/clone_cnb.sh   浅克隆绽知仓库（无 LFS、无 venv）
+scripts/clone_cnb.sh   浅克隆绽知仓库：depth=1、blob:none、按插件分片、HTTP/1.1 重试
 scripts/bootstrap.sh   布局软链 + hook + 后台预取 + 启动
 scripts/start_comfyui.sh
 scripts/prefetch.py    解析并执行「初始化下载」
@@ -110,6 +110,7 @@ MODAL_GPU=H100 modal deploy app.py
 
 - `MODAL_GPU` — 默认 `L40S`
 - `CNB_REPO_URL` / `CNB_REPO_REF` — 绽知仓库；可换成你自己的 fork / GitHub 镜像
+- `CNB_CLONE_RETRIES` — 每个分片 fetch 失败后的重试次数，默认 `5`（Modal 构建机访问 `cnb.cool` 容易 HTTP/2 断流）
 - `MODAL_BAKE_CNB=0` — 镜像里不克隆，容器启动时再克隆（冷启动更慢，镜像更小）
 - `PREFETCH=0` — UI 启动时不要后台预取（你已经跑过 `prefetch` 时很有用）
 - `COMFY_EXTRA_ARGS` — 追加给 `main.py`，例如 `--use-flash-attention`
