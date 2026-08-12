@@ -18,6 +18,8 @@ from pathlib import Path
 
 import modal
 
+from env_tokens import read_dotenv, token_secret_dict
+
 REPO_ROOT = Path(__file__).resolve().parent
 APP_NAME = os.environ.get("MODAL_APP_NAME", "zhanzhi-comfyui")
 GPU = os.environ.get("MODAL_GPU", "L40S")
@@ -39,16 +41,21 @@ data_vol = modal.Volume.from_name(
 )
 
 
-_DEFAULT_SECRET_NAMES = ("huggingface", "civitai", "github")
-
-
 def _optional_secrets() -> list[modal.Secret]:
-    raw = os.environ.get("MODAL_SECRETS")
-    if raw is None:
-        names = _DEFAULT_SECRET_NAMES
-    else:
-        names = tuple(part.strip() for part in raw.split(",") if part.strip())
-    return [modal.Secret.from_name(name) for name in names]
+    """Turn local HF / Civitai / GitHub tokens into a Modal Secret.
+
+    Reads ``HF_TOKEN`` / ``CIVITAI_TOKEN`` / ``GITHUB_TOKEN`` (and aliases)
+    from the process environment and from a gitignored ``.env``. Other ``.env``
+    keys are not uploaded. ``from_dict`` must run locally (``modal serve`` /
+    ``deploy``), not inside a container.
+    """
+    if not modal.is_local():
+        return []
+    dotenv = read_dotenv(REPO_ROOT / ".env")
+    payload = token_secret_dict(os.environ, dotenv)
+    if not payload:
+        return []
+    return [modal.Secret.from_dict(payload)]
 
 
 def build_image() -> modal.Image:
