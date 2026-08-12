@@ -94,7 +94,7 @@ modal deploy app.py
 modal run app.py --action status
 ```
 
-第一次 `serve` / `deploy` 会构建镜像：拉 CUDA 13 基础镜像、装 Torch 2.9.0+cu130、浅克隆绽知仓库、安装 ComfyUI 与插件的 `requirements.txt`。这对应 CNB 预装镜像，只需要做一次。
+第一次 `serve` / `deploy` 会构建镜像：拉 CUDA 13 基础镜像、用 Modal 的 `Image.uv_pip_install`（uv，比 pip 快）装 Torch 2.9.0+cu130、浅克隆绽知仓库、再用 `uv pip` 装 ComfyUI 与插件的 `requirements.txt`。这对应 CNB 预装镜像，只需要做一次。需要 Modal Python SDK **≥ 1.1.0**。
 
 换卡：
 
@@ -134,7 +134,7 @@ tail -f /tmp/prefetch.log
 ## 设计约束
 
 - **模型不进镜像、不进本 Git 仓库。** 只进 Volume。  
-- **Python 环境不进 Git。** 只进 Image。  
+- **Python 环境不进 Git。** 只进 Image；镜像层用 `uv_pip_install` / `uv pip`，不用 pip。  
 - **绽知的 `source.json` / `初始化下载` 不 fork 一份。** 克隆后原地读。  
 - **启动脚本只有一份**，按独占 GPU 调 VRAM，而不是按 CNB 共享卡。  
 - Hook 继续叫 `hook_cnb_xu.py`，因为绽知的 `folder_paths.py` 已经 `import hook_cnb_xu`。
