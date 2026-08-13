@@ -1,9 +1,0 @@
-workspace:
-  launch:
-    button:
-      name: ComfyUI 起飞🚀
-      description:  ComfyUI 💪 YYDS
-      hoverImage: .cnb/click.gif
-    disabled: false
-    autoOpenWebIDE: true
-    hoverImage: .cnb/click.gif
