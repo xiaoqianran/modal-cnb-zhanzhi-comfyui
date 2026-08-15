@@ -223,6 +223,8 @@ LanPaint's AV pipeline inpaints video **and audio** together with the MiniMax H3
 |:----------------------------------:|:----------------------:|:----------------:|
 | ![Masked Video](https://github.com/scraed/LanPaint/blob/master/examples/Example_29/Masked_LoadMe.gif) | ![Mask Overlay](https://github.com/scraed/LanPaint/blob/master/examples/Example_29/Masked_LoadMe_MaskOverlay.gif) | ![Inpainted Video](https://github.com/scraed/LanPaint/blob/master/examples/Example_29/InPainted_Drag_Me_to_ComfyUI.gif) |
 
+![LanPaint VideoMaskEditor](https://github.com/scraed/LanPaint/blob/master/examples/videomasknode.PNG)
+
 [View Workflow & Masks](https://github.com/scraed/LanPaint/tree/master/examples/Example_29) · [Workflow JSON](https://github.com/scraed/LanPaint/blob/master/example_workflows/MiniMax_H3_AV_EncodeDecode_Inpaint.json)
 
 **How it works:**
@@ -617,6 +619,9 @@ Submit a PR to add your tutorial/video here, or open an [Issue](https://github.c
 [Working togather with crop&stitch](https://github.com/scraed/LanPaint/issues/46)
 
 ## Updates
+- 2026/08/12
+    - `v2.1.0`: Significantly accelerated LanPaint using a new schedule mechanism.
+    - Fix bugs for MiniMax H3 on the latest ComfyUI.
 - 2026/08/09
     - Add MiniMax H3 video + audio inpainting support (Example_29): paint per-frame video masks and audio intervals in one editor session, encode both streams into a nested AV latent, sample once, and decode back with the source fps and bit depth preserved.
     - The mask editor can export the masks into the video itself (mp4 metadata) - share a single video file and the masks travel with it.

@@ -108,6 +108,7 @@ examples/Example_27/Original_No_Mask.png
 examples/Example_28/InPainted_Drag_Me_to_ComfyUI.png
 examples/Example_28/Masked_Load_Me_in_Loader.png
 examples/Example_28/Original_No_Mask.png
+examples/Example_29/H3_Input_Mask_Result.mp4
 examples/Example_29/InPainted_Drag_Me_to_ComfyUI.gif
 examples/Example_29/InPainted_Drag_Me_to_ComfyUI.mp4
 examples/Example_29/Masked_LoadMe.gif
@@ -159,6 +160,7 @@ examples/Original_Load_Me_in_Loader_example19.gif
 examples/Original_No_Mask-example18.gif
 examples/Original_No_Mask_example17.gif
 examples/Outpainted_40frames_Drag_Me_to_ComfyUI_example19.gif
+examples/videomasknode.PNG
 krea2-canvas.png
 krea2-fixed.png
 pyproject.toml
@@ -177,7 +179,9 @@ tests/pytest.ini
 tests/test_LanPaint.py
 tests/test_av_schedule.py
 tests/test_lanpaint_semantic_stop.py
+tests/test_min_step_frac.py
 tests/test_minimax_audio.py
+tests/test_node_params.py
 tests/test_reshape_mask.py
 tests/test_sho_regression.py
 tests/test_videomask.py

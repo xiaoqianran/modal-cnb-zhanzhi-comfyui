@@ -683,8 +683,6 @@ function removeMentionsForMaterial(node, link) {
 function removeVirtualLink(node, index) {
     const links = ensureLinks(node);
     if (index < 0 || index >= links.length) return false;
-    const removed = links[index];
-    removeMentionsForMaterial(node, removed);
     links.splice(index, 1);
     resequence(node);
     refreshMaterialTray(node);
@@ -1436,10 +1434,14 @@ function buildRuntimePrompt(node, runtimeLinks) {
         if (part?.type === "dialogue") return `<d>${String(part.text || "")}</d>`;
         if (part?.type !== "mention") return String(part?.text || "");
         const mediaType = String(part.mediaType || "image").toLowerCase();
+        const referenceMode = String(part.referenceMode || "index").toLowerCase();
         const partSourceId = part.sourceId != null && Number.isFinite(Number(part.sourceId)) ? Number(part.sourceId) : null;
         const partOrdinal = Number(part.ordinal);
         let index = -1;
-        if (partSourceId != null) {
+        // Index labels are positional: Picture 2 always means the second image
+        // in the current material order, regardless of which source used to be
+        // connected when the label was inserted.
+        if (referenceMode !== "index" && partSourceId != null) {
             index = runtimeLinks.findIndex((link) =>
                 Number(link.source_id) === partSourceId
                 && Number(link.source_slot) === Number(part.sourceSlot || 0)
@@ -1610,6 +1612,10 @@ function findMentionOption(options, reference, mode) {
     const findByOrdinal = () => Number.isFinite(ordinal) && ordinal > 0
         ? options.find((item) => item.type === type && Number(item.ordinal) === ordinal)
         : null;
+    // In index mode a mention belongs to a position, not a source node. This
+    // keeps labels unchanged while reordered/reconnected materials naturally
+    // take on the label for their new position.
+    if (String(mode || "index").toLowerCase() === "index") return findByOrdinal();
     if (Number.isFinite(sourceId)) {
         const sourceMatch = options.find((item) => Number(item.sourceId) === sourceId
             && Number(item.sourceSlot) === sourceSlot
