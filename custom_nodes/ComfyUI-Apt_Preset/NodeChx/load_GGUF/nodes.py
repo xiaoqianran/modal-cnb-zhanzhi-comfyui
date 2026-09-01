@@ -144,7 +144,7 @@ class UnetLoaderGGUF2:
 
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "load_unet"
-    CATEGORY = "Apt_Preset/chx_load"
+    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
     TITLE = "Unet Loader (GGUF)"
 
     def load_unet(self, unet_name, dequant_dtype=None, patch_dtype=None, patch_on_device=None):
@@ -165,7 +165,7 @@ class UnetLoaderGGUF2:
             ops.Linear.patch_dtype = getattr(torch, patch_dtype)
 
         # init model
-        unet_path = folder_paths.get_full_path_or_raise("unet", unet_name)
+        unet_path = folder_paths.get_full_path("unet", unet_name)
         sd = gguf_sd_loader(unet_path)
         model = comfy.sd.load_diffusion_model_state_dict(
             sd, model_options={"custom_operations": ops}
@@ -240,7 +240,7 @@ class CLIPLoaderGGUF2:
         return clip
 
     def load_clip(self, clip_name, type="stable_diffusion"):
-        clip_path = folder_paths.get_full_path_or_raise("clip", clip_name)
+        clip_path = folder_paths.get_full_path("clip", clip_name)
         clip_type = getattr(comfy.sd.CLIPType, type.upper(), comfy.sd.CLIPType.STABLE_DIFFUSION)
         return (self.load_patcher([clip_path], clip_type, self.load_data([clip_path])),)
 
@@ -260,8 +260,8 @@ class DualCLIPLoaderGGUF(CLIPLoaderGGUF2):
     TITLE = "DualCLIPLoader (GGUF)"
 
     def load_clip(self, clip_name1, clip_name2, type):
-        clip_path1 = folder_paths.get_full_path_or_raise("clip", clip_name1)
-        clip_path2 = folder_paths.get_full_path_or_raise("clip", clip_name2)
+        clip_path1 = folder_paths.get_full_path("clip", clip_name1)
+        clip_path2 = folder_paths.get_full_path("clip", clip_name2)
         clip_paths = (clip_path1, clip_path2)
         clip_type = getattr(comfy.sd.CLIPType, type.upper(), comfy.sd.CLIPType.STABLE_DIFFUSION)
         return (self.load_patcher(clip_paths, clip_type, self.load_data(clip_paths)),)
@@ -281,9 +281,9 @@ class TripleCLIPLoaderGGUF(CLIPLoaderGGUF2):
     TITLE = "TripleCLIPLoader (GGUF)"
 
     def load_clip(self, clip_name1, clip_name2, clip_name3, type="sd3"):
-        clip_path1 = folder_paths.get_full_path_or_raise("clip", clip_name1)
-        clip_path2 = folder_paths.get_full_path_or_raise("clip", clip_name2)
-        clip_path3 = folder_paths.get_full_path_or_raise("clip", clip_name3)
+        clip_path1 = folder_paths.get_full_path("clip", clip_name1)
+        clip_path2 = folder_paths.get_full_path("clip", clip_name2)
+        clip_path3 = folder_paths.get_full_path("clip", clip_name3)
         clip_paths = (clip_path1, clip_path2, clip_path3)
         clip_type = getattr(comfy.sd.CLIPType, type.upper(), comfy.sd.CLIPType.STABLE_DIFFUSION)
         return (self.load_patcher(clip_paths, clip_type, self.load_data(clip_paths)),)
@@ -304,13 +304,11 @@ class QuadrupleCLIPLoaderGGUF(CLIPLoaderGGUF2):
     TITLE = "QuadrupleCLIPLoader (GGUF)"
 
     def load_clip(self, clip_name1, clip_name2, clip_name3, clip_name4, type="stable_diffusion"):
-        clip_path1 = folder_paths.get_full_path_or_raise("clip", clip_name1)
-        clip_path2 = folder_paths.get_full_path_or_raise("clip", clip_name2)
-        clip_path3 = folder_paths.get_full_path_or_raise("clip", clip_name3)
-        clip_path4 = folder_paths.get_full_path_or_raise("clip", clip_name4)
+        clip_path1 = folder_paths.get_full_path("clip", clip_name1)
+        clip_path2 = folder_paths.get_full_path("clip", clip_name2)
+        clip_path3 = folder_paths.get_full_path("clip", clip_name3)
+        clip_path4 = folder_paths.get_full_path("clip", clip_name4)
         clip_paths = (clip_path1, clip_path2, clip_path3, clip_path4)
         clip_type = getattr(comfy.sd.CLIPType, type.upper(), comfy.sd.CLIPType.STABLE_DIFFUSION)
         return (self.load_patcher(clip_paths, clip_type, self.load_data(clip_paths)),)
 
-
-# 幂等补丁标记：get_full_path已安全替换

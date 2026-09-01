@@ -5,23 +5,28 @@ import base64
 import queue
 import threading
 import time
-import urllib.parse
 import inspect
-import ipaddress
-import sys
 import re
+import platform
+import tempfile
+import configparser
+import ipaddress
 
 import folder_paths
 import comfy.sd
 import comfy.utils
-import requests
 import server
 from aiohttp import web
-from huggingface_hub import hf_hub_download, hf_hub_url
+from huggingface_hub import hf_hub_download
 from PIL import Image
 import numpy as np
 import traceback
 import struct
+
+try:
+    from comfy.cli_args import args as comfy_cli_args
+except Exception:
+    comfy_cli_args = None
 
 try:
     from ..utils import (
@@ -70,7 +75,12 @@ _DOWNLOAD_STATUS = {}
 _DOWNLOAD_QUEUE = queue.Queue()
 _CUSTOM_LORAS_FILE = "vnccs_custom_loras.json"
 _PACKAGED_CC_REPO_IDS = {"MIUProject/VNCCS_v3.0"}
-_PIPELINE_LOCAL_LORAS = {"vnccs clothes core", "vnccs pose studio qie2511"}
+_PIPELINE_LOCAL_LORAS = {
+    "vnccs clothes core",
+    "vnccs pose studio qie2511",
+    "vnccs clothes core klein9b",
+    "vnccs pose studio klein9b",
+}
 _FOLDER_MAP = {
     "unet": ["unet", "diffusion_models"],
     "checkpoints": ["checkpoints"],
@@ -87,7 +97,8 @@ _FOLDER_MAP = {
 _MODEL_FILE_EXTENSIONS = {".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin"}
 _MIN_MODEL_FILE_SIZE = 1024
 _DEFAULT_MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024 * 1024
-_DOWNLOAD_TIMEOUT = (10, 60)
+_MANAGER_CONFIG_MAX_BYTES = 1024 * 1024
+_MANAGER_INSTALL_SECURITY_LEVELS = {"weak", "normal", "normal-"}
 DEFAULT_MODEL_STEPS = 4
 DEFAULT_MODEL_CFG = 1.0
 DEFAULT_MODEL_SCHEDULER = "simple"
@@ -99,6 +110,193 @@ GGUF_FORK_WARNING = (
     "A non-standard GGUF loader is active. Stable VNCCS operation is only tested "
     "with github.com/city96/ComfyUI-GGUF."
 )
+
+
+def _manager_config_path():
+    """Return ComfyUI-Manager's version-independent per-user config path."""
+    get_system_dir = getattr(folder_paths, "get_system_user_directory", None)
+    if callable(get_system_dir):
+        manager_dir = get_system_dir("manager")
+    else:
+        get_user_dir = getattr(folder_paths, "get_user_directory", None)
+        if not callable(get_user_dir):
+            raise RuntimeError("The ComfyUI user directory is unavailable.")
+        manager_dir = os.path.join(get_user_dir(), "__manager")
+
+    manager_dir = os.path.abspath(os.fspath(manager_dir))
+    if not manager_dir:
+        raise RuntimeError("The ComfyUI-Manager directory is unavailable.")
+    return os.path.join(manager_dir, "config.ini")
+
+
+def _read_manager_config_text(path=None):
+    path = path or _manager_config_path()
+    if not os.path.exists(path):
+        return ""
+    if os.path.islink(path):
+        raise RuntimeError("Refusing to modify a symlinked ComfyUI-Manager config.")
+    size = os.path.getsize(path)
+    if size > _MANAGER_CONFIG_MAX_BYTES:
+        raise RuntimeError("ComfyUI-Manager config is unexpectedly large.")
+    with open(path, "r", encoding="utf-8") as handle:
+        return handle.read(_MANAGER_CONFIG_MAX_BYTES + 1)
+
+
+def _parse_manager_policy(text):
+    network_mode = "public"
+    security_level = "normal"
+    if text.strip():
+        parser = configparser.ConfigParser(strict=False, interpolation=None)
+        try:
+            parser.read_string(text)
+            section_name = next(
+                (name for name in parser.sections() if name.lower() == "default"),
+                None,
+            )
+            if section_name:
+                section = parser[section_name]
+                network_mode = section.get("network_mode", network_mode).strip().lower()
+                security_level = section.get("security_level", security_level).strip().lower()
+        except configparser.Error as exc:
+            raise RuntimeError(f"ComfyUI-Manager config is invalid: {exc}") from exc
+    return network_mode, security_level
+
+
+def _manager_listener_address():
+    address = getattr(comfy_cli_args, "listen", None) if comfy_cli_args is not None else None
+    if address:
+        return str(address).strip()
+    instance = getattr(getattr(server, "PromptServer", None), "instance", None)
+    address = getattr(instance, "address", None)
+    if isinstance(address, (tuple, list)) and address:
+        address = address[0]
+    return str(address).strip() if address else None
+
+
+def _listener_is_loopback(address):
+    if not address:
+        return None
+    try:
+        return ipaddress.ip_address(address).is_loopback
+    except ValueError:
+        return False
+
+
+def _get_manager_install_policy(path=None, listen_address=None):
+    text = _read_manager_config_text(path)
+    network_mode, security_level = _parse_manager_policy(text)
+    address = listen_address if listen_address is not None else _manager_listener_address()
+    is_loopback = _listener_is_loopback(address)
+    security_allowed = security_level in _MANAGER_INSTALL_SECURITY_LEVELS
+    network_allowed = is_loopback is not False or network_mode == "personal_cloud"
+    return {
+        "network_mode": network_mode,
+        "security_level": security_level,
+        "listener": address or "unknown",
+        "listener_is_loopback": is_loopback,
+        "security_level_allows_install": security_allowed,
+        "install_allowed": security_allowed and network_allowed,
+        "requires_personal_cloud": security_allowed and is_loopback is False and not network_allowed,
+    }
+
+
+def _replace_manager_network_mode(text):
+    """Update only network_mode in [default], preserving unrelated config text."""
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.splitlines(keepends=True)
+    section_re = re.compile(r"^\s*\[([^\]]+)\]\s*(?:[#;].*)?(?:\r?\n)?$")
+    option_re = re.compile(
+        r"^(\s*network_mode\s*[=:]\s*)([^#;\r\n]*?)(\s*(?:[#;].*)?)(\r?\n)?$",
+        re.IGNORECASE,
+    )
+
+    start = None
+    end = len(lines)
+    for index, line in enumerate(lines):
+        match = section_re.match(line)
+        if not match:
+            continue
+        if start is None and match.group(1).strip().lower() == "default":
+            start = index
+            continue
+        if start is not None:
+            end = index
+            break
+
+    if start is None:
+        prefix = text
+        if prefix and not prefix.endswith(("\n", "\r")):
+            prefix += newline
+        if prefix and not prefix.endswith(newline * 2):
+            prefix += newline
+        return f"{prefix}[default]{newline}network_mode = personal_cloud{newline}"
+
+    found = False
+    for index in range(start + 1, end):
+        match = option_re.match(lines[index])
+        if not match:
+            continue
+        line_ending = match.group(4) or (newline if lines[index].endswith(("\n", "\r")) else "")
+        suffix = match.group(3).strip()
+        if suffix.startswith(("#", ";")):
+            indentation = re.match(r"^\s*", match.group(1)).group(0)
+            lines[index] = (
+                f"{match.group(1)}personal_cloud{line_ending or newline}"
+                f"{indentation}{suffix}{line_ending}"
+            )
+        else:
+            lines[index] = f"{match.group(1)}personal_cloud{line_ending}"
+        found = True
+
+    if not found:
+        insertion = f"network_mode = personal_cloud{newline}"
+        if start == len(lines) - 1 and lines[start] and not lines[start].endswith(("\n", "\r")):
+            lines[start] += newline
+        lines.insert(end, insertion)
+    return "".join(lines)
+
+
+def _atomic_write_manager_file(path, content, mode=0o600):
+    directory = os.path.dirname(path)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    file_descriptor, temp_path = tempfile.mkstemp(prefix=".vnccs-manager-", dir=directory)
+    try:
+        os.chmod(temp_path, mode)
+        with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="") as handle:
+            file_descriptor = None
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+def _enable_manager_personal_cloud(path=None):
+    path = path or _manager_config_path()
+    current = _read_manager_config_text(path)
+    network_mode, security_level = _parse_manager_policy(current)
+    if security_level not in _MANAGER_INSTALL_SECURITY_LEVELS:
+        raise RuntimeError(
+            "ComfyUI-Manager security_level must be normal or below. "
+            "VNCCS will not weaken that setting automatically."
+        )
+    if network_mode == "personal_cloud":
+        # Manager caches config at startup, so an already-updated file can still
+        # require a restart after a policy rejection from the running process.
+        return {"changed": False, "restart_required": True}
+
+    updated = _replace_manager_network_mode(current)
+    existing_mode = (os.stat(path).st_mode & 0o777) if os.path.exists(path) else 0o600
+    if current:
+        backup_path = f"{path}.vnccs-backup"
+        if not os.path.exists(backup_path):
+            _atomic_write_manager_file(backup_path, current, existing_mode)
+    _atomic_write_manager_file(path, updated, existing_mode)
+    return {"changed": True, "restart_required": True}
 
 def _get_node_class_mappings():
     import nodes as comfy_nodes
@@ -194,43 +392,106 @@ def resolve_path(relative_path):
     return os.path.abspath(os.path.join(base, normalized))
 
 
+def _control_center_data_path(filename, for_write=False):
+    """Resolve mutable Control Center state outside the ComfyUI code directory."""
+    get_user_directory = getattr(folder_paths, "get_user_directory", None)
+    if callable(get_user_directory):
+        try:
+            user_directory = get_user_directory()
+        except Exception:
+            user_directory = ""
+        if user_directory:
+            current = os.path.abspath(os.path.join(user_directory, "VNCCS", filename))
+            if for_write or os.path.exists(current):
+                return current
+
+    # Preserve configs created by older VNCCS releases and portable installs.
+    return resolve_path(filename)
+
+
+def _purge_legacy_download_credentials():
+    """Remove the obsolete Control Center secret store from every legacy location."""
+    filename = "vnccs_user_config.json"
+    candidates = {
+        _control_center_data_path(filename, for_write=True),
+        resolve_path(filename),
+    }
+    for path in candidates:
+        try:
+            if path and os.path.isfile(path):
+                os.remove(path)
+        except OSError as exc:
+            print(f"[VNCCS Control Center] Failed to remove obsolete secret store '{path}': {exc}")
+
+
+_purge_legacy_download_credentials()
+
+
 def _models_root():
     return os.path.abspath(getattr(folder_paths, "models_dir", os.path.join(getattr(folder_paths, "base_path", os.getcwd()), "models")))
 
 
-def _validate_https_url(url):
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme.lower() != "https" or not parsed.netloc:
-        raise ValueError("Download URL must be an absolute HTTPS URL")
-    host = parsed.hostname or ""
+def _configured_model_folder(folder_type):
+    """Return ComfyUI's preferred folder for a catalog model category."""
+    for key in _FOLDER_MAP.get(folder_type, [folder_type]):
+        try:
+            paths = folder_paths.get_folder_paths(key) or []
+        except Exception:
+            paths = []
+        if paths:
+            return os.path.abspath(normalize_filesystem_path(paths[0]))
+    return os.path.join(_models_root(), folder_type)
+
+
+def _create_download_staging_file(target_path, model_key):
+    """Create a hidden partial file beside the target for an atomic final move."""
+    target_directory = os.path.dirname(target_path)
+    os.makedirs(target_directory, exist_ok=True)
+    sanitized_name = "".join(ch for ch in model_key if ch.isalnum()) or "model"
+    return tempfile.mkstemp(
+        prefix=f".vnccs_{sanitized_name}_",
+        suffix=".part",
+        dir=target_directory,
+    )
+
+
+def _custom_nodes_roots():
+    """Return every custom-node root registered with the running ComfyUI host."""
     try:
-        ip = ipaddress.ip_address(host.strip("[]"))
-    except ValueError:
-        ip = None
-    if ip and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved):
-        raise ValueError("Download URL host must not be a private or local address")
-    return url
+        roots = folder_paths.get_folder_paths("custom_nodes") or []
+    except Exception:
+        roots = []
+    if not roots:
+        roots = [os.path.join(getattr(folder_paths, "base_path", os.getcwd()), "custom_nodes")]
+
+    result = []
+    seen = set()
+    for root in roots:
+        normalized = os.path.abspath(normalize_filesystem_path(root))
+        key = os.path.normcase(normalized)
+        if key not in seen:
+            seen.add(key)
+            result.append(normalized)
+    return result
+
+
+def _registered_node_class(spec, mappings=None):
+    """Find a dependency only in ComfyUI's active node registry."""
+    mappings = mappings if mappings is not None else _get_node_class_mappings()
+    identifiers = [spec.get("node_id"), *spec.get("class_names", [])]
+    for identifier in identifiers:
+        if identifier and identifier in mappings:
+            return mappings[identifier]
+
+    class_names = set(spec.get("class_names", []))
+    for candidate in mappings.values():
+        if getattr(candidate, "__name__", None) in class_names:
+            return candidate
+    return None
 
 
 def _max_download_bytes():
-    raw = os.environ.get("VNCCS_MAX_MODEL_DOWNLOAD_BYTES", "")
-    try:
-        value = int(raw)
-        return value if value > 0 else _DEFAULT_MAX_DOWNLOAD_BYTES
-    except Exception:
-        return _DEFAULT_MAX_DOWNLOAD_BYTES
-
-
-def _validate_download_response(response, expected_name="model"):
-    _validate_https_url(getattr(response, "url", ""))
-    total_size = int(response.headers.get("content-length", 0) or 0)
-    max_bytes = _max_download_bytes()
-    if total_size > max_bytes:
-        raise ValueError(
-            f"{expected_name} is too large to download safely "
-            f"({total_size / (1024 * 1024 * 1024):.1f} GB, limit {max_bytes / (1024 * 1024 * 1024):.1f} GB)"
-        )
-    return total_size, max_bytes
+    return _DEFAULT_MAX_DOWNLOAD_BYTES
 
 
 def _validate_model_filename(path):
@@ -256,8 +517,9 @@ def _resolve_model_download_path(local_path):
     if folder_type not in _FOLDER_MAP:
         raise ValueError(f"Unsupported model folder '{folder_type}'")
     _validate_model_filename(parts[-1])
-    target = os.path.abspath(os.path.join(_models_root(), *parts[1:]))
-    if os.path.commonpath([_models_root(), target]) != _models_root():
+    target_root = _configured_model_folder(folder_type)
+    target = os.path.abspath(os.path.join(target_root, *parts[2:]))
+    if os.path.commonpath([target_root, target]) != target_root:
         raise ValueError("Model local_path escapes ComfyUI models directory")
     return target
 
@@ -300,27 +562,8 @@ def _validate_downloaded_model_file(path, expected_name="model"):
     return True
 
 
-def get_vnccs_config():
-    config_path = resolve_path("vnccs_user_config.json")
-    if not os.path.exists(config_path):
-        return {}
-    try:
-        with open(config_path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except Exception:
-        return {}
-
-
-def save_vnccs_config(new_data):
-    config_path = resolve_path("vnccs_user_config.json")
-    data = get_vnccs_config()
-    data.update(new_data)
-    with open(config_path, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2)
-
-
-def _get_custom_loras_path():
-    return resolve_path(_CUSTOM_LORAS_FILE)
+def _get_custom_loras_path(for_write=False):
+    return _control_center_data_path(_CUSTOM_LORAS_FILE, for_write=for_write)
 
 
 def _load_custom_loras():
@@ -338,7 +581,7 @@ def _load_custom_loras():
 
 
 def _save_custom_loras(entries):
-    path = _get_custom_loras_path()
+    path = _get_custom_loras_path(for_write=True)
     current = _load_custom_loras()
     by_path = {
         entry.get("local_path", "").replace("\\", "/"): entry
@@ -377,7 +620,7 @@ def _remove_custom_lora(local_path=None, name=None):
         kept.append(entry)
 
     payload = {"lora": kept}
-    path = _get_custom_loras_path()
+    path = _get_custom_loras_path(for_write=True)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, ensure_ascii=False)
@@ -446,7 +689,7 @@ def _merge_custom_loras(config):
 
 
 def get_installed_version_info():
-    registry_path = resolve_path("vnccs_installed_models.json")
+    registry_path = _control_center_data_path("vnccs_installed_models.json")
     if not os.path.exists(registry_path):
         return {}
     try:
@@ -457,9 +700,10 @@ def get_installed_version_info():
 
 
 def update_installed_version(model_name, version):
-    registry_path = resolve_path("vnccs_installed_models.json")
+    registry_path = _control_center_data_path("vnccs_installed_models.json", for_write=True)
     data = get_installed_version_info()
     data[model_name] = version
+    os.makedirs(os.path.dirname(registry_path), exist_ok=True)
     with open(registry_path, "w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2)
 
@@ -496,7 +740,7 @@ def _sync_packaged_cc_config(repo_id, data):
                 json.dump(data, handle, indent=2, ensure_ascii=False)
                 handle.write("\n")
             os.replace(tmp_path, target)
-            print(f"[VNCCS Control Center] Updated packaged catalog from '{repo_id}'.")
+            print(f"[VNCCS Control Center] Replaced local catalog from '{repo_id}'.")
             return True
     except Exception as exc:
         print(f"[VNCCS Control Center] Failed to update packaged catalog: {exc}")
@@ -519,22 +763,14 @@ def _get_cc_config(repo_id, prefer_remote=False):
     if _uses_packaged_cc_config(repo_id) and not prefer_remote:
         path = _get_packaged_cc_path()
     else:
-        user_config = get_vnccs_config()
-        hf_token = user_config.get("hf_token")
-        try:
-            path = hf_hub_download(
-                repo_id=repo_id,
-                filename="control_center.json",
-                local_files_only=False,
-                force_download=bool(prefer_remote),
-                token=hf_token,
-            )
-            source = "huggingface"
-        except Exception:
-            if not _uses_packaged_cc_config(repo_id):
-                raise
-            path = _get_packaged_cc_path()
-            source = "packaged"
+        path = hf_hub_download(
+            repo_id=repo_id,
+            filename="control_center.json",
+            local_files_only=False,
+            force_download=bool(prefer_remote),
+            token=False,
+        )
+        source = "huggingface"
     with open(path, "r", encoding="utf-8") as handle:
         data = json.load(handle)
     if source == "huggingface":
@@ -636,10 +872,11 @@ def _find_first_entry_by_type(entries, entry_type):
     return None
 
 
-def _selected_model_name_for_type(state, entry_type):
+def _selected_model_name_for_type(state, entry_type, kind=""):
     selected_models = state.get("selected_models", {}) if isinstance(state, dict) else {}
     if isinstance(selected_models, dict):
-        name = selected_models.get(entry_type)
+        name = selected_models.get(f"{kind}:{entry_type}") if kind else None
+        name = name or selected_models.get(entry_type)
         if name:
             return name
     return ""
@@ -647,8 +884,21 @@ def _selected_model_name_for_type(state, entry_type):
 
 def _custom_context_model_entry(config, state):
     models = config.get("models", []) if isinstance(config, dict) else []
-    name = _selected_model_name_for_type(state, "gguf") or state.get("selected_model", "")
-    return _find_entry(models, name) or _find_first_entry_by_type(models, "gguf")
+    active_kind = str(state.get("active_kind", "") or "").strip()
+    normalized_kind = _normalize_meta_value(active_kind)
+    context_type = "unet" if normalized_kind == "klein9b" else "gguf"
+    name = _selected_model_name_for_type(state, context_type, active_kind) or state.get("selected_model", "")
+    selected = _find_entry(models, name)
+    if selected and (not normalized_kind or _entry_kind(selected) == normalized_kind):
+        return selected
+    return next(
+        (
+            entry for entry in models
+            if _entry_type(entry) == context_type
+            and (not normalized_kind or _entry_kind(entry) == normalized_kind)
+        ),
+        _find_first_entry_by_type(models, context_type),
+    )
 
 
 def _rel_within_folder(local_path):
@@ -1165,46 +1415,37 @@ def _download_worker_loop():
 
         try:
             _DOWNLOAD_STATUS[model_key] = {"status": "downloading", "message": "Initializing..."}
-            url = ""
-            headers = {}
-
+            target_abs_path = _resolve_model_download_path(target_model["local_path"])
             if target_model.get("url"):
-                url = target_model["url"]
-                if "civitai.com/models/" in url and "api/download" not in url:
-                    parsed = urllib.parse.urlparse(url)
-                    query = urllib.parse.parse_qs(parsed.query)
-                    if "modelVersionId" in query:
-                        version_id = query["modelVersionId"][0]
-                        url = f"https://civitai.com/api/download/models/{version_id}"
-                if "civitai.com" in url:
-                    civitai_token = get_vnccs_config().get("civitai_token", "")
-                    if civitai_token:
-                        headers = {"Authorization": f"Bearer {civitai_token}"}
-            else:
-                filename = target_model["hf_path"]
-                if filename.startswith(f"{download_repo_id}/"):
-                    filename = filename[len(download_repo_id) + 1:]
-                url = hf_hub_url(download_repo_id, filename)
-                hf_token = get_vnccs_config().get("hf_token")
-                if hf_token:
-                    headers = {"Authorization": f"Bearer {hf_token}"}
+                raise ValueError("Direct URL downloads are disabled; use hf_repo and hf_path")
 
-            _validate_https_url(url)
-            response = requests.get(url, headers=headers, stream=True, allow_redirects=True, timeout=_DOWNLOAD_TIMEOUT)
-            response.raise_for_status()
+            filename = target_model["hf_path"]
+            if filename.startswith(f"{download_repo_id}/"):
+                filename = filename[len(download_repo_id) + 1:]
+            _validate_model_filename(filename)
+            cached_path = hf_hub_download(
+                repo_id=download_repo_id,
+                filename=filename,
+                revision=target_model.get("revision") or None,
+                token=False,
+            )
 
             expected_name = basename_agnostic(target_model.get("local_path", "") or target_model.get("hf_path", "") or "model")
-            total_size, max_bytes = _validate_download_response(response, expected_name)
+            total_size = os.path.getsize(cached_path)
+            max_bytes = _max_download_bytes()
+            if total_size > max_bytes:
+                raise ValueError(
+                    f"{expected_name} is too large to install safely "
+                    f"({total_size / (1024 * 1024 * 1024):.1f} GB, limit {max_bytes / (1024 * 1024 * 1024):.1f} GB)"
+                )
             downloaded = 0
-            temp_dir = os.path.join(folder_paths.base_path, "temp")
-            os.makedirs(temp_dir, exist_ok=True)
-            sanitized_name = "".join(ch for ch in model_key if ch.isalnum())
-            temp_path = os.path.join(temp_dir, f"vnccs_{sanitized_name}.tmp")
+            temp_fd, temp_path = _create_download_staging_file(target_abs_path, model_key)
 
-            with open(temp_path, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=8192):
+            with open(cached_path, "rb") as source, os.fdopen(temp_fd, "wb") as handle:
+                while True:
+                    chunk = source.read(1024 * 1024)
                     if not chunk:
-                        continue
+                        break
                     handle.write(chunk)
                     downloaded += len(chunk)
                     if downloaded > max_bytes:
@@ -1217,22 +1458,11 @@ def _download_worker_loop():
                             "message": f"{mb_done:.1f}/{mb_total:.1f} MB",
                             "progress": (downloaded / total_size) * 100,
                         }
-                    else:
-                        _DOWNLOAD_STATUS[model_key] = {
-                            "status": "downloading",
-                            "message": f"{mb_done:.1f} MB",
-                            "progress": 0,
-                        }
 
             _DOWNLOAD_STATUS[model_key]["message"] = "Validating..."
-            target_abs_path = _resolve_model_download_path(target_model["local_path"])
             _validate_downloaded_model_file(temp_path, os.path.basename(target_abs_path))
             _DOWNLOAD_STATUS[model_key]["message"] = "Installing..."
-            os.makedirs(os.path.dirname(target_abs_path), exist_ok=True)
-
-            import shutil
-
-            shutil.move(temp_path, target_abs_path)
+            os.replace(temp_path, target_abs_path)
             update_installed_version(model_key, target_model.get("version", ""))
             _DOWNLOAD_STATUS[model_key] = {"status": "success", "message": "Installed"}
         except Exception as exc:
@@ -1241,19 +1471,18 @@ def _download_worker_loop():
                     os.remove(temp_path)
                 except Exception as cleanup_exc:
                     print(f"[VNCCS Control Center] Failed to remove temp download '{temp_path}': {cleanup_exc}")
-            is_auth_error = False
-            if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
-                is_auth_error = exc.response.status_code == 401
+            response = getattr(exc, "response", None)
+            is_auth_error = getattr(response, "status_code", None) == 401
 
             message = str(exc)
             status = "error"
             if is_auth_error:
-                status = "auth_required"
-                message = "API Key Required"
+                message = "Authentication required; token-based downloads are disabled"
             elif "404" in message or "EntryNotFoundError" in message:
                 message = "File not found (404)"
 
             _DOWNLOAD_STATUS[model_key] = {"status": status, "message": message}
+            print(f"[VNCCS Control Center] Download failed for '{model_key}': {message}")
         finally:
             _DOWNLOAD_QUEUE.task_done()
 
@@ -1324,11 +1553,21 @@ def _build_control_center_pipe(repo_id, node_state, custom_model=None, custom_cl
     except Exception:
         state = {}
 
+    active_kind = str(state.get("active_kind", "") or "").strip()
     selected_type = state.get("selected_type", "")
+    selected_types_by_kind = state.get("selected_types_by_kind", {})
+    if active_kind and isinstance(selected_types_by_kind, dict):
+        selected_type = selected_types_by_kind.get(active_kind, selected_type)
     selected_model = state.get("selected_model", "")
+    selected_models = state.get("selected_models", {})
+    if active_kind and isinstance(selected_models, dict):
+        selected_model = selected_models.get(f"{active_kind}:{selected_type}", selected_model)
     loras = state.get("loras", [])
     type_settings = state.get("type_settings", {})
     model_params = state.get("model_params", {})
+    model_params_by_kind = state.get("model_params_by_kind", {})
+    if active_kind and isinstance(model_params_by_kind, dict):
+        model_params = model_params_by_kind.get(active_kind, model_params)
 
     config = _apply_active_installed_paths(_get_cc_config(repo_id))
     if selected_type == "custom":
@@ -1658,11 +1897,10 @@ async def cc_download(request):
     try:
         _resolve_model_download_path(entry.get("local_path", ""))
         if entry.get("url"):
-            _validate_https_url(entry["url"])
-        elif entry.get("hf_path"):
-            _validate_model_filename(entry["hf_path"])
-        else:
-            return web.json_response({"error": "Entry must define either url or hf_path"}, status=400)
+            return web.json_response({"error": "Direct URL downloads are disabled; use hf_repo and hf_path"}, status=400)
+        if not entry.get("hf_path"):
+            return web.json_response({"error": "Entry must define hf_path"}, status=400)
+        _validate_model_filename(entry["hf_path"])
     except ValueError as exc:
         return web.json_response({"error": str(exc)}, status=400)
 
@@ -1677,8 +1915,16 @@ async def get_download_status(request):
     return web.json_response(_DOWNLOAD_STATUS)
 
 
-@server.PromptServer.instance.routes.post("/vnccs/manager/save_token")
-async def save_api_token(request):
+@server.PromptServer.instance.routes.get("/vnccs/manager/install_policy")
+async def vnccs_manager_install_policy(request):
+    try:
+        return web.json_response(_get_manager_install_policy())
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500)
+
+
+@server.PromptServer.instance.routes.post("/vnccs/manager/enable_personal_cloud")
+async def vnccs_manager_enable_personal_cloud(request):
     try:
         validate_privileged_request(request)
     except ValueError as exc:
@@ -1688,18 +1934,15 @@ async def save_api_token(request):
         data = await request.json()
     except Exception:
         return web.json_response({"error": "Invalid JSON"}, status=400)
-
-    tokens = {}
-    if "token" in data:
-        tokens["civitai_token"] = data["token"]
-    if "civitai_token" in data:
-        tokens["civitai_token"] = data["civitai_token"]
-    if "hf_token" in data:
-        tokens["hf_token"] = data["hf_token"]
+    if data.get("confirmation") != "enable_personal_cloud":
+        return web.json_response({"error": "Explicit confirmation is required."}, status=400)
 
     try:
-        save_vnccs_config(tokens)
-        return web.json_response({"status": "saved"})
+        result = _enable_manager_personal_cloud()
+        result["policy"] = _get_manager_install_policy()
+        return web.json_response(result)
+    except RuntimeError as exc:
+        return web.json_response({"error": str(exc)}, status=409)
     except Exception as exc:
         return web.json_response({"error": str(exc)}, status=500)
 
@@ -1708,25 +1951,16 @@ async def save_api_token(request):
 async def vnccs_module_status(request):
     import re
 
-    custom_nodes_dir = os.path.join(folder_paths.base_path, "custom_nodes")
+    custom_nodes_roots = _custom_nodes_roots()
     modules = {
         "main": ["vnccs", "ComfyUI_VNCCS"],
         "utils": ["vnccs-utils", "ComfyUI_VNCCS_Utils"],
     }
     dependency_modules = {
-        "seedvr": {
-            "label": "SeedVR",
-            "github_url": "https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler",
-            "folders": ["seedvr2_videoupscaler", "ComfyUI-SeedVR2_VideoUpscaler", "comfyui-seedvr2-videoupscaler", "ComfyUI-SeedVR"],
-            "nodes": [
-                {"class_names": ["SeedVR2LoadDiTModel"]},
-                {"class_names": ["SeedVR2LoadVAEModel"]},
-                {"class_names": ["SeedVR2VideoUpscaler"]},
-            ],
-        },
         "gguf": {
             "label": "GGUF",
             "github_url": "https://github.com/city96/ComfyUI-GGUF",
+            "manager_id": "ComfyUI-GGUF",
             "folders": ["ComfyUI-GGUF"],
             "loader_check": "gguf",
             "nodes": [
@@ -1736,6 +1970,7 @@ async def vnccs_module_status(request):
         "impact_pack": {
             "label": "Impact Pack",
             "github_url": "https://github.com/ltdrdata/ComfyUI-Impact-Pack",
+            "manager_id": "comfyui-impact-pack",
             "folders": ["ComfyUI-Impact-Pack"],
             "nodes": [
                 {"class_names": ["SAMLoader"]},
@@ -1745,6 +1980,7 @@ async def vnccs_module_status(request):
         "impact_subpack": {
             "label": "Impact Subpack",
             "github_url": "https://github.com/ltdrdata/ComfyUI-Impact-Subpack",
+            "manager_id": "comfyui-impact-subpack",
             "folders": ["ComfyUI-Impact-Subpack"],
             "nodes": [
                 {"class_names": ["UltralyticsDetectorProvider"]},
@@ -1753,6 +1989,8 @@ async def vnccs_module_status(request):
         "easy_sam3": {
             "label": "Easy SAM3",
             "github_url": "https://github.com/yolain/ComfyUI-Easy-Sam3",
+            "manager_id": "comfyui-easy-sam3",
+            "darwin_compatibility_warning": "The current Easy SAM3 release requires decord and Triton. Neither supports the macOS/MPS Desktop runtime, so installation or import may fail until the upstream package adds macOS support.",
             "folders": ["ComfyUI-Easy-Sam3", "comfyui-easy-sam3"],
             "nodes": [
                 {"node_id": "easy sam3ModelLoader", "class_names": ["LoadSam3Model"]},
@@ -1774,43 +2012,21 @@ async def vnccs_module_status(request):
             return None
 
     def comfy_node_available(spec):
-        mappings = _get_node_class_mappings()
-        node_id = spec.get("node_id")
-        if node_id and node_id in mappings:
-            return True
-
-        for class_name in spec.get("class_names", []):
-            if class_name in mappings:
-                return True
-
-        for module in list(sys.modules.values()):
-            if module is None:
-                continue
-            for class_name in spec.get("class_names", []):
-                if getattr(module, class_name, None) is not None:
-                    return True
-            if node_id:
-                try:
-                    values = vars(module).values()
-                except Exception:
-                    continue
-                for candidate in values:
-                    if not inspect.isclass(candidate) or not hasattr(candidate, "define_schema"):
-                        continue
-                    try:
-                        schema = candidate.define_schema()
-                        if getattr(schema, "node_id", None) == node_id:
-                            return True
-                    except Exception:
-                        continue
-        return False
+        return _registered_node_class(spec) is not None
 
     def dependency_status(spec):
+        is_darwin = platform.system().lower() == "darwin"
+        manager_metadata = {
+            "manager_id": spec.get("manager_id"),
+            "manager_version": "latest",
+            "compatibility_note": spec.get("darwin_compatibility_warning") if is_darwin else None,
+        }
         folders = []
-        for folder in spec.get("folders", []):
-            path = os.path.join(custom_nodes_dir, folder)
-            if os.path.isdir(path):
-                folders.append(folder)
+        for root in custom_nodes_roots:
+            for folder in spec.get("folders", []):
+                path = os.path.join(root, folder)
+                if os.path.isdir(path) and folder not in folders:
+                    folders.append(folder)
 
         missing_nodes = []
         for node_spec in spec.get("nodes", []):
@@ -1826,6 +2042,7 @@ async def vnccs_module_status(request):
                     return {
                         "label": spec["label"],
                         "github_url": spec.get("github_url"),
+                        **manager_metadata,
                         "status": "warning",
                         "folder": folders[0] if folders else loader_info.get("folder"),
                         "missing_nodes": [],
@@ -1835,6 +2052,7 @@ async def vnccs_module_status(request):
             return {
                 "label": spec["label"],
                 "github_url": spec.get("github_url"),
+                **manager_metadata,
                 "status": "ok",
                 "folder": folders[0] if folders else None,
                 "missing_nodes": [],
@@ -1843,7 +2061,8 @@ async def vnccs_module_status(request):
         return {
             "label": spec["label"],
             "github_url": spec.get("github_url"),
-            "status": "partial" if folders else "missing",
+            **manager_metadata,
+            "status": "unsupported" if manager_metadata.get("compatibility_note") else ("partial" if folders else "missing"),
             "folder": folders[0] if folders else None,
             "missing_nodes": missing_nodes,
         }
@@ -1851,10 +2070,14 @@ async def vnccs_module_status(request):
     result = {}
     for key, name_variants in modules.items():
         found = []
-        for name in name_variants:
-            path = os.path.join(custom_nodes_dir, name)
-            if os.path.isdir(path):
-                found.append({"folder": name, "version": read_version(path)})
+        found_paths = set()
+        for root in custom_nodes_roots:
+            for name in name_variants:
+                path = os.path.join(root, name)
+                normalized_path = os.path.normcase(os.path.abspath(path))
+                if os.path.isdir(path) and normalized_path not in found_paths:
+                    found_paths.add(normalized_path)
+                    found.append({"folder": name, "version": read_version(path)})
 
         if not found:
             result[key] = {"error": "not_found"}

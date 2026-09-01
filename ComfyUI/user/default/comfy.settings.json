@@ -228,5 +228,6 @@
     "\ud83c\udf10\u7ffb\u8bd1\u8bbe\u7f6e.\u524d\u7aefUI\u7ec4\u4ef6.Enable": true,
     "\ud83c\udf10\u7ffb\u8bd1\u8bbe\u7f6e.\u8bed\u8a00\u5f00\u5173.Enable": true,
     "Comfy.RightSidePanel.IsOpen": false,
-    "Comfy.Templates.SortBy": "newest"
+    "Comfy.Templates.SortBy": "newest",
+    "zml.floatingBall.show": false
 }

@@ -1047,8 +1047,14 @@ app.registerExtension({
                 const patchPoseStudioSync = () => {
                     const sync = window.__vnccsPoseStudioCharacterCreatorSync;
                     if (!sync || sync._vnccsClonerPatched) return !!sync;
-                    const originalFindSourceNode = sync.findSourceNode?.bind(sync);
-                    const originalRegisterStudio = sync.registerStudio?.bind(sync);
+                    const findSourceNode = sync.findSourceNode;
+                    const registerStudio = sync.registerStudio;
+                    const originalFindSourceNode = typeof findSourceNode === "function"
+                        ? (...args) => findSourceNode.apply(sync, args)
+                        : null;
+                    const originalRegisterStudio = typeof registerStudio === "function"
+                        ? (...args) => registerStudio.apply(sync, args)
+                        : null;
 
                     sync.findClonerSourceNode = () => {
                         const nodes = app.graph?._nodes || [];
@@ -1468,10 +1474,10 @@ app.registerExtension({
                     return showCommonModal(container, title, contentFunc, mappedButtons);
                 };
                 const showSourceImageRequiredModal = (message) => {
-                    showModal("Нужно изображение", () => {
+                    showModal("Source Image Required", () => {
                         const d = document.createElement("div");
                         d.style.lineHeight = "1.45";
-                        d.innerText = message || "Сначала загрузите изображение персонажа.";
+                        d.innerText = message || "Upload a character image first.";
                         return d;
                     }, [{ text: "OK", class: "vnccs-btn-primary" }]);
                 };

@@ -471,6 +471,7 @@ class ControlNetInpaintingAliMamaApply(nodes.ControlNetApplyAdvanced):
 import math
 import comfy.samplers
 import comfy.sample
+import comfy.nested_tensor
 from comfy.k_diffusion import sampling as k_diffusion_sampling
 from comfy.comfy_types import IO, ComfyNodeABC, InputTypeDict
 import latent_preview
@@ -753,7 +754,12 @@ class SamplerCustomAdvanced:
         latent = latent_image
         latent_image = latent["samples"]
         latent = latent.copy()
-        latent_image = comfy.sample.fix_empty_latent_channels(guider.model_patcher, latent_image)
+        latent_image = comfy.sample.fix_empty_latent_channels(
+            guider.model_patcher,
+            latent_image,
+            latent.get("downscale_ratio_spacial", None),
+            latent.get("downscale_ratio_temporal", None),
+        )
         latent["samples"] = latent_image
 
         noise_mask = None
@@ -768,10 +774,16 @@ class SamplerCustomAdvanced:
         samples = samples.to(comfy.model_management.intermediate_device())
 
         out = latent.copy()
+        out.pop("downscale_ratio_spacial", None)
+        out.pop("downscale_ratio_temporal", None)
         out["samples"] = samples
         if "x0" in x0_output:
+            x0 = x0_output["x0"]
+            if samples.is_nested and not x0.is_nested:
+                latent_shapes = [item.shape for item in samples.unbind()]
+                x0 = comfy.nested_tensor.NestedTensor(comfy.utils.unpack_latents(x0, latent_shapes))
             out_denoised = latent.copy()
-            out_denoised["samples"] = guider.model_patcher.model.process_latent_out(x0_output["x0"].cpu())
+            out_denoised["samples"] = guider.model_patcher.model.process_latent_out(x0.cpu())
         else:
             out_denoised = out
         return (out, out_denoised)

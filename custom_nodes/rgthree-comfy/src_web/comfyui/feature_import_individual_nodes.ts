@@ -1,5 +1,4 @@
-import type {INodeSlot, LGraphNode, LGraphNodeConstructor} from "@comfyorg/frontend";
-import type {ComfyNodeDef} from "typings/comfy.js";
+import type {ComfyNodeDef, LGraphNode} from "@comfyorg/frontend";
 
 import {app} from "scripts/app.js";
 import {tryToGetWorkflowDataFromEvent} from "rgthree/common/utils_workflow.js";
@@ -51,7 +50,7 @@ export async function importIndividualNodesInnerOnDragDrop(node: LGraphNode, e: 
   const {workflow, prompt} = await tryToGetWorkflowDataFromEvent(e);
   const exact = (workflow?.nodes || []).find(
     (n: any) =>
-      n.id === node.id &&
+      n.id == node.id && // Loose equality check to capture both number and strings.
       n.type === node.type &&
       (dynamicWidgetLengthNodes.includes(node.type) ||
         n.widgets_values?.length === node.widgets_values?.length),

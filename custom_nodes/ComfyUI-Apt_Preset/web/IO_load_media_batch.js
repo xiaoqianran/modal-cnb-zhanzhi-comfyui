@@ -605,12 +605,28 @@ app.registerExtension({
             if (wIndex) {
                 const origCallback = wIndex.callback;
                 let lastValue = wIndex.value;
+                const onIndexChange = () => {
+                    const v = wIndex.value;
+                    if (v === lastValue) return;
+                    lastValue = v;
+                    ui.redraw(true); // 强制完整重绘，避免 DOM 被替换后增量更新失效
+                };
                 wIndex.callback = function (value) {
                     origCallback?.call(this, value);
-                    if (value === lastValue) return;
-                    lastValue = value;
-                    ui.redraw(false);
+                    onIndexChange();
                 };
+                // 备份：直接挂 DOM change/input 事件，绕过 ComfyUI 内部 callback 时机差异
+                const attachDomListeners = () => {
+                    const inputEl = wIndex.inputEl;
+                    if (inputEl && !inputEl._ioIndexListenerAttached) {
+                        inputEl._ioIndexListenerAttached = true;
+                        inputEl.addEventListener("change", () => onIndexChange());
+                        inputEl.addEventListener("input", () => onIndexChange());
+                    }
+                };
+                attachDomListeners();
+                setTimeout(attachDomListeners, 0);
+                setTimeout(attachDomListeners, 100);
             }
             if (wList) {
                 const origCallback = wList.callback;

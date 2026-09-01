@@ -11,8 +11,10 @@ import json
 import math
 import re
 import hashlib
+import logging
 #from turtle import width
 import gc
+import weakref
 
 
 # 第三方库
@@ -27,6 +29,7 @@ from tqdm import tqdm
 import nodes
 # 本地库
 import comfy
+import comfy.nested_tensor
 import folder_paths
 import node_helpers
 import latent_preview
@@ -227,15 +230,17 @@ class Data_basic:
                 "clip": ("CLIP",),
                 "latent_image": ("IMAGE",),
                 "latent_mask": ("MASK",),
+                "audio_vae": ("VAE",),
             },
         }
 
-    RETURN_TYPES = ("RUN_CONTEXT","MODEL", "CONDITIONING","CONDITIONING","LATENT","VAE","CLIP","IMAGE","MASK",)
-    RETURN_NAMES = ("context", "model","positive","negative","latent","vae","clip","latent_image","latent_mask",)
+    RETURN_TYPES = ("RUN_CONTEXT","MODEL", "CONDITIONING","CONDITIONING","LATENT","VAE","CLIP","IMAGE","MASK","VAE",)
+    RETURN_NAMES = ("context", "model","positive","negative","latent","vae","clip","image","latent_mask","audio_vae",)
     FUNCTION = "sample"
     CATEGORY = "Apt_Preset/chx_load"
 
-    def sample(self, context=None,model=None,positive=None,negative=None,latent=None,vae =None,clip =None,latent_image =None,latent_mask=None ):
+    def sample(self, context=None,model=None,positive=None,negative=None,latent=None,vae =None,clip =None,latent_image =None,latent_mask=None,audio_vae=None ):
+        has_input_image = latent_image is not None
         if model is None:
             model = context.get("model")
         if positive is None:
@@ -246,8 +251,12 @@ class Data_basic:
             vae = context.get("vae")
         if clip is None:
             clip = context.get("clip")
+        if audio_vae is None:
+            audio_vae = context.get("audio_vae")
+        if latent_image is None:
+            latent_image = context.get("images")
         
-        if latent_image is not None: 
+        if has_input_image:
             latent = VAEEncode().encode(vae, latent_image)[0]     
             if latent_mask is not None:
                 if isinstance(latent, dict) and "samples" in latent:
@@ -261,8 +270,8 @@ class Data_basic:
         else:
             latent = context.get("latent")
 
-        context = new_context(context,model=model,positive=positive,negative=negative,latent=latent,vae=vae,clip=clip,images=latent_image,mask=latent_mask)
-        return (context, model, positive, negative, latent, vae, clip, latent_image, latent_mask)
+        context = new_context(context,model=model,positive=positive,negative=negative,latent=latent,vae=vae,clip=clip,images=latent_image,mask=latent_mask,audio_vae=audio_vae)
+        return (context, model, positive, negative, latent, vae, clip, latent_image, latent_mask, audio_vae)
     def set_latent_mask2(self,latent, mask):
         if not isinstance(latent, dict) or "samples" not in latent:
             raise ValueError("latent 必须是包含 'samples' 键的字典")
@@ -310,7 +319,7 @@ class Data_select:
                         },
         
             "optional": {
-                "type": (["model", "clip", "positive", "negative", "vae", "latent", "images", "mask",
+                "type": (["model", "clip", "positive", "negative", "vae", "audio_vae", "latent", "images", "mask",
                         "clip1", 
                         "clip2", 
                         "clip3", 
@@ -489,9 +498,58 @@ def safe_load_torch_file(path, device="cpu"):
         return torch.load(path, map_location=device, weights_only=False)
 
 
+# Non-owning model cache. Entries contain weak references only, so ComfyUI keeps
+# sole ownership of model lifetime and memory management.
+_APT_MODEL_CACHE = {}
+
+
+def _apt_cache_sweep():
+    dead = [key for key, (refs, _tag) in _APT_MODEL_CACHE.items()
+            if any(ref is not None and ref() is None for ref in refs)]
+    for key in dead:
+        _APT_MODEL_CACHE.pop(key, None)
+
+
+def _apt_cache_get(key):
+    _apt_cache_sweep()
+    entry = _APT_MODEL_CACHE.get(key)
+    if entry is None:
+        return None
+    refs, _tag = entry
+    payload = tuple(None if ref is None else ref() for ref in refs)
+    if any(ref is not None and value is None for ref, value in zip(refs, payload)):
+        _APT_MODEL_CACHE.pop(key, None)
+        return None
+    return payload
+
+
+def _apt_cache_set(key, payload, tag=None):
+    items = payload if isinstance(payload, (tuple, list)) else (payload,)
+    refs = []
+    for item in items:
+        if item is None:
+            refs.append(None)
+            continue
+        try:
+            refs.append(weakref.ref(item))
+        except TypeError:
+            return
+    _APT_MODEL_CACHE[key] = (tuple(refs), tag)
+
+
+def _apt_cache_evict_tag(tag, keep_key=None):
+    dead = [k for k, (_refs, ktag) in _APT_MODEL_CACHE.items()
+            if ktag == tag and k != keep_key]
+    for k in dead:
+        _APT_MODEL_CACHE.pop(k, None)
+
+
+def _apt_cache_clear_all():
+    _APT_MODEL_CACHE.clear()
+
+
 class sum_load_adv:
-    # 类级别的模型缓存
-    _model_cache = {}
+    _apt_cache_tag = "sum_load_adv"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -542,10 +600,10 @@ class sum_load_adv:
 
     @classmethod
     def _compute_cache_key(cls, ckpt_name, unet_name, unet_Weight_Dtype, clip_type,
-                          clip1, clip2, clip3, clip4, lora, lora_strength,
-                          lora_stack, over_model, over_clip, pos, neg):
-        """计算模型加载参数的缓存键"""
-        key_data = f"{ckpt_name}|{unet_name}|{unet_Weight_Dtype}|{clip_type}|{clip1}|{clip2}|{clip3}|{clip4}|{lora}|{lora_strength}|{lora_stack}|{over_model}|{over_clip}|{pos}|{neg}"
+                           clip1, clip2, clip3, clip4, lora, lora_strength,
+                           lora_stack, over_model, over_clip):
+        """计算模型加载参数的缓存键，不包含提示词。"""
+        key_data = f"{ckpt_name}|{unet_name}|{unet_Weight_Dtype}|{clip_type}|{clip1}|{clip2}|{clip3}|{clip4}|{lora}|{lora_strength}|{lora_stack}|{over_model}|{over_clip}"
         return hashlib.md5(key_data.encode()).hexdigest()
 
     @classmethod
@@ -555,13 +613,24 @@ class sum_load_adv:
         """带缓存的模型加载和提示词编码"""
         cache_key = cls._compute_cache_key(ckpt_name, unet_name, unet_Weight_Dtype, clip_type,
                                            clip1, clip2, clip3, clip4, lora, lora_strength,
-                                           lora_stack, over_model, over_clip, pos, neg)
+                                           lora_stack, over_model, over_clip)
 
-        if cache_key in cls._model_cache:
-            print(f"[sum_load_adv] Cache hit, reusing loaded model and conditioning")
-            return cls._model_cache[cache_key]
+        cached = _apt_cache_get(cache_key)
+        if cached is not None:
+            print("[sum_load_adv] Model cache hit, encoding prompts...")
+            model, clip, vae2 = cached
+            if clip is not None:
+                (positive,) = CLIPTextEncode().encode(clip, pos)
+                (negative,) = CLIPTextEncode().encode(clip, neg)
+            else:
+                positive = None
+                negative = None
+            return model, clip, vae2, positive, negative
 
         print(f"[sum_load_adv] Cache miss, loading model and encoding prompts...")
+        _apt_cache_evict_tag(cls._apt_cache_tag, keep_key=cache_key)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         model = None
         clip = over_clip
         vae2 = None
@@ -625,6 +694,8 @@ class sum_load_adv:
         if lora != "None" and lora_strength != 0:
             model, clip = LoraLoader().load_lora(model, clip, lora, lora_strength, lora_strength)
 
+        _apt_cache_set(cache_key, (model, clip, vae2), tag=cls._apt_cache_tag)
+
         # 编码提示词
         if clip is not None:
             (positive,) = CLIPTextEncode().encode(clip, pos)
@@ -633,8 +704,6 @@ class sum_load_adv:
             positive = None
             negative = None
 
-        # 缓存结果（包含 positive 和 negative）
-        cls._model_cache[cache_key] = (model, clip, vae2, positive, negative)
         return model, clip, vae2, positive, negative
     def process_settings(self,
                         node_id,
@@ -750,6 +819,8 @@ class sum_load_adv:
 
 
 class sum_load_simple(sum_load_adv):
+    _apt_cache_tag = "sum_load_simple"
+
     @classmethod
     def INPUT_TYPES(cls):
         # 动态获取模型列表
@@ -842,7 +913,7 @@ class sum_load_simple(sum_load_adv):
 
 
 class sum_load_MiniMaxH3:
-    _model_cache = {}
+    _apt_cache_tag = "sum_load_MiniMaxH3"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -880,15 +951,13 @@ class sum_load_MiniMaxH3:
     def _load_model_cached(cls, unet_name, unet_Weight_Dtype, clip_type, clip1):
         cache_key = cls._compute_cache_key(unet_name, unet_Weight_Dtype, clip_type, clip1)
 
-        if cache_key in cls._model_cache:
+        cached = _apt_cache_get(cache_key)
+        if cached is not None:
             print(f"[sum_load_adv] Cache hit")
-            return cls._model_cache[cache_key]
+            return cached
 
         print(f"[sum_load_adv] Cache miss, loading model...")
-
-        import torch
-        for key in list(cls._model_cache.keys()):
-            del cls._model_cache[key]
+        _apt_cache_evict_tag(cls._apt_cache_tag, keep_key=cache_key)
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -913,8 +982,9 @@ class sum_load_MiniMaxH3:
             else:
                 clip = CLIPLoader().load_clip(clip1, clip_type, "default")[0]
 
-        cls._model_cache[cache_key] = (model, clip)
-        return model, clip
+        payload = (model, clip)
+        _apt_cache_set(cache_key, payload, tag=cls._apt_cache_tag)
+        return payload
 
     def process_settings(self, steps, cfg, sampler, scheduler,
                          unet_Weight_Dtype, clip_type=None, vae=None, audio_vae=None,
@@ -948,74 +1018,37 @@ class sum_load_MiniMaxH3:
 
 
 
+
 class Apt_clear_cache:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "data": ("RUN_CONTEXT",),
+                "data": (any_type, {}),
             }
         }
 
     OUTPUT_NODE = True
-    RETURN_TYPES = ()
-    RETURN_NAMES = ()
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("data",)
     FUNCTION = "clear_cache"
     CATEGORY = "Apt_Preset/chx_load"
-    
-    def clear_cache(self, data=None):
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("nan")
+
+    def clear_cache(self, data):
         print("[Apt_clear_cache] Starting cache cleanup...")
-        total_cleared = 0
-        
-        try:
-            if hasattr(sum_load_adv, '_model_cache'):
-                cache_size_before = len(sum_load_adv._model_cache)
-                sum_load_adv._model_cache.clear()
-                total_cleared += cache_size_before
-                print(f"[sum_load_adv] Cleared {cache_size_before} cached model entries")
-            else:
-                print("[Apt_clear_cache] sum_load_adv._model_cache not found")
-        except NameError:
-            print("[Apt_clear_cache] sum_load_adv class not found, skipping")
-            
-        try:
-            if hasattr(sum_load_simple, '_model_cache'):
-                cache_size_before = len(sum_load_simple._model_cache)
-                sum_load_simple._model_cache.clear()
-                total_cleared += cache_size_before
-                print(f"[sum_load_simple] Cleared {cache_size_before} cached model entries")
-            else:
-                print("[Apt_clear_cache] sum_load_simple._model_cache not found")
-        except NameError:
-            print("[Apt_clear_cache] sum_load_simple class not found, skipping")
-        
-        try:
-            import comfy.model_management
-            import comfy.utils
-            
-            comfy.model_management.cleanup_models()
-            if hasattr(comfy.model_management, 'cleanup'):
-                comfy.model_management.cleanup()
-            if hasattr(comfy.model_management, 'model_cache'):
-                comfy.model_management.model_cache.clear()           
-            print("[Apt_clear_cache] Cleaned up ComfyUI models and GPU memory")
-        except Exception as e:
-            print(f"[Apt_clear_cache] Error during ComfyUI cache cleanup: {e}")
-        
-        try:
-            gc.collect()
-        except NameError:
-            import gc
-            gc.collect()
-        
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()  # 清理GPU显存缓存（核心有效接口）
-            torch.cuda.ipc_collect()  # 清理CUDA多进程缓存
-            print("[Apt_clear_cache] Cleared CUDA cache")
-        
-        print(f"[Apt_clear_cache] Total cleared {total_cleared} cached model entries. GPU memory should be freed.")
-        
-        return {}
+        total_cleared = len(_APT_MODEL_CACHE)
+        _apt_cache_clear_all()
+        comfy.model_management.unload_all_models()
+        comfy.model_management.cleanup_models_gc()
+        gc.collect()
+        comfy.model_management.soft_empty_cache()
+        print(f"[Apt_clear_cache] Cleared {total_cleared} APT cache entries and unloaded ComfyUI models.")
+
+        return (data,)
 
 
 
@@ -1577,6 +1610,64 @@ class chx_input_data:
 
 #region-----------采样器---------------------------------------------------------------------------------------#
 
+def _apt_default_negative(negative, clip):
+    if negative is not None:
+        return negative
+    if clip is None:
+        raise ValueError("Cannot encode the default negative prompt 'blur' without a CLIP input")
+    return CLIPTextEncode().encode(clip, "blur")[0]
+
+
+def _apt_default_positive(positive, clip):
+    if positive is not None:
+        return positive
+    if clip is None:
+        raise ValueError("Cannot encode the default positive prompt without a CLIP input")
+    return CLIPTextEncode().encode(clip, "")[0]
+
+
+def _apt_replace_av_video_latent(latent, video_latent):
+    if latent is None:
+        return video_latent
+    samples = latent.get("samples")
+    if not isinstance(samples, comfy.nested_tensor.NestedTensor):
+        return video_latent
+    streams = list(samples.unbind())
+    if len(streams) < 2:
+        return video_latent
+
+    video_samples = video_latent["samples"]
+    if isinstance(video_samples, comfy.nested_tensor.NestedTensor):
+        video_samples = video_samples.unbind()[0]
+    output = video_latent.copy()
+    output["samples"] = comfy.nested_tensor.NestedTensor([video_samples, *streams[1:]])
+    return output
+
+
+def _apt_second_pass_positive(positive, source_latent, target_latent):
+    def video_shape(value):
+        if not isinstance(value, dict):
+            return None
+        samples = value.get("samples")
+        if isinstance(samples, comfy.nested_tensor.NestedTensor):
+            samples = samples.unbind()[0]
+        if not isinstance(samples, torch.Tensor) or samples.ndim < 4:
+            return None
+        return tuple(int(size) for size in samples.shape[-2:])
+
+    source_shape = video_shape(source_latent)
+    target_shape = video_shape(target_latent)
+    if source_shape is None or target_shape is None or source_shape == target_shape:
+        return positive
+    output = []
+    for embedding, extra in positive:
+        values = extra.copy()
+        values.pop("minimax_keyframes", None)
+        values.pop("minimax_frame_count", None)
+        output.append([embedding, values])
+    return output
+
+
 class basic_Ksampler_full:
     @classmethod
     def INPUT_TYPES(s):
@@ -1632,6 +1723,8 @@ class basic_Ksampler_full:
             model= context.get("model")
         if clip is None:
             clip= context.get("clip")
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
 
         if latent_image is not None:
             latent = encode(vae, latent_image)[0]
@@ -1691,7 +1784,7 @@ class basic_Ksampler_mid:
     RETURN_TYPES = ("RUN_CONTEXT","IMAGE", "MODEL", "CONDITIONING", "CONDITIONING", "LATENT","VAE","CLIP", )
     RETURN_NAMES = ("context", "image", "model","positive", "negative",  "latent", "vae", "clip", )
     FUNCTION = "sample"
-    CATEGORY = "Apt_Preset/chx_ksample/ksample"
+    CATEGORY = "Apt_Preset/chx_ksample"
 
 
     def sample(self,  seed, denoise, context=None, clip=None, model=None,vae=None, positive=None, negative=None, latent=None, image=None, prompt=None, image_output=None, extra_pnginfo=None, ):
@@ -1713,6 +1806,8 @@ class basic_Ksampler_mid:
             model= context.get("model")
         if clip is None:
             clip= context.get("clip")
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
 
 
 #------------------------latent四种处理方式-------------------------
@@ -1785,6 +1880,9 @@ class basic_Ksampler_simple:
         positive = context.get("positive",None)
         negative = context.get("negative",None)
         model = context.get("model",None)
+        clip = context.get("clip",None)
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
 
         if image is not None:
             latent = VAEEncode().encode(vae, image)[0]
@@ -1801,7 +1899,7 @@ class basic_Ksampler_simple:
 
 
         output_image = VAEDecode().decode(vae, latent)[0]
-        context = new_context(context, latent=latent, images=output_image,  )
+        context = new_context(context, negative=negative, latent=latent, images=output_image,  )
         
         results = easySave(output_image, 'easyPreview', image_output, prompt, extra_pnginfo)
         if image_output in ("Hide", "Hide/Save"):
@@ -1834,17 +1932,17 @@ class basic_Ksampler_custom:
                     "image": ("IMAGE", ),
                     "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                     "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                    "image_output": (["Hide", "Preview", "Save", "Hide/Save"], {"default": "None", "tooltip": "  output_image will take up CPU resources "}),
+                    "image_output": (["Hide", "Preview", "Save", "Hide/Save"], {"default": "Hide", }),
                     
                     },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO",},
             
                 }
     OUTPUT_NODE = True
-    RETURN_TYPES = ("RUN_CONTEXT","IMAGE", "MODEL","CONDITIONING","CONDITIONING","LATENT", "VAE", )
-    RETURN_NAMES = ("context","image", "model","positive","negative","latent", "vae",  )
+    RETURN_TYPES = ("RUN_CONTEXT","IMAGE", "MODEL","CONDITIONING","CONDITIONING","LATENT", "VAE", "LATENT", )
+    RETURN_NAMES = ("context","image", "model","positive","negative","latent", "vae", "denoise_latent", )
     FUNCTION = "sample"
-    CATEGORY = "Apt_Preset/chx_ksample/ksample"
+    CATEGORY = "Apt_Preset/chx_ksample"
 
     def sample(self, context=None,model=None,image=None,positive=None, negative=None, latent=None, noise=None, sampler=None, guider=None, sigmas=None, seed=1, denoise=1, prompt=None, image_output=None, extra_pnginfo=None,):
         
@@ -1863,6 +1961,16 @@ class basic_Ksampler_custom:
             
         if negative is None:    
             negative = context.get("negative",None)
+        clip = context.get("clip",None)
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
+
+        context_latent = context.get("latent")
+        if image is not None:
+            latent = encode(vae, image)[0]
+        elif latent is None:
+            latent = context_latent
+        positive = _apt_second_pass_positive(positive, context_latent, latent)
             
         if sampler is None:
             sampler_name = context.get("sampler",None)
@@ -1872,7 +1980,7 @@ class basic_Ksampler_custom:
             noise = RandomNoise().get_noise(seed)[0] 
 
         if guider is None:
-            guider = BasicGuider().get_guider(model, positive)[0] 
+            guider = CFGGuider().get_guider(model, positive, negative, cfg)[0]
 
         if sigmas is None:
             sigmas = BasicScheduler().get_sigmas(model, scheduler, steps, denoise)[0]
@@ -1882,34 +1990,23 @@ class basic_Ksampler_custom:
 
 
 
-        if image is not None:
-            latent = encode(vae, image)[0]
-        elif latent is not None:
-            pass
-        else:
-            latent = context.get("latent")
-
-
-
 #----------------------------------------------------------------           
                
         out= SamplerCustomAdvanced().sample( noise, guider, sampler, sigmas, latent)
-        latent= out[0]
+        latent = out[0]
+        denoise_latent = out[1]
         
-        if image_output == "None":
-            context = new_context(context, images=None, latent=latent, model=model, positive=positive, negative=negative,  )
-            return(context, None, model, positive, negative, latent, vae, ) 
-            
-        output_image = VAEDecode().decode(vae, latent)[0]  
+          
+        output_image = VAEDecode().decode(vae, denoise_latent)[0]
         context = new_context(context, images=output_image, latent=latent, model=model, positive=positive, negative=negative,  )   
         
         results = easySave(output_image, 'easyPreview', image_output, prompt, extra_pnginfo)
         if image_output in ("Hide", "Hide/Save"):
             return {"ui": {},
-                "result": (context,output_image, model, positive, negative, latent, vae, )}
-            
+                "result": (context,output_image, model, positive, negative, latent, vae, denoise_latent, )}
+             
         return {"ui": {"images": results},
-                "result": (context,output_image, model, positive, negative, latent, vae,)}
+                "result": (context,output_image, model, positive, negative, latent, vae, denoise_latent,)}
 
 
 class basic_Ksampler_adv:
@@ -1938,7 +2035,7 @@ class basic_Ksampler_adv:
     RETURN_NAMES = ("context ", "image")
     OUTPUT_NODE = True
     FUNCTION = "sample"
-    CATEGORY = "Apt_Preset/chx_ksample/ksample"
+    CATEGORY = "Apt_Preset/chx_ksample"
 
     def sample(self, context, add_noise, steps, noise_seed, start_at_step,end_at_step, return_with_leftover_noise, denoise=1.0, 
                 pos="", neg="", latent=None, prompt=None, image_output=None, extra_pnginfo=None, ):
@@ -1959,6 +2056,9 @@ class basic_Ksampler_adv:
 
         positive = context.get("positive", None)
         negative = context.get("negative", None)
+        clip = context.get("clip", None)
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
 
         """guidance = context.get("guidance",None)
         if guidance is None:
@@ -1975,12 +2075,12 @@ class basic_Ksampler_adv:
         
         
         if image_output =="None":
-            context = new_context(context, latent=latent,images=None)
+            context = new_context(context, negative=negative, latent=latent,images=None)
 
             return (context, None,)
         
         output_image = VAEDecode().decode(vae, latent)[0]
-        context = new_context(context, latent=latent, images=output_image)  
+        context = new_context(context, negative=negative, latent=latent, images=output_image)  
         results = easySave(output_image, 'easyPreview', image_output, prompt, extra_pnginfo)
 
         if image_output in ("Hide", "Hide/Save"):
@@ -2060,8 +2160,12 @@ class texture_Ksampler:
 
         positive = context.get("positive")
         negative = context.get("negative")
+        clip = context.get("clip")
         model = context.get("model")
         latent_image = context.get("latent") 
+        
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
         
         self.__hijackConv2DMethods(model.model, tileX == 1, tileY == 1)
         result = nodes.common_ksampler(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent_image, denoise=denoise)[0]
@@ -2083,8 +2187,6 @@ class chx_Ksampler_refine:
             "required": {
                 "context": ("RUN_CONTEXT",),
                 "upscale_model": (["None"] +folder_paths.get_filename_list("upscale_models"), {"default": "1xDeJPG_OmniSR.pth"}),
-                "upscale_method": (["nearest-exact", "bilinear", "area", "bicubic", "lanczos"], {"default": "bilinear" }),
-                "Add_img_scale": ("FLOAT", {"default": 2, "min": 1, "max": 16.0, "step": 0.1}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 "denoise": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "image_output": (["Hide", "Preview", "Save", "Hide/Save"], {"default": "Preview"}),                
@@ -2105,7 +2207,7 @@ class chx_Ksampler_refine:
     OUTPUT_NODE = True
     FUNCTION = "run"
     CATEGORY = "Apt_Preset/chx_ksample/ksample"
-    def run(self,context, seed, denoise, upscale_model,upscale_method, image=None,  prompt=None, image_output=None, extra_pnginfo=None,Add_img_scale=1, lowCpu=None):
+    def run(self,context, seed, denoise, upscale_model, image=None,  prompt=None, image_output=None, extra_pnginfo=None, lowCpu=None):
 
         vae = context.get("vae",None)
         steps = context.get("steps",None)
@@ -2115,21 +2217,20 @@ class chx_Ksampler_refine:
 
         positive = context.get("positive",None)
         negative = context.get("negative",None)
+        clip = context.get("clip",None)
         model = context.get("model",None)
         latent = context.get("latent",None) 
 
-        if image is None:
-            image = context.get("images",None)
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
 
-        if upscale_model != "None":         
+        if upscale_model != "None":
+            if image is None:
+                image = context.get("images",None)
             up_model = load_upscale_model(upscale_model)
-            image = upscale_with_model(up_model, image )
-
-        if Add_img_scale != 1:
-            image = image_upscale(image, upscale_method, Add_img_scale)[0]
-
-        if image is not None:
-            latent = encode(vae, image)[0]
+            image = upscale_with_model(up_model, image)
+            video_latent = encode(vae, image)[0]
+            latent = _apt_replace_av_video_latent(latent, video_latent)
 
 
         latent = common_ksampler(model,seed, steps, cfg, sampler, scheduler,
@@ -2142,9 +2243,9 @@ class chx_Ksampler_refine:
 
         if lowCpu is not None:
             (tile_size, overlap, temporal_size, temporal_overlap)=lowCpu
-            output_image = VAEDecodeTiled(vae, latent, tile_size, overlap, temporal_size, temporal_overlap)[0]
+            output_image = VAEDecodeTiled().decode(vae, latent, tile_size, overlap, temporal_size, temporal_overlap)[0]
         else:
-            output_image = decode(vae, latent)[0]
+            output_image = VAEDecode().decode(vae, latent)[0]
 
 
         if image_output == "None":
@@ -2161,6 +2262,7 @@ class chx_Ksampler_refine:
             
         return {"ui": {"images": results},
                 "result": (context, output_image,)}
+
 
 
 class chx_Ksampler_dual_paint:    #双区采样 ksampler
@@ -2195,8 +2297,12 @@ class chx_Ksampler_dual_paint:    #双区采样 ksampler
 
         positive = context.get("positive",None)
         negative = context.get("negative",None)
+        clip = context.get("clip",None)
         model = context.get("model",None)
         latent = context.get("latent",None) 
+
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
 
 
         phase_steps = math.ceil(steps / 2)
@@ -2340,8 +2446,12 @@ class basic_Ksampler_low_gpu:
         scheduler = context.get("scheduler",None)
         positive = context.get("positive",None)
         negative = context.get("negative",None)
+        clip = context.get("clip",None)
         model = context.get("model",None)
         latent = context.get("latent",None)
+
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
 
         if image is not None:
             latent = VAEEncode().encode(vae, image)[0]
@@ -2423,10 +2533,14 @@ class chx_ksampler_tile:
         cfg = context.get("cfg", 7)
         sampler_name = context.get("sampler", "dpmpp_sde_gpu")
         scheduler = context.get("scheduler", "karras")
-        positive_cond_base = context.get("positive", "")
-        negative_cond_base = context.get("negative", "")
+        positive_cond_base = context.get("positive", None)
+        negative_cond_base = context.get("negative", None)
+        clip = context.get("clip", None)
         base_model = context.get("model", None)
         samples = context.get("latent", None)
+
+        negative_cond_base = _apt_default_negative(negative_cond_base, clip)
+        positive_cond_base = _apt_default_positive(positive_cond_base, clip)
 
         tile_denoise = denoise_image
 
@@ -2636,10 +2750,14 @@ class chx_ksampler_tile:
         cfg = context.get("cfg", 7)
         sampler_name = context.get("sampler", "dpmpp_sde_gpu")
         scheduler = context.get("scheduler", "karras")
-        positive_cond_base = context.get("positive", "")
-        negative_cond_base = context.get("negative", "")
+        positive_cond_base = context.get("positive", None)
+        negative_cond_base = context.get("negative", None)
+        clip = context.get("clip", None)
         base_model = context.get("model", None)
         samples = context.get("latent", None)
+
+        negative_cond_base = _apt_default_negative(negative_cond_base, clip)
+        positive_cond_base = _apt_default_positive(positive_cond_base, clip)
 
         tile_denoise = denoise_image
 
@@ -3034,7 +3152,7 @@ class load_Nanchaku:
     RETURN_TYPES = ("RUN_CONTEXT", "MODEL", "PDATA")
     RETURN_NAMES = ("context", "model", "preset_save")
     FUNCTION = "process_settings"
-    CATEGORY = "Apt_Preset/chx_load"
+    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
     DESCRIPTION = """
 - cache_threshold典型设置为0.12。越大速度越快，将其设为0会禁用该效果。
 - nunchaku-fp16采用FP16注意力机制，可提供约1.2倍的速度提升。
@@ -3805,15 +3923,18 @@ class sum_Ksampler:
         image2 = context.get("images",None)
 
         if positive is None:
-            positive = context.get("positive","boy" )
+            positive = context.get("positive", None)
         if negative is None:
-            negative = context.get("negative","" )
+            negative = context.get("negative", None)
         if model is None:
             model= context.get("model")
 
 
 
 #-------------------------------------------------------------------------------------
+
+        negative = _apt_default_negative(negative, clip)
+        positive = _apt_default_positive(positive, clip)
 
         if latent_stack is not None:
             from .main_stack import Apply_latent
@@ -3933,6 +4054,60 @@ class sum_Ksampler:
 RUN_CONTEXT = comfy_io.Custom("RUN_CONTEXT")
 
 
+def _apt_trim_video_audio(images, audio, fps, trim_frames):
+    """Trim a marked H3 continuation and keep decoded audio frame-accurate."""
+    n = max(0, int(trim_frames))
+    if n == 0:
+        return images, audio
+    if images is None:
+        raise ValueError("AD Create Video cannot trim H3 context without images")
+
+    total = int(images.shape[0])
+    if n >= total:
+        raise ValueError(
+            f"AD Create Video cannot trim {n} H3 context frames from "
+            f"a {total}-frame clip"
+        )
+    images = images[n:]
+
+    if audio is None:
+        return images, None
+    if not isinstance(audio, dict) or "waveform" not in audio or "sample_rate" not in audio:
+        raise ValueError(
+            "AD Create Video expected decoded H3 AUDIO with waveform and "
+            "sample_rate while applying continuation trimming"
+        )
+
+    waveform = audio["waveform"]
+    sample_rate = int(audio["sample_rate"])
+    cut = int(round(n / float(fps) * sample_rate))
+    length = int(waveform.shape[-1])
+    if cut >= length:
+        raise ValueError(
+            f"AD Create Video cannot trim {cut} audio samples from a "
+            f"{length}-sample H3 soundtrack"
+        )
+    waveform = waveform[..., cut:]
+
+    # H3's 40 Hz audio latent grid can decode a few milliseconds beyond
+    # its 24 fps picture. Match the tail so the error cannot accumulate
+    # across a chain of clips.
+    wanted = int(round((total - n) / float(fps) * sample_rate))
+    if int(waveform.shape[-1]) > wanted:
+        waveform = waveform[..., :wanted]
+    elif int(waveform.shape[-1]) < wanted:
+        logging.getLogger("h3_motion_context").warning(
+            "AD Create Video: H3 audio is %.2fms shorter than the trimmed "
+            "picture; leaving its tail unchanged",
+            (wanted - int(waveform.shape[-1])) / sample_rate * 1000.0,
+        )
+
+    trimmed_audio = dict(audio)
+    trimmed_audio["waveform"] = waveform
+    trimmed_audio["sample_rate"] = sample_rate
+    return images, trimmed_audio
+
+
 class AD_CreateVideo(comfy_io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -3942,12 +4117,16 @@ class AD_CreateVideo(comfy_io.ComfyNode):
             display_name="AD Create Video",
             category="Apt_Preset/AD",
             essentials_category="Video Tools",
-            description="",
+            description=(
+                "Create a video from frames and audio. trim_frames removes "
+                "that many leading image frames and the matching audio; use "
+                "0 for no trim or 22 for an H3 continuation clip."
+            ),
             inputs=[
                 RUN_CONTEXT.Input("context", optional=True),
                 comfy_io.Image.Input("images", optional=True),
                 comfy_io.Audio.Input("audio", optional=True, tooltip="The audio to add to the video."),
-                comfy_io.Float.Input("fps", default=30.0, min=1.0, max=120.0, step=1.0),
+                comfy_io.Float.Input("fps", default=24.0, min=1.0, max=120.0, step=1.0),
                 comfy_io.Int.Input(
                     "bit_depth",
                     min=8,
@@ -3957,6 +4136,20 @@ class AD_CreateVideo(comfy_io.ComfyNode):
                     optional=True,
                     display_mode=comfy_io.NumberDisplay.number,
                 ),
+                comfy_io.Int.Input(
+                    "trim_frames",
+                    min=0,
+                    max=4096,
+                    default=0,
+                    step=1,
+                    optional=True,
+                    display_mode=comfy_io.NumberDisplay.number,
+                    tooltip=(
+                        "Remove this many leading image frames and the "
+                        "matching audio. 0 disables trimming; use 22 for "
+                        "Apt MiniMax H3 continuation clips."
+                    ),
+                ),
             ],
             outputs=[
                 comfy_io.Video.Output(),
@@ -3964,7 +4157,10 @@ class AD_CreateVideo(comfy_io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, context=None, images=None, audio=None, fps: float = 30.0, bit_depth: int = 8) -> comfy_io.NodeOutput:
+    def execute(
+        cls, context=None, images=None, audio=None, fps: float = 30.0,
+        bit_depth: int = 8, trim_frames: int = 0
+    ) -> comfy_io.NodeOutput:
         if images is None and context is not None:
             images = context.get("images")
         if audio is None and context is not None:
@@ -3972,6 +4168,9 @@ class AD_CreateVideo(comfy_io.ComfyNode):
             audio_vae = context.get("audio_vae")
             if latent is not None and audio_vae is not None:
                 audio = vae_decode_audio(audio_vae, latent)
+        images, audio = _apt_trim_video_audio(
+            images, audio, fps, trim_frames
+        )
         return comfy_io.NodeOutput(
             InputImpl.VideoFromComponents(
                 Types.VideoComponents(images=images, audio=audio, frame_rate=Fraction(fps)),

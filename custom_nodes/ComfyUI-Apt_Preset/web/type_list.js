@@ -16,13 +16,13 @@ const TypeSlotEvent = {
     Disconnect: false,
 }
 
-const dynamic_connection = (node, index, event, prefix = 'in_', type = '*', names = []
+const dynamic_connection = (node, index, event, prefix = 'in_', type = '*', names = [], fixedInputs = 0
 ) => {
-    if (!node.inputs[index].name.startsWith(prefix)) {
+    if (index < fixedInputs || !node.inputs[index].name.startsWith(prefix)) {
         return
     }
     // remove all non connected inputs
-    if (event == TypeSlotEvent.Disconnect && node.inputs.length > 1) {
+    if (event == TypeSlotEvent.Disconnect && node.inputs.length > fixedInputs + 1) {
         if (node.widgets) {
             const widget = node.widgets.find((w) => w.name === node.inputs[index].name)
             if (widget) {
@@ -34,8 +34,9 @@ const dynamic_connection = (node, index, event, prefix = 'in_', type = '*', name
 
         // TODO type
         // make inputs sequential again
-        for (let i = 0; i < node.inputs.length; i++) {
-            const name = i < names.length ? names[i] : `${prefix}${i + 1}`
+        for (let i = fixedInputs; i < node.inputs.length; i++) {
+            const dynamicIndex = i - fixedInputs
+            const name = dynamicIndex < names.length ? names[dynamicIndex] : `${prefix}${dynamicIndex + 1}`
             node.inputs[i].label = name
             node.inputs[i].name = name
         }
@@ -43,11 +44,113 @@ const dynamic_connection = (node, index, event, prefix = 'in_', type = '*', name
 
     // add an extra input
     if (node.inputs[node.inputs.length - 1].link != undefined) {
-        const nextIndex = node.inputs.length
-        const name = nextIndex < names.length
-            ? names[nextIndex]
-            : `${prefix}${nextIndex + 1}`
+        const nextIndex = node.inputs.length - fixedInputs
+        const name = nextIndex < names.length ? names[nextIndex] : `${prefix}${nextIndex + 1}`
         node.addInput(name, type)
+    }
+}
+
+const registerDynamicValueInputs = (nodeType, { fixedInputs = 0, lockType = false, syncOutput = false } = {}) => {
+    const updateType = (node, connectedType = null) => {
+        if (!lockType) {
+            return
+        }
+        const dynamicInputs = node.inputs.slice(fixedInputs)
+        const firstConnected = dynamicInputs.find((input) => input.link != null)
+        const type = connectedType || firstConnected?.type || '*'
+        for (const input of dynamicInputs) {
+            input.type = type
+        }
+        if (syncOutput && node.outputs?.[0]) {
+            node.outputs[0].type = type
+        }
+    }
+
+    const onNodeCreated = nodeType.prototype.onNodeCreated
+    nodeType.prototype.onNodeCreated = function () {
+        const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined
+        if (this.inputs.length === fixedInputs) {
+            this.addInput(`${_prefix}_1`, '*')
+        }
+        return r
+    }
+
+    const onConfigure = nodeType.prototype.onConfigure
+    nodeType.prototype.onConfigure = function () {
+        const r = onConfigure ? onConfigure.apply(this, arguments) : undefined
+        if (!app.configuringGraph && this.inputs) {
+            for (let i = this.inputs.length - 1; i >= fixedInputs; i--) {
+                this.removeInput(i)
+            }
+            this.addInput(`${_prefix}_1`, '*')
+        }
+        updateType(this)
+        return r
+    }
+
+    const onConnectionsChange = nodeType.prototype.onConnectionsChange
+    nodeType.prototype.onConnectionsChange = function (slotType, slot, event, linkInfo, data) {
+        const r = onConnectionsChange ? onConnectionsChange.apply(this, arguments) : undefined
+        if (slotType !== TypeSlot.Input || slot < fixedInputs) {
+            return r
+        }
+
+        let connectedType = null
+        if (event === TypeSlotEvent.Connect && linkInfo) {
+            const fromNode = this.graph._nodes.find((otherNode) => otherNode.id == linkInfo.origin_id)
+            connectedType = fromNode.outputs[linkInfo.origin_slot].type
+            this.inputs[slot].type = connectedType
+        }
+
+        dynamic_connection(this, slot, event, `${_prefix}_`, connectedType || '*', [], fixedInputs)
+        updateType(this, connectedType)
+
+        if (!lockType && event === TypeSlotEvent.Disconnect && this.inputs[slot]) {
+            this.inputs[slot].type = '*'
+            this.inputs[slot].label = `${_prefix}_${slot - fixedInputs + 1}`
+        }
+        return r
+    }
+}
+
+const renamedPorts = {
+    create_list: { outputs: ['list'] },
+    create_array: { outputs: ['array'] },
+    type_ListToArray: { inputs: ['list'], outputs: ['array'] },
+    type_ArrayToList: { inputs: ['array'], outputs: ['list'] },
+    array_Slice: { inputs: ['array', 'start', 'end'], outputs: ['array'] },
+    array_Merge: { outputs: ['array'] },
+    flow_stage_list: { outputs: ['list', 'array'] },
+}
+
+const registerRenamedPorts = (nodeType, names) => {
+    const applyNames = (node) => {
+        names.inputs?.forEach((name, index) => {
+            if (node.inputs?.[index]) {
+                node.inputs[index].name = name
+                node.inputs[index].label = name
+            }
+        })
+        names.outputs?.forEach((name, index) => {
+            if (node.outputs?.[index]) {
+                node.outputs[index].name = name
+                node.outputs[index].label = name
+            }
+        })
+    }
+
+    const onNodeCreated = nodeType.prototype.onNodeCreated
+    nodeType.prototype.onNodeCreated = function () {
+        const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined
+        applyNames(this)
+        return r
+    }
+
+    const onConfigure = nodeType.prototype.onConfigure
+    nodeType.prototype.onConfigure = function () {
+        const r = onConfigure ? onConfigure.apply(this, arguments) : undefined
+        applyNames(this)
+        return r
     }
 }
 
@@ -78,50 +181,13 @@ function getWorkflowTypes(app) {
 app.registerExtension({
     name: "APTPRESET",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeData.name === "pack_Pack" || nodeData.name === "create_any_batch" || nodeData.name === "create_image_batch"|| nodeData.name === "create_mask_batch") {
-            const onNodeCreated = nodeType.prototype.onNodeCreated
-            nodeType.prototype.onNodeCreated = function () {
-                const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined
-                this.addInput(`${_prefix}_1`, '*')
-                return r
-            }
-
-            // on copy and paste
-            const onConfigure = nodeType.prototype.onConfigure
-            nodeType.prototype.onConfigure = function () {
-                const r = onConfigure ? onConfigure.apply(this, arguments) : undefined
-                if (!app.configuringGraph && this.inputs) {
-                    const length = this.inputs.length
-                    for (let i = length - 1; i >= 0; i--) {
-                        this.removeInput(i)
-                    }
-                    this.addInput(`${_prefix}_1`, '*')
-                }
-                return r
-            }
-
-
-            const onConnectionsChange = nodeType.prototype.onConnectionsChange
-            nodeType.prototype.onConnectionsChange = function (slotType, slot, event, link_info, data) {
-                const r = onConnectionsChange ? onConnectionsChange.apply(this, arguments) : undefined
-                if (slotType === TypeSlot.Input) {
-                    dynamic_connection(this, slot, event, `${_prefix}_`, '*')
-                    if (event === TypeSlotEvent.Connect && link_info) {
-                        const fromNode = this.graph._nodes.find(
-                            (otherNode) => otherNode.id == link_info.origin_id
-                        )
-                        const type = fromNode.outputs[link_info.origin_slot].type
-                        this.inputs[slot].type = type
-                    } else if (event === TypeSlotEvent.Disconnect) {
-                        this.inputs[slot].type = '*'
-                        this.inputs[slot].label = `${_prefix}_${slot + 1}`
-                    }
-                }
-                return r
-            }
-
-
-            
+        if (renamedPorts[nodeData.name]) {
+            registerRenamedPorts(nodeType, renamedPorts[nodeData.name])
+        }
+        if (nodeData.name === "pack_Pack" || nodeData.name === "create_array" || nodeData.name === "create_image_batch" || nodeData.name === "create_mask_batch") {
+            registerDynamicValueInputs(nodeType)
+        } else if (nodeData.name === "flow_stage_list" || nodeData.name === "flow_stage_collect_multi") {
+            registerDynamicValueInputs(nodeType, { fixedInputs: 1, lockType: true })
         } else if (nodeData.name === "math_Exec") {
             const onNodeCreated = nodeType.prototype.onNodeCreated
             nodeType.prototype.onNodeCreated = function () {
@@ -193,8 +259,8 @@ app.registerExtension({
                 return me
             }
         }
-        // 如果节点名称为"create_any_List"或"list_MergeList"
-        else if (nodeData.name === "create_any_List" || nodeData.name === "list_MergeList") {
+        // 如果节点名称为"create_list"或"list_MergeList"
+        else if (nodeData.name === "create_list" || nodeData.name === "list_MergeList") {
             // 获取节点类型原型上的onNodeCreated方法
             const onNodeCreated = nodeType.prototype.onNodeCreated
             // 重写节点类型原型上的onNodeCreated方法
@@ -291,7 +357,7 @@ app.registerExtension({
                 }
                 return me
             }
-        } else if (nodeData.name == "batch_MergeBatch") {
+        } else if (nodeData.name == "array_Merge") {
             // 获取节点类型原型上的onNodeCreated方法
             const onNodeCreated = nodeType.prototype.onNodeCreated
             // 重写节点类型原型上的onNodeCreated方法
@@ -652,4 +718,3 @@ app.registerExtension({
         }
     }
 })
-

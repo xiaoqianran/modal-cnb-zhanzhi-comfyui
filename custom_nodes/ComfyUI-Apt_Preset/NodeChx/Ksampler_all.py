@@ -27,10 +27,6 @@ import comfy.model_management as mm
 import folder_paths
 import node_helpers
 
-import nodes
-from nodes import CLIPTextEncode, common_ksampler, VAEDecode, VAEEncode, ImageScale, KSampler,InpaintModelConditioning
-
-import matplotlib
 from PIL import Image, ImageFilter, ImageDraw
 
 #---------------------安全导入------

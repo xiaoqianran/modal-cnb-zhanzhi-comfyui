@@ -49,6 +49,11 @@ from .NodeBasic.mask_human import *
 from .NodeChx.sum_text_yaml import *
 from .NodeChx.edit_imge import*
 
+from .NodeBasic.minimaxH3 import *
+
+
+
+
 
 
 
@@ -224,23 +229,35 @@ NODE_CLASS_MAPPINGS= {
 "AD_sch_value": AD_sch_value,
 "AD_sch_prompt_basic": AD_sch_prompt_basic,
 "AD_sch_mask_weigh":AD_sch_mask_weigh,
-"AD_video_merge": AD_video_merge,
-"AD_CreateVideo": AD_CreateVideo,
 "AD_VideoSeg": AD_VideoSeg,
 "AD_media_trim_visual": AD_media_trim_visual,
-
-
-
-
-"AD_sch_image_merge":AD_sch_image_merge,
+"AD_sch_image_merge":AD_sch_image_merge,  #    CATEGORY = "Apt_Preset/AD/😺backup"
+"AD_pingpong_vedio":AD_pingpong_vedio,
 "AD_MaskExpandBatch": AD_MaskExpandBatch, 
 "AD_ImageExpandBatch": AD_ImageExpandBatch,
 "AD_AutoTileVAEDecode": AD_AutoTileVAEDecode,
 "AD_frame_replace": AD_frame_replace,
-"AD_pingpong_vedio":AD_pingpong_vedio,
-"AD_FILM_VFI":AD_FILM_VFI,
+
+
 "AD_MiniMax_Ref2V": AD_MiniMax_Ref2V,
+"AD_In_VideoSplit": AD_In_VideoSplit,
+"AD_video_merge": AD_video_merge,
+"AD_CreateVideo": AD_CreateVideo,
+"AD_FILM_VFI":AD_FILM_VFI,
+
+
+
 "AD_MiniMax_guide": AD_MiniMax_guide,
+"AD_MinMax_Ref2_generate": AD_MinMax_Ref2_generate,
+"AD_MinMax_FL2_generate": AD_MinMax_FL2_generate,
+"AD_MinMax_Ref2_mul": AD_MinMax_Ref2_mul,
+"AD_MinMax_FL2_mul": AD_MinMax_FL2_mul,
+
+
+
+"AD_sam_Crop": AD_sam_Crop,
+"AD_sam_stitch": AD_sam_stitch,
+"AD_Inject_Latent": AD_Inject_Latent,
 
 
 
@@ -298,14 +315,16 @@ NODE_CLASS_MAPPINGS= {
 
 
 "IO_LoadImgBatch": IO_LoadImgBatch,
+"IO_LoadTextBatch": IO_LoadTextBatch,
 "IO_LoadVideoBatch": IO_LoadVideoBatch,
 "IO_LoadAudioBatch": IO_LoadAudioBatch,
-"IO_LoadTextBatch": IO_LoadTextBatch,
-"IO_LoadShotBatch": IO_LoadShotBatch,
-"IO_ShotCreate": IO_ShotCreate,
 
+"IO_ShotCreate": IO_ShotCreate,
+"IO_LoadShotBatch": IO_LoadShotBatch,
 
 "IO_PathProcessor": IO_PathProcessor,
+"IO_loadLatent": IO_loadLatent,
+"IO_SaveLatent": IO_SaveLatent,
 "IO_load_anyimage": IO_load_anyimage,
 "IO_store_image": IO_store_image,
 "IO_EasyMark": IO_EasyMark,
@@ -342,8 +361,8 @@ NODE_CLASS_MAPPINGS= {
 
 "create_mask_batch": create_mask_batch, #wed
 "create_image_batch": create_image_batch, #wed
-"create_any_List": create_any_List,#wed
-"create_any_batch": create_any_batch,  #wed
+"create_list": create_list,#wed
+"create_array": create_array,  #wed
 
 "type_ImageAlphaSplit":type_ImageAlphaSplit,
 "type_Image_List2Batch":type_Image_List2Batch,
@@ -351,16 +370,16 @@ NODE_CLASS_MAPPINGS= {
 "type_Image_Batch2List":type_Image_Batch2List,
 "type_Mask_List2Batch":type_Mask_List2Batch,
 "type_Mask_Batch2List":type_Mask_Batch2List,
-"type_ListToBatch": type_ListToBatch, 
-"type_BatchToList": type_BatchToList,
+"type_ListToArray": type_ListToArray, 
+"type_ArrayToList": type_ArrayToList,
 
 "list_Value":list_Value,
 "list_fliter": list_fliter,
 "list_ListSlice": list_Slice, 
 "list_MergeList": list_Merge, #wed   
 "list_num_range": list_num_range,
-"batch_BatchSlice": BatchSlice, 
-"batch_MergeBatch": MergeBatch, #wed
+"array_Slice": array_Slice, 
+"array_Merge": array_Merge, #wed
 
 
 
@@ -373,6 +392,7 @@ NODE_CLASS_MAPPINGS= {
 "latent_chx_noise": latent_chx_noise,
 "latent_Image2Noise": latent_Image2Noise,
 "chx_latent_adjust": chx_latent_adjust,
+"latent_minimaxH3_scale": latent_minimaxH3_scale,
 
 
 
@@ -537,6 +557,8 @@ NODE_CLASS_MAPPINGS= {
 #----------prompt----------------
 
 "excel_qwen_artistic":excel_qwen_artistic,    #N------------     
+
+
 "excel_VedioPrompt":excel_VedioPrompt,       #N------------
 "excel_roles":excel_roles,   
 "excel_Prompter":excel_Prompter,       
@@ -547,10 +569,12 @@ NODE_CLASS_MAPPINGS= {
 "excel_search_data":excel_search_data,
 "excel_read_easy":excel_read_easy,
 "excel_write_data_easy":excel_write_data_easy,
-"excel_video_assistant":excel_video_assistant,
+
+
 
 
 "text_sum": text_sum,#web
+"text_sum_edit": text_sum_edit,
 "text_converter":text_converter, 
 "text_filter":text_filter,  
 "text_Splitter":text_Splitter,
@@ -600,29 +624,37 @@ NODE_CLASS_MAPPINGS= {
 "flow_BooleanSwitch":flow_BooleanSwitch,
 
 
-
 "flow_bridge_image":flow_bridge_image,
-
-
 "flow_low_gpu":flow_low_gpu,
 "flow_case_tentor":flow_case_tentor,
-"flow_ChangeDetector":flow_ChangeDetector,
+
+"flow_frame_slice":flow_frame_slice,
+"flow_stage_index_switch":flow_stage_index_switch,
+"flow_stage_begin":flow_stage_begin,
+"flow_stage_end":flow_stage_end,
+"flow_stage_collect_single":flow_stage_collect_single,
+"flow_stage_collect_multi":flow_stage_collect_multi,
+"flow_stage_list":flow_stage_list,
+"flow_stage_unpack":flow_stage_unpack,
+#"flow_stage_data":flow_stage_data,
 
 
-"flow_sch_control":flow_sch_control,
-"flow_tensor_Unify":flow_tensor_Unify, 
 "flow_forStart": flow_forStart,
 "flow_forEnd": flow_forEnd,
+
+"flow_sch_control":flow_sch_control,
 "flow_whileStart": flow_whileStart,
 "flow_whileEnd": flow_whileEnd,
+
 "flow_AutoShutdown": flow_AutoShutdown,   
-
-
+"flow_tensor_Unify":flow_tensor_Unify, 
+"flow_ChangeDetector":flow_ChangeDetector,
 
 #----------------------外部导入节点-register-----------------------
 
 "InputShareNode": InputShareNode,
 "flow_createbatch": flow_createbatch,  #    CATEGORY = "Apt_Preset/stack/register"
+
 "Easy_QwenEdit2509": Easy_QwenEdit2509,
 
 #----------------------外部导入节点-----------------------
@@ -687,11 +719,7 @@ NODE_CLASS_MAPPINGS= {
 
 
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-
-
-
-}
+NODE_DISPLAY_NAME_MAPPINGS = {}
 
 
 

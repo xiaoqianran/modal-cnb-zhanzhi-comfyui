@@ -24,6 +24,11 @@ const DEFAULT_SCHEDULERS = [
 const DEFAULT_MODEL_STEPS = 4;
 const DEFAULT_MODEL_CFG = 1.0;
 const DEFAULT_MODEL_SCHEDULER = "simple";
+const PENDING_DEPENDENCY_INSTALLS_KEY = "vnccs-control-center-pending-dependency-installs";
+const MODEL_FAMILIES = [
+    { kind: "QIE2511", label: "QIE2511", defaultType: "gguf" },
+    { kind: "Klein9b", label: "Flux Klein9b", defaultType: "unet" },
+];
 
 // ─── CSS injection (once per page load) ──────────────────────────────────────
 
@@ -252,6 +257,10 @@ function _injectVNCCSControlCenterStyles() {
     border-right: 1px solid rgba(255,255,255,0.04);
     min-width: 0;
 }
+.vnccs-cc-twocol-left > .vnccs-cc-model-card {
+    flex: 1;
+    box-sizing: border-box;
+}
 .vnccs-cc-twocol-right,
 .vnccs-cc-twocol-right2 {
     width: 130px;
@@ -370,6 +379,36 @@ function _injectVNCCSControlCenterStyles() {
     line-height: 1.45;
     color: #9da3b8;
     text-align: center;
+}
+.vnccs-cc-family-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    padding: 6px;
+    margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 8px;
+    background: #111119;
+}
+.vnccs-cc-family-tab {
+    min-width: 0;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    background: #0d0d13;
+    color: #8e93a8;
+    padding: 8px 6px;
+    font: 700 10px/1.2 inherit;
+    letter-spacing: 0;
+    cursor: pointer;
+}
+.vnccs-cc-family-tab:hover {
+    border-color: rgba(255,143,163,0.3);
+    color: #f4c2ce;
+}
+.vnccs-cc-family-tab--active {
+    border-color: rgba(255,143,163,0.52);
+    background: rgba(255,143,163,0.16);
+    color: #fff3f6;
 }
 .vnccs-cc-model-tabs {
     display: grid;
@@ -1039,6 +1078,11 @@ function _injectVNCCSControlCenterStyles() {
     color: #ffaa00;
     word-break: break-word;
 }
+.vnccs-cc-deps-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
 .vnccs-cc-link-btn {
     border: 1px solid rgba(0,214,143,0.28);
     background: rgba(0,214,143,0.1);
@@ -1192,6 +1236,10 @@ app.registerExtension({
                 window.removeEventListener("pointerup", this._cc_widget._onGlobalPointerUp);
             if (this._cc_widget?._onRegistryUpdate)
                 window.removeEventListener("vnccs-cc-registry-updated", this._cc_widget._onRegistryUpdate);
+            if (this._cc_widget?._onManagerTaskCompleted)
+                api.removeEventListener("cm-task-completed", this._cc_widget._onManagerTaskCompleted);
+            if (this._cc_widget?._onManagerQueueStatus)
+                api.removeEventListener("cm-queue-status", this._cc_widget._onManagerQueueStatus);
         };
     },
 });
@@ -1214,6 +1262,14 @@ class VNCCSControlCenterWidget {
         this._samplers   = DEFAULT_SAMPLERS;
         this._schedulers = DEFAULT_SCHEDULERS;
         this.pollingInterval = null;
+        this._dependencyInstallTasks = new Map();
+        this._dependencyRestartRequired = false;
+        this._restartRequiredOverlay = null;
+        this._managerPolicyOverlay = null;
+        this._onManagerTaskCompleted = event => this._handleManagerTaskCompleted(event);
+        this._onManagerQueueStatus = event => this._handleManagerQueueStatus(event);
+        api.addEventListener("cm-task-completed", this._onManagerTaskCompleted);
+        api.addEventListener("cm-queue-status", this._onManagerQueueStatus);
 
         _injectVNCCSControlCenterStyles();
         this._buildUI();
@@ -1240,6 +1296,7 @@ class VNCCSControlCenterWidget {
             const myRepo = this._getRepoId();
             if (repoId && repoId === myRepo && window.VNCCS_CC_REGISTRY[repoId]) {
                 this.config = window.VNCCS_CC_REGISTRY[repoId];
+                this._syncCustomModelInput();
                 if (!this._isUserInteracting()) this._renderAll();
             }
         };
@@ -1255,8 +1312,12 @@ class VNCCSControlCenterWidget {
         // TECH DEBT: Nunchaku/NVFP entries can remain in old catalogs/state, but
         // are intentionally hidden from the Control Center UI. Delete this after
         // catalogs are cleaned and old workflow JSON is migrated.
-        const preferred = ["gguf", "custom"];
-        const available = new Set(this.config?.available_types ?? []);
+        const activeKind = this._activeKind();
+        const preferred = activeKind === "Klein9b" ? ["unet", "custom"] : ["gguf", "custom"];
+        const available = new Set((this.config?.models ?? [])
+            .filter(entry => this._metaKind(entry).toLowerCase() === activeKind.toLowerCase())
+            .map(entry => entry.type)
+            .filter(Boolean));
         available.add("custom");
         const preferredTabs = preferred.filter(type => available.has(type));
         return preferredTabs.length ? preferredTabs : Array.from(available);
@@ -1274,8 +1335,19 @@ class VNCCSControlCenterWidget {
         return (this.node.inputs ?? []).findIndex(input => input?.name === "vae");
     }
 
+    _getStoredSelectedType() {
+        const kind = this._activeKind();
+        const selectedForKind = this.state.selected_types_by_kind?.[kind];
+        if (selectedForKind) return selectedForKind;
+        return kind === "QIE2511" ? (this.state.selected_type || "") : "";
+    }
+
     _syncCustomModelInput() {
-        const selectedType = this.state.selected_type || this._getSelectedType();
+        // Before the registry config arrives, _getModelTypeTabs() contains only
+        // the synthetic CUSTOM tab. That must not make a brand-new node expose
+        // external model sockets. Existing custom workflows still retain their
+        // sockets because their stored state is restored before this sync.
+        const selectedType = this.config ? this._getSelectedType() : this._getStoredSelectedType();
         const isCustom = selectedType === "custom";
 
         const sync = (name, type, getIndex, shouldShow) => {
@@ -1301,6 +1373,8 @@ class VNCCSControlCenterWidget {
 
     _setSelectedType(nextType) {
         if (!nextType || this._getSelectedType() === nextType) return;
+        if (!this.state.selected_types_by_kind) this.state.selected_types_by_kind = {};
+        this.state.selected_types_by_kind[this._activeKind()] = nextType;
         this.state.selected_type = nextType;
 
         const variants = this._visibleModelsByType(nextType);
@@ -1350,22 +1424,37 @@ class VNCCSControlCenterWidget {
 
     _getRepoId()     { return (this.node.widgets?.find(w => w.name === "repo_id")?.value ?? "").trim(); }
     _getStateWidget(){ return this.node.widgets?.find(w => w.name === "node_state"); }
+    _activeKind() {
+        const kind = String(this.state.active_kind || "QIE2511");
+        return MODEL_FAMILIES.some(entry => entry.kind === kind) ? kind : "QIE2511";
+    }
+
+    _familyDefinition(kind = this._activeKind()) {
+        return MODEL_FAMILIES.find(entry => entry.kind === kind) || MODEL_FAMILIES[0];
+    }
+
     _getSelectedType(){
         const visibleTabs = this._getModelTypeTabs();
-        const selected = this.state.selected_type;
+        const selected = this.state.selected_types_by_kind?.[this._activeKind()]
+            ?? (this._activeKind() === "QIE2511" ? this.state.selected_type : "");
         if (selected && visibleTabs.includes(selected)) return selected;
-        return visibleTabs[0] || (this.config?.available_types?.[0] ?? "");
+        const preferred = this._familyDefinition().defaultType;
+        return visibleTabs.includes(preferred) ? preferred : (visibleTabs[0] || "");
     }
 
     _getSelectedModelName(type = this._getSelectedType()) {
         const selectedByType = this.state.selected_models ?? {};
-        return selectedByType[type] ?? this.state.selected_model ?? "";
+        const familyKey = `${this._activeKind()}:${type}`;
+        if (selectedByType[familyKey]) return selectedByType[familyKey];
+        if (this._activeKind() === "QIE2511") return selectedByType[type] ?? this.state.selected_model ?? "";
+        return "";
     }
 
     _setSelectedModelName(type, modelName) {
         if (!type || !modelName) return;
         if (!this.state.selected_models) this.state.selected_models = {};
-        this.state.selected_models[type] = modelName;
+        this.state.selected_models[`${this._activeKind()}:${type}`] = modelName;
+        if (this._activeKind() === "QIE2511") this.state.selected_models[type] = modelName;
         if (type === this._getSelectedType()) {
             this.state.selected_model = modelName;
         }
@@ -1381,7 +1470,7 @@ class VNCCSControlCenterWidget {
     }
 
     _getCustomContextModelEntry() {
-        const contextType = "gguf";
+        const contextType = this._familyDefinition().defaultType;
         const variants = this._visibleModelsByType(contextType);
         const selectedModel = this._getSelectedModelName(contextType);
         return variants.find(m => m.name === selectedModel) ?? variants[0] ?? null;
@@ -1391,8 +1480,10 @@ class VNCCSControlCenterWidget {
         // TECH DEBT: Nunchaku and NVFP/UNet entries are still present in
         // control_center.json for future use, but hidden from the UI for now.
         if (type === "custom") return [];
-        if (type !== "gguf") return [];
-        return (this.config?.models || []).filter(m => (!m.type || m.type === "gguf"));
+        const activeKind = this._activeKind().toLowerCase();
+        return (this.config?.models || []).filter(m =>
+            (!m.type || m.type === type) && this._metaKind(m).toLowerCase() === activeKind
+        );
     }
 
     _metaKind(entry) {
@@ -1404,7 +1495,7 @@ class VNCCSControlCenterWidget {
     }
 
     _selectedKind() {
-        return this._metaKind(this._getSelectedModelEntry());
+        return this._metaKind(this._getSelectedModelEntry()) || this._activeKind();
     }
 
     _isQwenFamily(entry = this._getSelectedModelEntry()) {
@@ -1421,6 +1512,55 @@ class VNCCSControlCenterWidget {
         return !entryKind || !kind || entryKind.toLowerCase() === kind.toLowerCase();
     }
 
+    _exactKind(entry, kind = this._selectedKind()) {
+        const entryKind = this._metaKind(entry);
+        return Boolean(entryKind && kind && entryKind.toLowerCase() === kind.toLowerCase());
+    }
+
+    _currentModelParams() {
+        if (!this.state.model_params_by_kind) this.state.model_params_by_kind = {};
+        const kind = this._activeKind();
+        if (!this.state.model_params_by_kind[kind]) {
+            const legacy = kind === "QIE2511" && this.state.model_params
+                ? this.state.model_params
+                : {};
+            this.state.model_params_by_kind[kind] = {
+                steps: DEFAULT_MODEL_STEPS,
+                cfg: DEFAULT_MODEL_CFG,
+                sampler: "euler",
+                scheduler: DEFAULT_MODEL_SCHEDULER,
+                ...legacy,
+            };
+        }
+        return this.state.model_params_by_kind[kind];
+    }
+
+    _syncActiveFamilyState() {
+        const kind = this._activeKind();
+        const type = this._getSelectedType();
+        if (!this.state.selected_types_by_kind) this.state.selected_types_by_kind = {};
+        this.state.active_kind = kind;
+        this.state.selected_types_by_kind[kind] = type;
+        this.state.selected_type = type;
+        this.state.selected_model = this._getSelectedModelName(type);
+        this.state.model_params = { ...this._currentModelParams() };
+    }
+
+    _setActiveKind(kind) {
+        if (!MODEL_FAMILIES.some(entry => entry.kind === kind) || kind === this._activeKind()) return;
+        this._syncActiveFamilyState();
+        this.state.active_kind = kind;
+        const type = this._getSelectedType();
+        const variants = this._visibleModelsByType(type);
+        if (variants.length && !variants.some(entry => entry.name === this._getSelectedModelName(type))) {
+            this._setSelectedModelName(type, variants[0].name);
+        }
+        this._syncCustomModelInput();
+        this._saveState();
+        this._renderAll();
+        this._scheduleDependencyRefresh(true);
+    }
+
     _isTurboLora(entry) {
         return this._metaType(entry).toLowerCase() === "turbolora";
     }
@@ -1428,7 +1568,7 @@ class VNCCSControlCenterWidget {
     _compatibleTurboLoras() {
         const selectedKind = this._selectedKind();
         return (this.config?.lora || []).filter(entry =>
-            !entry.custom && this._isTurboLora(entry) && this._sameKind(entry, selectedKind)
+            !entry.custom && this._isTurboLora(entry) && this._exactKind(entry, selectedKind)
         );
     }
 
@@ -1441,8 +1581,7 @@ class VNCCSControlCenterWidget {
     }
 
     _setTurboPreset(enabled) {
-        if (!this.state.model_params) this.state.model_params = {};
-        const params = this.state.model_params;
+        const params = this._currentModelParams();
 
         if (enabled) {
             params.turbo_previous_settings = {
@@ -1471,13 +1610,14 @@ class VNCCSControlCenterWidget {
             if (!l?.name || l.auto_apply !== true) return false;
             const entry = entryByName[l.name];
             if (!entry) return false;
-            if (this._isTurboLora(entry)) return this._sameKind(entry, selectedKind);
+            if (this._isTurboLora(entry)) return this._exactKind(entry, selectedKind);
             if (Math.abs(Number(l.strength ?? 1)) <= 1e-6) return false;
             return entry.custom;
         });
     }
 
     _saveState() {
+        this._syncActiveFamilyState();
         const w = this._getStateWidget();
         if (w) w.value = JSON.stringify(this.state);
         this.node.setDirtyCanvas(true, true);
@@ -1490,6 +1630,7 @@ class VNCCSControlCenterWidget {
         const options = [];
         for (const entry of this.config.lora) {
             if (entry.custom || this._isTurboLora(entry) || !this._isHelperLora(entry)) continue;
+            if (!this._exactKind(entry, selectedKind)) continue;
             const norm = (entry.local_path || "").replace(/\\/g, "/");
             const rel = norm.startsWith("models/loras/") ? norm.slice("models/loras/".length) : norm.split("/").pop();
             options.push(rel);
@@ -1513,6 +1654,11 @@ class VNCCSControlCenterWidget {
         if (this.state.selected_model && !this.state.selected_models) {
             const selectedType = this.state.selected_type;
             this.state.selected_models = selectedType ? { [selectedType]: this.state.selected_model } : {};
+        }
+        this.state.active_kind = this._activeKind();
+        if (!this.state.selected_types_by_kind) this.state.selected_types_by_kind = {};
+        if (!this.state.selected_types_by_kind.QIE2511 && this.state.selected_type) {
+            this.state.selected_types_by_kind.QIE2511 = this.state.selected_type;
         }
         // Control Center now exposes a single pipe output.
         this.state.output_slot_names = [];
@@ -1830,6 +1976,396 @@ class VNCCSControlCenterWidget {
         window.open(url, "_blank", "noopener,noreferrer");
     }
 
+    async _readManagerError(response, fallback) {
+        try {
+            const text = await response.text();
+            if (!text) return fallback;
+            try {
+                const data = JSON.parse(text);
+                return data.error || data.message || text;
+            } catch {
+                return text;
+            }
+        } catch {
+            return fallback;
+        }
+    }
+
+    async _getManagerInstallPolicy() {
+        try {
+            const response = await api.fetchApi("/vnccs/manager/install_policy", { cache: "no-store" });
+            if (!response.ok) return null;
+            return await response.json();
+        } catch {
+            return null;
+        }
+    }
+
+    _isManagerPersonalCloudError(error) {
+        const message = String(error?.message || error).toLowerCase();
+        return message.includes("network_mode") && message.includes("personal_cloud");
+    }
+
+    _pendingDependencyKeys(items) {
+        return [...new Set((items || []).map(item => String(item?.key || "").trim()).filter(Boolean))];
+    }
+
+    _storePendingDependencyInstalls(items) {
+        const keys = this._pendingDependencyKeys(items);
+        if (!keys.length) return;
+        try {
+            sessionStorage.setItem(PENDING_DEPENDENCY_INSTALLS_KEY, JSON.stringify(keys));
+        } catch { /* private browsing may disable session storage */ }
+    }
+
+    async _resumePendingDependencyInstalls(items) {
+        let keys = [];
+        try {
+            keys = JSON.parse(sessionStorage.getItem(PENDING_DEPENDENCY_INSTALLS_KEY) || "[]");
+            sessionStorage.removeItem(PENDING_DEPENDENCY_INSTALLS_KEY);
+        } catch {
+            try { sessionStorage.removeItem(PENDING_DEPENDENCY_INSTALLS_KEY); } catch { /* ignored */ }
+        }
+        if (!Array.isArray(keys) || !keys.length) return false;
+
+        const allowedKeys = new Set(keys.filter(key => typeof key === "string"));
+        const pending = (items || []).filter(item => allowedKeys.has(item.key) && item.manager_id);
+        if (!pending.length) return false;
+
+        let queued = 0;
+        for (const item of pending) {
+            const statusButton = document.createElement("button");
+            statusButton.textContent = "Resuming…";
+            if (await this._installDependency(item, statusButton, { skipPolicyCheck: true })) queued += 1;
+        }
+        if (queued) this.showMessage(`Resumed installation of ${queued} custom node package${queued === 1 ? "" : "s"}.`);
+        return queued > 0;
+    }
+
+    async _ensureManagerInstallPolicy(items) {
+        const policy = await this._getManagerInstallPolicy();
+        if (!policy || policy.install_allowed) return true;
+        if (!policy.security_level_allows_install) {
+            this.showMessage(
+                `ComfyUI-Manager security_level is '${policy.security_level}'. Registered custom-node installation requires normal or below. VNCCS will not weaken this setting automatically.`,
+                true,
+            );
+            return false;
+        }
+        if (policy.requires_personal_cloud) {
+            this._showManagerPolicyModal(items, policy);
+            return false;
+        }
+        return true;
+    }
+
+    _showManagerPolicyModal(items, policy = null) {
+        if (this._managerPolicyOverlay?.isConnected) return;
+        const pendingItems = (items || []).filter(item => item?.manager_id);
+        if (!pendingItems.length) return;
+
+        const ov = document.createElement("div");
+        ov.className = "vnccs-cc-settings-overlay";
+        this._managerPolicyOverlay = ov;
+
+        const panel = document.createElement("div");
+        panel.className = "vnccs-cc-settings-panel";
+        panel.style.maxWidth = "480px";
+
+        const title = document.createElement("div");
+        title.className = "vnccs-cc-deps-modal-title";
+        title.textContent = "Allow Manager installations";
+
+        const text = document.createElement("div");
+        text.className = "vnccs-cc-deps-modal-text";
+        const listener = policy?.listener && policy.listener !== "unknown" ? ` (${policy.listener})` : "";
+        text.textContent = `ComfyUI-Manager blocks registered custom-node installation because this server listens on a non-local address${listener}. VNCCS can set network_mode = personal_cloud in Manager's user config, preserve a backup, restart ComfyUI, and then resume this installation automatically.\n\nThis permits registered custom-node installations for users who can access this ComfyUI server. Enable it only on a trusted, single-user deployment. security_level will not be changed.`;
+
+        const buttons = document.createElement("div");
+        buttons.className = "vnccs-cc-settings-btns";
+        const cancelBtn = this._btn("Cancel", () => ov.remove());
+        const enableBtn = this._btn("Enable & restart", async () => {
+            enableBtn.disabled = true;
+            enableBtn.textContent = "Updating…";
+            try {
+                const response = await api.fetchApi("/vnccs/manager/enable_personal_cloud", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-VNCCS-CSRF": "1" },
+                    body: JSON.stringify({ confirmation: "enable_personal_cloud" }),
+                });
+                if (!response.ok) {
+                    throw new Error(await this._readManagerError(response, "Could not update ComfyUI-Manager policy."));
+                }
+                this._storePendingDependencyInstalls(pendingItems);
+                const restarted = await this._restartComfyUIServer(enableBtn, true);
+                if (restarted) ov.remove();
+            } catch (error) {
+                enableBtn.disabled = false;
+                enableBtn.textContent = "Enable & restart";
+                this.showMessage(`Could not enable Manager installations:\n${String(error?.message || error)}`, true);
+            }
+        });
+        enableBtn.classList.add("vnccs-cc-btn--save");
+        buttons.append(cancelBtn, enableBtn);
+        panel.append(title, text, buttons);
+        ov.appendChild(panel);
+        ov.onclick = event => { if (event.target === ov) ov.remove(); };
+        this.container.appendChild(ov);
+    }
+
+    async _queueLegacyDependencyInstall(item, uiId) {
+        const install = {
+            id: item.manager_id,
+            version: item.manager_version || "latest",
+            ui_id: uiId,
+            title: item.label || item.key,
+            selected_version: "latest",
+            channel: "default",
+            mode: "remote",
+            skip_post_install: false,
+        };
+        const response = await api.fetchApi("/manager/queue/install", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(install),
+        });
+        if (response.status === 404 || response.status === 405) return null;
+        if (!response.ok) {
+            throw new Error(await this._readManagerError(response, "ComfyUI-Manager rejected the installation."));
+        }
+
+        const startResponse = await api.fetchApi("/manager/queue/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+        });
+        if (!startResponse.ok && startResponse.status !== 201) {
+            throw new Error(await this._readManagerError(startResponse, "The ComfyUI-Manager queue could not be started."));
+        }
+        return "legacy";
+    }
+
+    async _queueDependencyInstall(item, button) {
+        if (!item?.manager_id) {
+            throw new Error("This package is not registered in Comfy Registry. Install it manually after reviewing its source.");
+        }
+
+        const uiId = `vnccs-dependency-${item.key}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const clientId = api.clientId || "vnccs-control-center";
+        const task = {
+            ui_id: uiId,
+            client_id: clientId,
+            kind: "install",
+            params: {
+                id: item.manager_id,
+                version: item.manager_version || "latest",
+                ui_id: uiId,
+                selected_version: "latest",
+                repository: item.github_url || null,
+                mode: "remote",
+                channel: "default",
+                skip_post_install: false,
+            },
+        };
+
+        const tracked = { item, button, mode: "legacy" };
+        this._dependencyInstallTasks.set(uiId, tracked);
+        try {
+            let mode = await this._queueLegacyDependencyInstall(item, uiId);
+            if (!mode) {
+                mode = "modern";
+                tracked.mode = mode;
+                const response = await api.fetchApi("/v2/manager/queue/task", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(task),
+                });
+                if (!response.ok) {
+                    throw new Error(await this._readManagerError(response, "ComfyUI-Manager rejected the installation."));
+                }
+                const startResponse = await api.fetchApi("/v2/manager/queue/start", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: "{}",
+                });
+                if (!startResponse.ok && startResponse.status !== 201) {
+                    throw new Error(await this._readManagerError(startResponse, "The Manager queue could not be started."));
+                }
+            }
+
+            if (this._dependencyInstallTasks.has(uiId)) button.textContent = "Installing…";
+            return mode;
+        } catch (error) {
+            this._dependencyInstallTasks.delete(uiId);
+            throw error;
+        }
+    }
+
+    async _installDependency(item, button, options = {}) {
+        const originalLabel = button.textContent;
+        if (!options.skipPolicyCheck && !await this._ensureManagerInstallPolicy([item])) return false;
+        button.disabled = true;
+        button.textContent = "Queueing…";
+        try {
+            await this._queueDependencyInstall(item, button);
+            return true;
+        } catch (error) {
+            button.disabled = false;
+            button.textContent = originalLabel;
+            if (this._isManagerPersonalCloudError(error)) {
+                this._showManagerPolicyModal([item]);
+                return false;
+            }
+            this.showMessage(`Could not install ${item.label || item.key}:\n${String(error?.message || error)}`, true);
+            return false;
+        }
+    }
+
+    async _installAllDependencies(items, button, installButtons) {
+        const installable = items.filter(item => item.manager_id && item.status !== "unsupported");
+        if (!installable.length) return;
+        if (!await this._ensureManagerInstallPolicy(installable)) return;
+        button.disabled = true;
+        button.textContent = "Queueing…";
+        let queued = 0;
+        for (const item of installable) {
+            const itemButton = installButtons.get(item.key);
+            if (itemButton && await this._installDependency(item, itemButton, { skipPolicyCheck: true })) queued += 1;
+        }
+        button.textContent = queued ? `Installing ${queued}…` : "Install all";
+        if (!queued) button.disabled = false;
+    }
+
+    _scheduleReloadAfterServerRestart(initiallyUnavailable = false) {
+        let sawUnavailable = initiallyUnavailable;
+        let attempts = 0;
+        const probe = async () => {
+            attempts += 1;
+            try {
+                const response = await api.fetchApi("/vnccs/module_status", { cache: "no-store" });
+                if (response.ok && (sawUnavailable || attempts >= 8)) {
+                    window.location.reload();
+                    return;
+                }
+            } catch {
+                sawUnavailable = true;
+            }
+            if (attempts < 80) setTimeout(probe, 1500);
+            else this.showMessage("ComfyUI did not become available after restart. Reload the page when the server is ready.", true);
+        };
+        setTimeout(probe, 2500);
+    }
+
+    async _restartComfyUIServer(button, reloadAfterRestart = false) {
+        button.disabled = true;
+        button.textContent = "Restarting…";
+        try {
+            let response = await api.fetchApi("/manager/reboot", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}",
+            });
+            if (response.status === 404 || response.status === 405) {
+                response = await api.fetchApi("/v2/manager/reboot", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: "{}",
+                });
+            }
+            if (!response.ok) {
+                throw new Error(await this._readManagerError(response, "ComfyUI-Manager rejected the restart."));
+            }
+            if (reloadAfterRestart) this._scheduleReloadAfterServerRestart(false);
+            return true;
+        } catch (error) {
+            // A successful reboot can close the connection before fetch resolves.
+            if (String(error?.message || error).toLowerCase().includes("fetch")) {
+                if (reloadAfterRestart) this._scheduleReloadAfterServerRestart(true);
+                return true;
+            }
+            button.disabled = false;
+            button.textContent = "Restart server";
+            this.showMessage(`Could not restart ComfyUI:\n${String(error?.message || error)}`, true);
+            return false;
+        }
+    }
+
+    _showRestartRequiredModal() {
+        if (this._restartRequiredOverlay?.isConnected) return;
+        const ov = document.createElement("div");
+        ov.className = "vnccs-cc-settings-overlay";
+        this._restartRequiredOverlay = ov;
+
+        const panel = document.createElement("div");
+        panel.className = "vnccs-cc-settings-panel";
+        panel.style.maxWidth = "420px";
+
+        const title = document.createElement("div");
+        title.className = "vnccs-cc-deps-modal-title";
+        title.textContent = "Restart required";
+
+        const text = document.createElement("div");
+        text.className = "vnccs-cc-deps-modal-text";
+        text.textContent = "The modules were installed, but their nodes are not loaded yet. Restart the ComfyUI server before using VNCCS. Unsaved workflow changes may be lost.";
+
+        const buttons = document.createElement("div");
+        buttons.className = "vnccs-cc-settings-btns";
+        const laterBtn = this._btn("Later", () => ov.remove());
+        const restartBtn = this._btn("Restart server", () => this._restartComfyUIServer(restartBtn));
+        restartBtn.classList.add("vnccs-cc-btn--save");
+        buttons.append(laterBtn, restartBtn);
+        panel.append(title, text, buttons);
+        ov.appendChild(panel);
+        ov.onclick = event => { if (event.target === ov) ov.remove(); };
+        this.container.appendChild(ov);
+    }
+
+    _finishDependencyInstall(uiId, success, message = "Installation failed.") {
+        const tracked = this._dependencyInstallTasks.get(uiId);
+        if (!tracked) return;
+        this._dependencyInstallTasks.delete(uiId);
+
+        tracked.button.textContent = success ? "Restart required" : "Retry";
+        tracked.button.disabled = success;
+        if (!success) tracked.button.disabled = false;
+
+        if (success) {
+            this._dependencyRestartRequired = true;
+        } else {
+            const compatibility = tracked.item.compatibility_note ? `\n\n${tracked.item.compatibility_note}` : "";
+            this.showMessage(`Could not install ${tracked.item.label || tracked.item.key}:\n${message}${compatibility}`, true);
+        }
+        if (this._dependencyRestartRequired && this._dependencyInstallTasks.size === 0) {
+            setTimeout(() => this._showRestartRequiredModal(), 100);
+        }
+    }
+
+    _handleManagerTaskCompleted(event) {
+        const detail = event?.detail || {};
+        const status = detail.status?.status_str || "";
+        const success = status === "success" || detail.result === "success";
+        const message = detail.status?.messages?.join("\n") || detail.result || "Installation failed.";
+        this._finishDependencyInstall(detail.ui_id, success, message);
+    }
+
+    _handleManagerQueueStatus(event) {
+        const detail = event?.detail || {};
+        if (detail.status === "in_progress") {
+            const tracked = this._dependencyInstallTasks.get(detail.target);
+            if (tracked?.mode === "legacy") tracked.button.textContent = "Installing…";
+            return;
+        }
+        if (detail.status !== "done") return;
+
+        const results = detail.nodepack_result || {};
+        for (const [uiId, tracked] of this._dependencyInstallTasks.entries()) {
+            if (tracked.mode !== "legacy" || !Object.prototype.hasOwnProperty.call(results, uiId)) continue;
+            const result = results[uiId];
+            const success = result === "success" || result === "skip";
+            this._finishDependencyInstall(uiId, success, String(result || "Installation failed."));
+        }
+    }
+
     _showMissingDependenciesModal(items) {
         if (!items?.length) return;
         const signature = items
@@ -1852,10 +2388,11 @@ class VNCCSControlCenterWidget {
 
         const text = document.createElement("div");
         text.className = "vnccs-cc-deps-modal-text";
-        text.textContent = "VNCCS uses these custom nodes internally. Install them, then restart ComfyUI.";
+        text.textContent = "VNCCS uses these custom nodes internally. Install uses the registered Comfy Registry release through ComfyUI-Manager's standard policy-compatible queue. Restart ComfyUI afterward.";
 
         const list = document.createElement("div");
         list.className = "vnccs-cc-deps-list";
+        const installButtons = new Map();
 
         for (const item of items) {
             const row = document.createElement("div");
@@ -1874,21 +2411,49 @@ class VNCCSControlCenterWidget {
                 missingEl.textContent = `missing: ${missing.join(", ")}`;
                 meta.appendChild(missingEl);
             }
+            if (item.compatibility_note) {
+                const compatibilityEl = document.createElement("div");
+                compatibilityEl.className = "vnccs-cc-deps-missing";
+                compatibilityEl.textContent = item.compatibility_note;
+                meta.appendChild(compatibilityEl);
+            }
 
             row.appendChild(meta);
+            const actions = document.createElement("div");
+            actions.className = "vnccs-cc-deps-actions";
+            if (item.manager_id) {
+                const installBtn = document.createElement("button");
+                installBtn.type = "button";
+                installBtn.className = "vnccs-cc-link-btn";
+                installBtn.textContent = "Install";
+                installBtn.title = item.compatibility_note || "Install the latest registry release through ComfyUI-Manager";
+                installBtn.onclick = () => this._installDependency(item, installBtn);
+                actions.appendChild(installBtn);
+                installButtons.set(item.key, installBtn);
+            }
             if (item.github_url) {
                 const btn = document.createElement("button");
                 btn.type = "button";
                 btn.className = "vnccs-cc-link-btn";
                 btn.textContent = "GitHub";
                 btn.onclick = () => this._openDependencyUrl(item.github_url);
-                row.appendChild(btn);
+                actions.appendChild(btn);
             }
+            row.appendChild(actions);
             list.appendChild(row);
         }
 
         const btns = document.createElement("div");
         btns.className = "vnccs-cc-settings-btns";
+        if (this._dependencyRestartRequired) {
+            const restartBtn = this._btn("Restart server", () => this._restartComfyUIServer(restartBtn));
+            restartBtn.classList.add("vnccs-cc-btn--save");
+            btns.appendChild(restartBtn);
+        } else if (items.some(item => item.manager_id && item.status !== "unsupported")) {
+            const installAllBtn = this._btn("Install all", () => this._installAllDependencies(items, installAllBtn, installButtons));
+            installAllBtn.classList.add("vnccs-cc-btn--save");
+            btns.appendChild(installAllBtn);
+        }
         const closeBtn = this._btn("Close", () => ov.remove());
         btns.appendChild(closeBtn);
 
@@ -1921,42 +2486,16 @@ class VNCCSControlCenterWidget {
         return false;
     }
 
-    _parseTomlVersion(text) {
-        const m = text.match(/^version\s*=\s*["']([^"']+)["']/m);
-        return m ? m[1] : null;
-    }
-
-    async _fetchGitHubVersion(repo) {
-        // repo: "AHEKOT/ComfyUI_VNCCS" etc.
-        try {
-            const url = `https://raw.githubusercontent.com/${repo}/main/pyproject.toml`;
-            const r = await fetch(url, { cache: "no-store" });
-            if (!r.ok) return null;
-            return this._parseTomlVersion(await r.text());
-        } catch { return null; }
-    }
-
     async _fetchModuleStatus() {
-        const REPOS = {
-            main:  "AHEKOT/ComfyUI_VNCCS",
-            utils: "AHEKOT/ComfyUI_VNCCS_Utils",
-        };
         const LABELS = { main: "VNCCS", utils: "Utils" };
         const PILLS  = { main: this._pillMain, utils: this._pillUtils };
 
-        // 1. Fetch local versions from Python
+        // Fetch installed module versions from the local ComfyUI backend.
         let local = {};
         try {
             const r = await api.fetchApi("/vnccs/module_status");
             if (r.ok) local = await r.json();
         } catch { /* server may not be ready yet */ }
-
-        // 2. Fetch GitHub versions in parallel
-        const [ghMain, ghUtils] = await Promise.all([
-            this._fetchGitHubVersion(REPOS.main),
-            this._fetchGitHubVersion(REPOS.utils),
-        ]);
-        const ghVersions = { main: ghMain, utils: ghUtils };
 
         const updateNeeded = [];
 
@@ -1964,7 +2503,6 @@ class VNCCSControlCenterWidget {
             const info   = local[key] ?? {};
             const label  = LABELS[key];
             const pill   = PILLS[key];
-            const ghVer  = ghVersions[key];
             const locVer = info.version ?? null;
 
             if (info.error === "not_found") {
@@ -1984,12 +2522,7 @@ class VNCCSControlCenterWidget {
                 continue;
             }
 
-            if (ghVer && this._semverGt(ghVer, locVer)) {
-                this._updatePill(pill, label, locVer, "update", ghVer);
-                updateNeeded.push(`${label} v${locVer} → v${ghVer}`);
-            } else {
-                this._updatePill(pill, label, locVer, "ok");
-            }
+            this._updatePill(pill, label, locVer, "ok");
         }
 
         const dependencies = local.dependencies || {};
@@ -2011,15 +2544,20 @@ class VNCCSControlCenterWidget {
             } else if (info.status === "partial") {
                 this._updatePill(pill, label, null, "partial");
                 pill.title = detail || "installed but not loaded";
+            } else if (info.status === "unsupported") {
+                this._updatePill(pill, label, null, "warning", "unsupported");
+                pill.title = info.compatibility_note || "Unsupported on this platform";
+                updateNeeded.push(`${label}: unsupported on this platform`);
             } else {
                 this._updatePill(pill, label, null, "error");
                 pill.title = detail || "not installed";
             }
-            if (info.status !== "ok" && info.status !== "warning") {
+            if (info.status !== "ok" && info.status !== "warning" && info.status !== "unsupported") {
                 missingDependencies.push({ key, ...info });
             }
         }
-        this._showMissingDependenciesModal(missingDependencies);
+        const resumedPendingInstalls = await this._resumePendingDependencyInstalls(missingDependencies);
+        if (!resumedPendingInstalls) this._showMissingDependenciesModal(missingDependencies);
 
         this._showUpdateBanner(updateNeeded);
     }
@@ -2094,6 +2632,7 @@ class VNCCSControlCenterWidget {
             this.config = window.VNCCS_CC_REGISTRY[repoId];
             this.statusText.textContent = this.config.name || "Control Center";
             if (!this.state.output_slot_names) this.state.output_slot_names = [];
+            this._syncCustomModelInput();
             this._renderAll();
             this._dispatchLoraOptions();
         }
@@ -2105,6 +2644,7 @@ class VNCCSControlCenterWidget {
                 this.config = data;
                 this.statusText.textContent = data.name || "Control Center";
                 if (!this.state.output_slot_names) this.state.output_slot_names = [];
+                this._syncCustomModelInput();
                 this._renderAll();
                 this._dispatchLoraOptions();
             } catch { /* already shown by the original caller */ }
@@ -2132,6 +2672,7 @@ class VNCCSControlCenterWidget {
             this.statusText.textContent = data.name || "Control Center";
             localStorage.setItem(cacheKey, JSON.stringify(data));
             this._syncCnetSlots(data);
+            this._syncCustomModelInput();
             await this._refreshDependencyStatus(true);
             this._renderAll();
             this._dispatchLoraOptions();
@@ -2208,6 +2749,8 @@ class VNCCSControlCenterWidget {
             }
         }
 
+        this.scrollArea.appendChild(this._renderFamilyTabs());
+
         // MODEL — 2-column block: one big card for the selected type's variants
         this._renderTwoColBlockSingle(
             "MODEL", variants.length, "models",
@@ -2238,6 +2781,25 @@ class VNCCSControlCenterWidget {
             e => this._renderCnetEntry("controlnet", e));
         this._renderBlock("OTHER", this.config.other, "other",
             e => this._renderCnetEntry("other", e));
+    }
+
+    _renderFamilyTabs() {
+        const tabs = document.createElement("div");
+        tabs.className = "vnccs-cc-family-tabs";
+        tabs.setAttribute("role", "tablist");
+        const activeKind = this._activeKind();
+        MODEL_FAMILIES.forEach(family => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "vnccs-cc-family-tab";
+            button.textContent = family.label;
+            button.setAttribute("role", "tab");
+            button.setAttribute("aria-selected", String(family.kind === activeKind));
+            if (family.kind === activeKind) button.classList.add("vnccs-cc-family-tab--active");
+            button.onclick = () => this._setActiveKind(family.kind);
+            tabs.appendChild(button);
+        });
+        return tabs;
     }
 
     _divider() {
@@ -2300,7 +2862,7 @@ class VNCCSControlCenterWidget {
     _buildTurboModelBlock() {
         const selectedKind = this._selectedKind();
         const entries = (this.config.lora || []).filter(entry =>
-            !entry.custom && this._isTurboLora(entry) && this._sameKind(entry, selectedKind)
+            !entry.custom && this._isTurboLora(entry) && this._exactKind(entry, selectedKind)
         );
         const collapsed = this.state.collapsed?.turbo_model ?? false;
         const block = this._blockShell("TURBO MODEL", entries.length, "turbo_model", collapsed);
@@ -2340,7 +2902,7 @@ class VNCCSControlCenterWidget {
     _buildLoraBlock() {
         const selectedKind = this._selectedKind();
         const entries = (this.config.lora || []).filter(entry =>
-            !entry.custom && !this._isTurboLora(entry) && (this._isHelperLora(entry) || this._sameKind(entry, selectedKind))
+            !entry.custom && !this._isTurboLora(entry) && this._exactKind(entry, selectedKind)
         );
         const collapsed = this.state.collapsed?.lora ?? false;
         const block = this._blockShell("LORA", entries.length, "lora", collapsed);
@@ -2795,6 +3357,8 @@ class VNCCSControlCenterWidget {
                 const chosen = variants.find(v => v.name === sel.value);
                 if (chosen) {
                     this._setSelectedModelName(type, chosen.name);
+                    if (!this.state.selected_types_by_kind) this.state.selected_types_by_kind = {};
+                    this.state.selected_types_by_kind[this._activeKind()] = chosen.type || type;
                     this.state.selected_type  = chosen.type || type;
                     this._saveState();
                     this._renderAll();
@@ -2805,9 +3369,10 @@ class VNCCSControlCenterWidget {
         }
 
         if (status === "auth_required") {
-            const b = this._btn("⚠ Enter Key", () => this.showApiKeyDialog("models", cur));
-            b.style.color = "#ffaa00"; b.style.borderColor = "rgba(255,170,0,0.4)";
-            footer.appendChild(b);
+            const warning = document.createElement("span");
+            warning.className = "vnccs-cc-row-progress";
+            warning.textContent = "Authentication required";
+            footer.appendChild(warning);
         } else if (this._isDownloadableStatus(status)) {
             footer.appendChild(this._btn(this._downloadLabel(status), () => this._downloadEntry("models", cur)));
         }
@@ -2891,8 +3456,7 @@ class VNCCSControlCenterWidget {
     // ── MODEL right column: sampler params ────────────────────────────────────
 
     _modelParamsSave(patch) {
-        if (!this.state.model_params) this.state.model_params = {};
-        Object.assign(this.state.model_params, patch);
+        Object.assign(this._currentModelParams(), patch);
         this._saveState();
         if (this._isQwenFamily()) this._renderAll();
     }
@@ -2968,14 +3532,10 @@ class VNCCSControlCenterWidget {
             toggle.append(input, track, thumb);
             row.appendChild(toggle);
         } else if (status === "auth_required") {
-            const btn = this._btn("⚠ Enter Key", () => this.showApiKeyDialog("lora", entry));
-            btn.style.color = "#ffaa00";
-            btn.style.borderColor = "rgba(255,170,0,0.4)";
-            btn.onclick = event => {
-                event.stopPropagation();
-                this.showApiKeyDialog("lora", entry);
-            };
-            row.appendChild(btn);
+            const warning = document.createElement("span");
+            warning.className = "vnccs-cc-row-progress";
+            warning.textContent = "Authentication required";
+            row.appendChild(warning);
         } else if (this._isDownloadableStatus(status)) {
             const btn = this._btn(this._downloadLabel(status), () => this._downloadEntry("lora", entry));
             btn.onclick = event => {
@@ -2989,7 +3549,7 @@ class VNCCSControlCenterWidget {
     }
 
     _renderModelParams() {
-        const p  = this.state.model_params ?? {};
+        const p  = this._currentModelParams();
         const mp = { steps: DEFAULT_MODEL_STEPS, cfg: DEFAULT_MODEL_CFG, ...p };
 
         const panel = document.createElement("div");
@@ -3017,7 +3577,7 @@ class VNCCSControlCenterWidget {
     }
 
     _renderModelSamplerParams() {
-        const p  = this.state.model_params ?? {};
+        const p  = this._currentModelParams();
         const mp = { sampler: "euler", scheduler: DEFAULT_MODEL_SCHEDULER, ...p };
 
         const panel = document.createElement("div");
@@ -3089,9 +3649,10 @@ class VNCCSControlCenterWidget {
             p.textContent = "⏳ Queued";
             row.appendChild(p);
         } else if (status === "auth_required") {
-            const b = this._btn("⚠ Enter Key", () => this.showApiKeyDialog(cat, entry));
-            b.style.color = "#ffaa00"; b.style.borderColor = "rgba(255,170,0,0.4)";
-            row.appendChild(b);
+            const warning = document.createElement("span");
+            warning.className = "vnccs-cc-row-progress";
+            warning.textContent = "Authentication required";
+            row.appendChild(warning);
         } else if (this._isDownloadableStatus(status)) {
             row.appendChild(this._btn(status === "outdated" ? "↑" : "↓", () => this._downloadEntry(cat, entry)));
         }
@@ -3221,11 +3782,10 @@ class VNCCSControlCenterWidget {
             btn.addEventListener("click", e => e.stopPropagation());
             footer.appendChild(btn);
         } else if (status === "auth_required") {
-            const b = this._btn("⚠ Enter Key", () => this.showApiKeyDialog("lora", entry));
-            b.style.color = "#ffaa00";
-            b.style.borderColor = "rgba(255,170,0,0.4)";
-            b.addEventListener("click", e => e.stopPropagation());
-            footer.appendChild(b);
+            const warning = document.createElement("span");
+            warning.className = "vnccs-cc-row-progress";
+            warning.textContent = "Authentication required";
+            footer.appendChild(warning);
         } else if (status === "installed" && active && !isPipeMode && !isTurboMode) {
                 const slider = document.createElement("input");
                 slider.type = "range";
@@ -3290,7 +3850,7 @@ class VNCCSControlCenterWidget {
     _selectTurboLora(name, enabled) {
         const selectedKind = this._selectedKind();
         const turboNames = new Set((this.config?.lora || [])
-            .filter(entry => !entry.custom && this._isTurboLora(entry) && this._sameKind(entry, selectedKind))
+            .filter(entry => !entry.custom && this._isTurboLora(entry) && this._exactKind(entry, selectedKind))
             .map(entry => entry.name));
 
         const wasEnabled = (this.state.loras ?? []).some(lora =>
@@ -3361,9 +3921,10 @@ class VNCCSControlCenterWidget {
             p.textContent = "⏳ Queued";
             row.appendChild(p);
         } else if (status === "auth_required") {
-            const b = this._btn("⚠ Enter Key", () => this.showApiKeyDialog(cat, entry));
-            b.style.color = "#ffaa00"; b.style.borderColor = "rgba(255,170,0,0.4)";
-            row.appendChild(b);
+            const warning = document.createElement("span");
+            warning.className = "vnccs-cc-row-progress";
+            warning.textContent = "Authentication required";
+            row.appendChild(warning);
         } else if (this._isDownloadableStatus(status)) {
             row.appendChild(this._btn(status === "outdated" ? "↑" : "↓", () => this._downloadEntry(cat, entry)));
         }
@@ -3430,9 +3991,7 @@ class VNCCSControlCenterWidget {
                 // TECH DEBT: Nunchaku settings help removed with disabled UI.
                 // "CPU Offload": "Controls whether Nunchaku can offload model blocks to CPU memory.",
                 // "Blocks On GPU": "How many Nunchaku blocks should stay on GPU. Higher uses more VRAM and can be faster.",
-                // "Pinned Memory": "Enables pinned CPU memory for Nunchaku transfers when supported.",
-                "HuggingFace Token": "Access token used to download gated HuggingFace models.",
-                "Civitai Token": "API key used to download Civitai models."
+                // "Pinned Memory": "Enables pinned CPU memory for Nunchaku transfers when supported."
             }[labelText];
             setHelpText(w, help);
             const l = document.createElement("label");
@@ -3452,17 +4011,6 @@ class VNCCSControlCenterWidget {
             });
             return s;
         };
-        const mkInput = (id, type, min, max, step, val) => {
-            const i = document.createElement("input");
-            i.id = id; i.type = type;
-            if (min !== null) i.min = min;
-            if (max !== null) i.max = max;
-            if (step !== null) i.step = step;
-            i.value = val;
-            i.className = "vnccs-cc-settings-input";
-            return i;
-        };
-
         const title = document.createElement("h3");
         title.className = "vnccs-cc-settings-title";
         title.textContent = "⚙ Settings";
@@ -3562,19 +4110,6 @@ class VNCCSControlCenterWidget {
         panel.appendChild(nunDet);
         */
 
-        // Tokens
-        const tokDet = document.createElement("details");
-        tokDet.className = "vnccs-cc-settings-details";
-        const tokSum = document.createElement("summary");
-        tokSum.textContent = "API Tokens";
-        tokDet.appendChild(tokSum);
-        const hfIn = mkInput("vnccs-cc-hf-tok", "password", null, null, null, "");
-        hfIn.placeholder = "hf_...";
-        const cvIn = mkInput("vnccs-cc-cv-tok", "password", null, null, null, "");
-        cvIn.placeholder = "Civitai key...";
-        tokDet.append(field("HuggingFace Token", hfIn), field("Civitai Token", cvIn));
-        panel.appendChild(tokDet);
-
         // Buttons
         const btns = document.createElement("div");
         btns.className = "vnccs-cc-settings-btns";
@@ -3593,16 +4128,6 @@ class VNCCSControlCenterWidget {
             // TECH DEBT: Nunchaku settings persistence disabled. Delete after
             // stale workflow state no longer stores type_settings.nunchaku.
             delete this.state.type_settings.nunchaku;
-            const hf = hfIn.value.trim(), cv = cvIn.value.trim();
-            if (hf || cv) {
-                await api.fetchApi("/vnccs/manager/save_token", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "X-VNCCS-CSRF": "1" },
-                    body: JSON.stringify(Object.fromEntries(
-                        [hf && ["hf_token", hf], cv && ["civitai_token", cv]].filter(Boolean)
-                    )),
-                }).catch(console.error);
-            }
             this._saveState();
             await this._refreshDependencyStatus(true);
             ov.remove();
@@ -3632,16 +4157,24 @@ class VNCCSControlCenterWidget {
                 headers: { "Content-Type": "application/json", "X-VNCCS-CSRF": "1" },
                 body: JSON.stringify({ repo_id: repoId, category: cat, name: entry.name }),
             });
-            const d = await r.json();
-            if (d.error) {
-                this.dlStatus[key] = { status: "error", message: d.error };
+            const responseText = await r.text();
+            let d = {};
+            try { d = responseText ? JSON.parse(responseText) : {}; } catch { d = {}; }
+            if (!r.ok || d.error) {
+                const message = d.error || responseText || `Download request failed (${r.status})`;
+                this.dlStatus[key] = { status: "error", message };
                 this._renderAll();
+                this.showMessage(message, true);
             } else {
-                window.dispatchEvent(new CustomEvent("vnccs-cc-registry-updated"));
+                window.dispatchEvent(new CustomEvent("vnccs-cc-registry-updated", {
+                    detail: { repo_id: repoId },
+                }));
             }
         } catch (e) {
-            this.dlStatus[key] = { status: "error", message: String(e) };
+            const message = String(e?.message || e);
+            this.dlStatus[key] = { status: "error", message };
             this._renderAll();
+            this.showMessage(message, true);
         }
     }
 
@@ -3657,9 +4190,12 @@ class VNCCSControlCenterWidget {
             tasks.push({ cat: "models", e: modelEntry });
         }
 
-        // Everything else: all missing, errored, or outdated
+        // Family assets follow the active top-level tab. Utility assets remain global.
+        const selectedKind = this._selectedKind();
         for (const cat of ["clip", "vae", "lora", "controlnet", "other"]) {
             for (const e of (this.config[cat] ?? [])) {
+                if (["clip", "vae"].includes(cat) && !this._sameKind(e, selectedKind)) continue;
+                if (cat === "lora" && !e.custom && !this._exactKind(e, selectedKind)) continue;
                 if (this._isDownloadableStatus(e.status)) tasks.push({ cat, e });
             }
         }
@@ -3765,74 +4301,4 @@ class VNCCSControlCenterWidget {
         this.container.appendChild(ov);
     }
 
-    showApiKeyDialog(cat, entry) {
-        const ov = document.createElement("div");
-        ov.style.cssText = `
-            position: absolute; top:0; left:0; width:100%; height:100%;
-            background: rgba(0,0,0,0.85); z-index:100;
-            display:flex; flex-direction:column; justify-content:center; align-items:center;
-            padding:16px; box-sizing:border-box;
-        `;
-        const panel = document.createElement("div");
-        panel.className = "vnccs-cc-settings-panel";
-
-        const title = document.createElement("h3");
-        title.className = "vnccs-cc-settings-title";
-        title.textContent = "⚠ API Key Required";
-        panel.appendChild(title);
-
-        const desc = document.createElement("p");
-        desc.style.cssText = "margin:0;font-size:11px;color:#9898a8;line-height:1.5;";
-        desc.textContent = `"${entry.name}" requires an API token to download.`;
-        panel.appendChild(desc);
-
-        const mkField = (labelText, inputEl) => {
-            const w = document.createElement("div");
-            w.className = "vnccs-cc-settings-field";
-            const l = document.createElement("label");
-            l.className = "vnccs-cc-settings-label";
-            l.textContent = labelText;
-            w.append(l, inputEl);
-            return w;
-        };
-        const hfIn = document.createElement("input");
-        hfIn.type = "password"; hfIn.placeholder = "hf_...";
-        hfIn.className = "vnccs-cc-settings-input";
-        const cvIn = document.createElement("input");
-        cvIn.type = "password"; cvIn.placeholder = "Civitai key...";
-        cvIn.className = "vnccs-cc-settings-input";
-        panel.appendChild(mkField("HuggingFace Token", hfIn));
-        panel.appendChild(mkField("Civitai API Key", cvIn));
-
-        const btns = document.createElement("div");
-        btns.className = "vnccs-cc-settings-btns";
-        const cancelBtn = this._btn("Cancel", () => ov.remove());
-        const saveBtn = this._btn("Save & Retry", async () => {
-            const hf = hfIn.value.trim(), cv = cvIn.value.trim();
-            if (!hf && !cv) { this.showMessage("Enter at least one token.", true); return; }
-            const payload = {};
-            if (hf) payload.hf_token = hf;
-            if (cv) payload.civitai_token = cv;
-            try {
-                const r = await api.fetchApi("/vnccs/manager/save_token", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "X-VNCCS-CSRF": "1" },
-                    body: JSON.stringify(payload),
-                });
-                if (r.ok) {
-                    ov.remove();
-                    this._downloadEntry(cat, entry);
-                } else {
-                    this.showMessage("Failed to save tokens.", true);
-                }
-            } catch (e) {
-                this.showMessage("Error: " + e.message, true);
-            }
-        });
-        saveBtn.classList.add("vnccs-cc-btn--save");
-        btns.append(cancelBtn, saveBtn);
-        panel.appendChild(btns);
-        ov.appendChild(panel);
-        this.container.appendChild(ov);
-    }
 }

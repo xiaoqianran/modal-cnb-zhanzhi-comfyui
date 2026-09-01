@@ -4,6 +4,7 @@
 # 例如：
 # aria2c -x 4 -s 4 -c -d "" -o "" ""
 # 注意添加下载命令后需要在终端运行提交命令： add 初始化下载
+aria2c -x 4 -s 4 -c -d "/models/latent_upscale_models" -o "minimax_h3_latent_upscaler_3d_bf16.safetensors" "https://cnb.cool/comfyui114514/model/LBH-123-AI__Minimax_h3_latent_Upscaler/-/lfs/4f57821f5837f32f7142b67d815606dbd7550f194e5c769f7d6c3f83b146a5e6"
 aria2c -x 4 -s 4 -c -d "/models/sams" -o "SeC-4B-fp8.safetensors" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/71b968a02c2cd818b3c81d6c80f07f4fbd439478b7aa79b02273c120e8f4b6e4"
 aria2c -x 4 -s 4 -c -d "/models/sams" -o "sam_vit_b_01ec64.pth" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/ec2df62732614e57411cdcf32a23ffdf28910380d03139ee0f4fcbe91eb8c912"
 aria2c -x 4 -s 4 -c -d "/models/sam3" -o "sam3.pt" "https://cnb.cool/ai-models/facebook/sam3/-/lfs/9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"

@@ -1,12 +1,18 @@
 import numpy as np
+import os
+import re
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.v2 as T
 import math
 import sys
 import nodes
+import folder_paths
+import comfy.utils
 import comfy.samplers
 import comfy.k_diffusion.sampling
+from comfy_extras.nodes_lt import LTXVConcatAVLatent, LTXVSeparateAVLatent
 from ..main_unit import *
 
 
@@ -497,9 +503,247 @@ class latent_blend:      #未启用
         return expanded_mask
 
 
+_MINIMAX_H3_UPSCALE_FOLDER = "latent_upscale_models"
+if _MINIMAX_H3_UPSCALE_FOLDER not in folder_paths.folder_names_and_paths:
+    folder_paths.add_model_folder_path(
+        _MINIMAX_H3_UPSCALE_FOLDER,
+        os.path.join(folder_paths.models_dir, _MINIMAX_H3_UPSCALE_FOLDER),
+    )
+
+_MINIMAX_H3_LATENTS_MEAN = [
+    0.858090341091156, -0.9606591463088989, 1.0661640167236328, -0.5090325474739075,
+    -0.2727581858634949, -1.3675414323806763, -0.2553254961967468, -0.26907554268836975,
+    -0.5376840829849243, -0.0464097298681736, 0.6657370328903198, 0.19690127670764923,
+    -0.5460608005523682, -0.4035342037677765, -0.23683024942874808, 0.25928452610969543,
+    -0.30133944749832153, 0.211341992020607, -1.1206848621368408, 0.3581933379173279,
+    -0.04225143790245056, 0.2604829967021942, 0.22864092886447906, 0.7056031823158264,
+]
+_MINIMAX_H3_LATENTS_STD = [
+    1.2223774194717407, 1.2767263650894165, 1.6831774711608887, 1.7549455165863037,
+    1.5636216402053833, 2.194143533706665, 0.9653137922286987, 1.0569885969161987,
+    0.841948926448822, 0.7729952931404114, 1.8955937623977661, 0.946841835975647,
+    0.7996809482574463, 0.44988900423049927, 0.7197399735450745, 0.6936293244361877,
+    2.9610958099365234, 2.7694199085235596, 3.0496184825897217, 2.1088054180145264,
+    3.276226282119751, 3.1627357006073, 2.2816812992095947, 2.6127843856811523,
+]
 
 
+class _MinimaxH3ResBlock3D(nn.Module):
+    def __init__(self, channels, emb_channels, out_channels=None):
+        super().__init__()
+        self.out_channels = out_channels or channels
+        self.in_layers = nn.Sequential(
+            nn.GroupNorm(32, channels),
+            nn.SiLU(),
+            nn.Conv3d(channels, self.out_channels, 3, padding=1),
+        )
+        self.emb_layers = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(emb_channels, 2 * self.out_channels),
+        )
+        self.out_norm = nn.GroupNorm(32, self.out_channels)
+        self.out_layers = nn.Sequential(
+            nn.SiLU(),
+            nn.Identity(),
+            nn.Conv3d(self.out_channels, self.out_channels, 3, padding=1),
+        )
+        self.skip = nn.Conv3d(channels, self.out_channels, 1) if self.out_channels != channels else nn.Identity()
 
+    def forward(self, x, emb):
+        h = self.in_layers(x)
+        emb_out = self.emb_layers(emb).type(h.dtype)
+        while emb_out.ndim < h.ndim:
+            emb_out = emb_out[..., None]
+        scale, shift = torch.chunk(emb_out, 2, dim=1)
+        h = self.out_norm(h) * (1 + scale) + shift
+        return self.skip(x) + self.out_layers(h)
+
+
+class _MinimaxH3TemporalConv3D(nn.Module):
+    def __init__(self, channels, kernel_size=5):
+        super().__init__()
+        padding = kernel_size // 2
+        self.norm = nn.GroupNorm(32, channels)
+        self.dwconv = nn.Conv3d(
+            channels,
+            channels,
+            kernel_size=(kernel_size, 1, 1),
+            padding=(padding, 0, 0),
+            groups=channels,
+        )
+        self.pwconv = nn.Conv3d(channels, channels, kernel_size=1)
+
+    def forward(self, x):
+        h = F.silu(self.norm(x))
+        return x + self.pwconv(self.dwconv(h))
+
+
+class _MinimaxH3LatentResizer3D(nn.Module):
+    def __init__(self, in_channels=24, in_blocks=12, out_blocks=12, channels=512, temporal_every=2, temporal_kernel=5):
+        super().__init__()
+        self.conv_in = nn.Conv3d(in_channels, channels, 3, padding=1)
+        embed_dim = 64
+        self.embed = nn.Sequential(nn.Linear(1, embed_dim), nn.SiLU(), nn.Linear(embed_dim, embed_dim))
+
+        self.in_blocks = nn.ModuleList()
+        for block_index in range(in_blocks):
+            self.in_blocks.append(_MinimaxH3ResBlock3D(channels, embed_dim))
+            if temporal_every > 0 and block_index % temporal_every == 0:
+                self.in_blocks.append(_MinimaxH3TemporalConv3D(channels, temporal_kernel))
+
+        self.out_blocks = nn.ModuleList()
+        for block_index in range(out_blocks):
+            self.out_blocks.append(_MinimaxH3ResBlock3D(channels, embed_dim))
+            if temporal_every > 0 and block_index % temporal_every == 0:
+                self.out_blocks.append(_MinimaxH3TemporalConv3D(channels, temporal_kernel))
+
+        self.norm_out = nn.GroupNorm(32, channels)
+        self.conv_out = nn.Conv3d(channels, in_channels, 3, padding=1)
+
+    def forward(self, x, scale, target_size):
+        scale_emb = torch.tensor([scale - 1], dtype=x.dtype, device=x.device).unsqueeze(0)
+        emb = self.embed(scale_emb)
+
+        x = self.conv_in(x)
+        for block in self.in_blocks:
+            if isinstance(block, _MinimaxH3ResBlock3D):
+                x = block(x, emb.expand(x.shape[0], -1))
+            else:
+                x = block(x)
+
+        x = F.interpolate(x, size=target_size, mode="trilinear", align_corners=False)
+
+        for block in self.out_blocks:
+            if isinstance(block, _MinimaxH3ResBlock3D):
+                x = block(x, emb.expand(x.shape[0], -1))
+            else:
+                x = block(x)
+
+        return self.conv_out(F.silu(self.norm_out(x)))
+
+
+def _minimax_h3_upscale_models():
+    return [
+        name for name in folder_paths.get_filename_list(_MINIMAX_H3_UPSCALE_FOLDER)
+        if "minimax_h3_latent_upscaler_3d" in name.lower() and name.lower().endswith((".safetensors", ".pth", ".pt"))
+    ]
+
+
+def _minimax_h3_model_config(state_dict):
+    config = {
+        "in_channels": 24,
+        "in_blocks": 12,
+        "out_blocks": 12,
+        "channels": 512,
+        "temporal_every": 2,
+        "temporal_kernel": 5,
+    }
+    if "conv_in.weight" in state_dict:
+        config["in_channels"] = state_dict["conv_in.weight"].shape[1]
+        config["channels"] = state_dict["conv_in.weight"].shape[0]
+
+    in_blocks = set()
+    out_blocks = set()
+    has_temporal = False
+    for key, value in state_dict.items():
+        match = re.match(r"in_blocks\.(\d+)\.in_layers\.", key)
+        if match:
+            in_blocks.add(int(match.group(1)))
+        match = re.match(r"out_blocks\.(\d+)\.in_layers\.", key)
+        if match:
+            out_blocks.add(int(match.group(1)))
+        if key.endswith("dwconv.weight"):
+            has_temporal = True
+            config["temporal_kernel"] = value.shape[2]
+
+    if in_blocks:
+        config["in_blocks"] = len(in_blocks)
+    if out_blocks:
+        config["out_blocks"] = len(out_blocks)
+    if not has_temporal:
+        config["temporal_every"] = 0
+    return config
+
+
+def _load_minimax_h3_upscaler(model_name, device):
+    model_path = folder_paths.get_full_path_or_raise(_MINIMAX_H3_UPSCALE_FOLDER, model_name)
+    state_dict = comfy.utils.load_torch_file(model_path, safe_load=True)
+    if isinstance(state_dict, dict) and "model" in state_dict:
+        state_dict = state_dict["model"]
+    if any(key.startswith("upscaler.") for key in state_dict):
+        state_dict = {
+            key[len("upscaler."):]: value
+            for key, value in state_dict.items()
+            if key.startswith("upscaler.")
+        }
+    state_dict = {
+        key: value.to(torch.bfloat16) if value.dtype == torch.float8_e4m3fn else value
+        for key, value in state_dict.items()
+    }
+    model = _MinimaxH3LatentResizer3D(**_minimax_h3_model_config(state_dict))
+    model.load_state_dict(state_dict, strict=True)
+    return model.to(device=device, dtype=torch.bfloat16).eval().requires_grad_(False)
+
+
+def _upscale_minimax_h3_video_latent(latent, model_name, scale):
+    if not torch.cuda.is_available():
+        raise RuntimeError("latent_minimaxH3_scale requires CUDA")
+
+    source = latent["samples"]
+    original_dtype = source.dtype
+    was_4d = source.ndim == 4
+    samples = source.to(device="cuda", dtype=torch.bfloat16, copy=True)
+    if was_4d:
+        samples = samples.unsqueeze(2)
+
+    batch, channels, frames, height, width = samples.shape
+    pixel_width = width * 16 * scale
+    aligned_width = round(pixel_width / 32) * 32
+    aligned_height = aligned_width / (width / height)
+    output_width = max(1, round(aligned_width / 16))
+    output_height = max(1, round(aligned_height / 16))
+    if output_width == width and output_height == height:
+        return latent
+
+    model = _load_minimax_h3_upscaler(model_name, samples.device)
+    mean = torch.tensor(_MINIMAX_H3_LATENTS_MEAN, dtype=samples.dtype, device=samples.device).view(1, -1, 1, 1, 1)
+    std = torch.tensor(_MINIMAX_H3_LATENTS_STD, dtype=samples.dtype, device=samples.device).view(1, -1, 1, 1, 1)
+    samples.sub_(mean).div_(std)
+    output = model(samples, scale=scale, target_size=(frames, output_height, output_width))
+    output.mul_(std).add_(mean)
+    if was_4d:
+        output = output.squeeze(2)
+    return {"samples": output.to(device="cpu", dtype=original_dtype)}
+
+
+class latent_minimaxH3_scale:
+    @classmethod
+    def INPUT_TYPES(cls):
+        models = _minimax_h3_upscale_models()
+        if not models:
+            models = ["(place MiniMax H3 3D models in models/latent_upscale_models)"]
+        default_model = next((name for name in models if "minimax_h3_latent_upscaler_3d_bf16" in name.lower()), models[0])
+        return {
+            "required": {
+                "latent": ("LATENT",),
+                "model": (models, {"default": default_model}),
+                "scale": ("FLOAT", {"default": 1.2, "min": 1.0, "max": 4.0, "step": 0.1}),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("latent",)
+    FUNCTION = "execute"
+    CATEGORY = "Apt_Preset/chx_tool/latent"
+
+    def execute(self, latent, model, scale):
+        samples = latent.get("samples")
+        if samples is None or not getattr(samples, "is_nested", False) or len(samples.unbind()) != 2:
+            raise ValueError("latent_minimaxH3_scale requires a MiniMax H3 AV latent containing video and audio streams")
+
+        video_latent, audio_latent = LTXVSeparateAVLatent.execute(latent).result
+        scaled_video = _upscale_minimax_h3_video_latent(video_latent, model, scale)
+        return LTXVConcatAVLatent.execute(scaled_video, audio_latent).result
 
 
 

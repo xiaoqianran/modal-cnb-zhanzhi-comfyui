@@ -1935,6 +1935,9 @@
       },
       "6": {
         "name": "VAE模型"
+      },
+      "7": {
+        "name": "降噪潜空间"
       }
     }
   },
@@ -6613,21 +6616,21 @@
       }
     }
   },
-  "create_any_List": {
-    "display_name": "create_任意列表",
+  "create_list": {
+    "display_name": "create_执行列表",
     "inputs": {},
     "outputs": {
       "0": {
-        "name": "输出0"
+        "name": "列表"
       }
     }
   },
-  "create_any_batch": {
-    "display_name": "create_任意批次",
+  "create_array": {
+    "display_name": "create_数组",
     "inputs": {},
     "outputs": {
       "0": {
-        "name": "输出0"
+        "name": "数组"
       }
     }
   },
@@ -6683,29 +6686,29 @@
       }
     }
   },
-  "type_ListToBatch": {
-    "display_name": "type_列表转批次",
+  "type_ListToArray": {
+    "display_name": "type_列表转数组",
     "inputs": {
-      "ANY": {
-        "name": "任意"
+      "list": {
+        "name": "列表"
       }
     },
     "outputs": {
       "0": {
-        "name": "列表"
+        "name": "数组"
       }
     }
   },
-  "type_BatchToList": {
-    "display_name": "type_批次转列表",
+  "type_ArrayToList": {
+    "display_name": "type_数组转列表",
     "inputs": {
-      "LIST": {
-        "name": "列表"
+      "array": {
+        "name": "数组"
       }
     },
     "outputs": {
       "0": {
-        "name": "输出0"
+        "name": "列表"
       }
     }
   },
@@ -6762,11 +6765,11 @@
       }
     }
   },
-  "batch_BatchSlice": {
-    "display_name": "batch_批次切片",
+  "array_Slice": {
+    "display_name": "array_数组切片",
     "inputs": {
-      "LIST": {
-        "name": "列表"
+      "array": {
+        "name": "数组"
       },
       "start": {
         "name": "开始"
@@ -6777,16 +6780,16 @@
     },
     "outputs": {
       "0": {
-        "name": "数据"
+        "name": "数组"
       }
     }
   },
-  "batch_MergeBatch": {
-    "display_name": "batch_合并批次",
+  "array_Merge": {
+    "display_name": "array_合并数组",
     "inputs": {},
     "outputs": {
       "0": {
-        "name": "列表"
+        "name": "数组"
       }
     }
   },
@@ -10818,12 +10821,12 @@
         "name": "自定义分隔符"
       },
       "current_frame": {
-        "name": "当前帧"
+        "name": "index_当前帧"
       }
     },
     "outputs": {
       "0": {
-        "name": "调度文本"
+        "name": "index_文本"
       },
       "1": {
         "name": "分割批次"
@@ -11692,6 +11695,56 @@
     "outputs": {
       "0": {
         "name": "any输出"
+      }
+    }
+  },
+  "flow_stage_index_switch": {
+    "display_name": "flow_阶段编号开关",
+    "inputs": {
+      "any_input": {
+        "name": "任意输入"
+      },
+      "stage_index": {
+        "name": "当前阶段编号"
+      },
+      "open_stage_index": {
+        "name": "开启阶段编号"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "任意输出"
+      }
+    }
+  },
+  "flow_frame_slice": {
+    "display_name": "flow_帧截取",
+    "inputs": {
+      "image": {
+        "name": "图片"
+      },
+      "latent": {
+        "name": "latent"
+      },
+      "video": {
+        "name": "Video"
+      },
+      "start_frame": {
+        "name": "帧起点"
+      },
+      "end_frame": {
+        "name": "帧终点"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图片"
+      },
+      "1": {
+        "name": "latent"
+      },
+      "2": {
+        "name": "Video"
       }
     }
   },
@@ -13555,7 +13608,7 @@
                 "name": "视频list"
             },
             "1": {
-                "name": "视频索引"
+                "name": "索引_视频"
             },
             "2": {
                 "name": "名称索引"
@@ -13589,7 +13642,7 @@
                 "name": "音频list"
             },
             "1": {
-                "name": "音频索引"
+                "name": "索引_音频"
             },
             "2": {
                 "name": "名称索引"
@@ -13849,8 +13902,308 @@
     } 
 },
 
+"AD_In_VideoSplit": {
+    "display_name": "AD_输入视频拆分",
+    "inputs": {
+        "video": {
+            "name": "视频"
+        },
+        "force_rate": {
+            "name": "强制帧率"
+        },
+        "custom_width": {
+            "name": "自定义宽度"
+        },
+        "custom_height": {
+            "name": "自定义高度"
+        },
+        "frame_load_cap": {
+            "name": "最大加载帧数"
+        },
+        "skip_first_frames": {
+            "name": "跳过开头帧数"
+        },
+        "select_every_nth": {
+            "name": "间隔取帧"
+        }
+    },
+    "outputs": {
+        "0": {
+            "name": "输出视频"
+        },
+        "1": {
+            "name": "图像帧"
+        },
+        "2": {
+            "name": "音频"
+        }
+    }
+},
+"AD_CreateVideo": {
+    "display_name": "AD_创建视频",
+    "inputs": {
+        "context": {
+            "name": "运行上下文"
+        },
+        "images": {
+            "name": "图像序列"
+        },
+        "audio": {
+            "name": "音频"
+        },
+        "fps": {
+            "name": "帧率"
+        },
+        "bit_depth": {
+            "name": "位深度"
+        },
+        "trim_frames": {
+            "name": "截断起始帧数"
+        }
+    },
+    "outputs": {
+        "0": {
+            "name": "视频"
+        }
+    }
+},
 
-
+  "AD_sam_Crop": {
+    "display_name": "AD_SAM裁切",
+    "inputs": {
+      "image": {
+        "name": "图像"
+      },
+      "detection_threshold": {
+        "name": "检测阈值"
+      },
+      "max_objects": {
+        "name": "最大目标数"
+      },
+      "detect_interval": {
+        "name": "检测间隔"
+      },
+      "ckpt_name": {
+        "name": "SAM模型"
+      },
+      "pos": {
+        "name": "目标描述"
+      },
+      "crop_factor": {
+        "name": "裁切倍率"
+      },
+      "crop_width": {
+        "name": "裁切宽度"
+      },
+      "crop_height": {
+        "name": "裁切高度"
+      },
+      "smoothing_preset": {
+        "name": "镜头平滑预设"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "裁切图像"
+      },
+      "1": {
+        "name": "变换数据"
+      },
+      "2": {
+        "name": "跟踪数据"
+      },
+      "3": {
+        "name": "掩码"
+      }
+    }
+  },
+  "AD_sam_stitch": {
+    "display_name": "AD_SAM缝合",
+    "inputs": {
+      "stitch_img": {
+        "name": "缝合图像"
+      },
+      "transform": {
+        "name": "变换数据"
+      },
+      "paste_region": {
+        "name": "粘贴区域"
+      },
+      "mask_dilation": {
+        "name": "掩码膨胀"
+      },
+      "feather": {
+        "name": "羽化"
+      },
+      "colour_match": {
+        "name": "颜色匹配"
+      },
+      "undetected_frames": {
+        "name": "未检测帧处理"
+      },
+      "masks": {
+        "name": "掩码"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图像"
+      }
+    }
+  },
+  "AD_Inject_Latent": {
+    "display_name": "AD_潜空间注入",
+    "inputs": {
+      "av_latent": {
+        "name": "AV潜空间"
+      },
+      "vae": {
+        "name": "VAE"
+      },
+      "crop_img": {
+        "name": "裁切图像"
+      },
+      "transform": {
+        "name": "变换数据"
+      },
+      "smooth_frames": {
+        "name": "平滑帧数"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "AV潜空间"
+      }
+    }
+  },
+  "flow_stage_begin": {
+    "display_name": "flow_阶段开始",
+    "inputs": {
+      "run_id": {
+        "name": "运行ID"
+      },
+      "total": {
+        "name": "总阶段数"
+      },
+      "restart_completed": {
+        "name": "重启已完成"
+      },
+      "start": {
+        "name": "起始阶段"
+      },
+      "initial_data": {
+        "name": "初始数据"
+      }
+    },
+    "outputs": {
+    }
+  },
+  "flow_stage_data": {
+    "display_name": "flow_阶段数据",
+    "inputs": {
+      "stage_info": {
+        "name": "阶段信息"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "数组"
+      }
+    }
+  },
+  "flow_stage_list": {
+    "display_name": "flow_阶段列表",
+    "inputs": {
+      "stage_info": {
+        "name": "阶段信息"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "列表"
+      },
+      "1": {
+        "name": "数组"
+      }
+    }
+  },
+  "flow_stage_collect_single": {
+    "display_name": "flow_阶段收集_单端口",
+    "inputs": {
+      "stage_info": {
+        "name": "阶段信息"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图像批次"
+      },
+      "1": {
+        "name": "遮罩批次"
+      },
+      "2": {
+        "name": "潜空间批次"
+      },
+      "3": {
+        "name": "合并视频"
+      },
+      "4": {
+        "name": "合并音频"
+      }
+    }
+  },
+  "flow_stage_collect_multi": {
+    "display_name": "flow_阶段收集_多端口",
+    "inputs": {
+      "stage_info": {
+        "name": "阶段信息"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图像批次"
+      },
+      "1": {
+        "name": "遮罩批次"
+      },
+      "2": {
+        "name": "潜空间批次"
+      },
+      "3": {
+        "name": "合并视频"
+      },
+      "4": {
+        "name": "合并音频"
+      }
+    }
+  },
+  "flow_stage_unpack": {
+    "display_name": "flow_阶段解包",
+    "inputs": {
+    },
+    "outputs": {
+      "0": {
+        "name": "图像"
+      },
+      "1": {
+        "name": "掩码"
+      },
+      "2": {
+        "name": "潜空间"
+      }
+    }
+  },
+  "flow_stage_end": {
+    "display_name": "flow_阶段结束",
+    "inputs": {
+      "data": {
+        "name": "数据"
+      },
+      "data_type": {
+        "name": "数据类型"
+      }
+    }
+  },
 
   "csv_write_data": {
     "display_name": "CSV_写入数据",

@@ -66,7 +66,7 @@
       "diy_models": "workspace/models"
     }
   },
-  "checkpoints": {    
+  "checkpoints": {     
     "LTX-2.3/ltx-2.3-22b-dev-fp8.safetensors": "https://cnb.cool/ai-models/Lightricks/LTX-2.3-fp8/-/lfs/28606c5b5a06ce56f896d4dfcb20f212739e07a68fbe48e53638188449d26450",
     "LTX-2/ltx-2-19b-distilled-fp8.safetensors": "https://cnb.cool/ai-models/DeepBeepMeep/LTX-2/-/lfs/2be4dd61394194e44e00248773eea9a33e4d4c0d151aeea0e4ba6ed093cf8ab6",
     "LTX-2/ltx-2-19b-dev-fp8.safetensors": "https://cnb.cool/ai-models/Lightricks/LTX-2/-/lfs/8a67e709b6d1adc061cb19921887a5c15754178199e45801a04310e9b522760d",
@@ -88,8 +88,9 @@
     "Wan/Wan21_Uni3C_controlnet_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/WanVideo_comfy/-/lfs/d7dd1bfe5f34dea607a749d72f206908e76a908b9999cb28c53c3eb167ddd709"
   },
   "diffusion_models": {
+    "minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/a629cfea8d89a071b140c6e1935dc9a23e72de6badc18975a2bb9e6d1423d76d",
+    "minimax_h3_ref2va_int8_convrot.safetensors": "https://cnb.cool/ai-models/Comfy-Org/MiniMax-H3/-/lfs/9eef934046a0671bc8a5daf87100705e1478419c574cfde70c50fbe6885f76a9",
     "minimax_h3_fl2va_int8_convrot.safetensors": "https://cnb.cool/ai-models/Comfy-Org/MiniMax-H3/-/lfs/7ad4c73e6e378b822ffd1629f27f632d3787d95f5e468e3af958f98c58df96a5",
-    "minimax_h3_ref2va_pruned_int8_convrot.safetensors": "https://cnb.cool/ai-models/Comfy-Org/MiniMax-H3/-/lfs/9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779",
     "Ace-Step/acestep_v1.5_turbo.safetensors": "https://cnb.cool/ai-models/Comfy-Org/ace_step_1.5_ComfyUI_files/-/lfs/3f6e0797fad420a39bd33979eb6e840e30989e34a3794e843d23b60ec6e422d7",
     "LTX-2/Kijai/ltx-2-19b-dev-fp8_transformer_only.safetensors": "https://cnb.cool/ai-models/Kijai/LTXV2_comfy/-/lfs/6d6f26c0643ef1f7ffc28a6d703198f0a8521a45c3e7d75fe707335e6bae6b76",
     "Z-Image/z_image_bf16.safetensors": "https://cnb.cool/ai-models/Comfy-Org/z_image/-/lfs/996a67d3ff666946b1c25cbc16d1b1918b6cc0ac166309e23fe3b3d830263dee",
@@ -143,6 +144,10 @@
     "MelBandRoFormer/MelBandRoformer_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/MelBandRoFormer_comfy/-/lfs/6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
   },
   "loras": {
+    "Minimax H3真实电影质感V0.1.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/51dda79218ea126cbb2e08f3a6d9cc595e2224f4977d7618061954043a8bafcf",
+    "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/7098acf3ee75028fd9fcd948f50fcc8d995057fabb76f86bd3ca2c0ffc58e409",
+    "wushu_action_v7_ref2va_aitoolkit_NO-ADALN_pruned-int8convrot_2000step.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/f070becda73c65a19a8204384db51bb8204d2303055852172c25aa699589326e",
+    "wushu_spatial_physics_v2_1000_pruned.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/c38b8f9c43614c91a2847d290d9c5b3341536acb4d6d8ce2d825d4caf7eaee6b",
     "minimax_h3_turbo_4步加速_comfyui.safetensors": "https://cnb.cool/fuliai/comfyui_source/-/lfs/35946f9f2957c2766e28b627c88169535249dd07a3040ce3c2c8c99951fdbc7b",
     "LTX-2.3/ltx-2.3-22b-distilled-lora-384.safetensors": "https://cnb.cool/ai-models/Lightricks/LTX-2.3/-/lfs/2943ab994f3c9d88052e5a2a34cca14e4a2dfc36b1d8c407931d52d5c25dd72b",
     "Z-Image/Kook_Zimage_真实幻想_Turbo.safetensors": "https://cnb.cool/ai-models/KookYan/Kook_Zimage_Zshx_Turbo/-/lfs/6b51cf2456fbb7cb3ce74be27f61f0ec01e3098184bcb684e9299a38a2294fa7",
@@ -235,8 +240,11 @@
     "Wan/Kijai/umt5-xxl-enc-bf16.safetensors": "https://cnb.cool/ai-models/Kijai/WanVideo_comfy/-/lfs/4fa971faf306cad919033d5bbe192e571dc08452f800cbf2ec3c73977c01b2cc",
     "Wan/Kijai/umt5-xxl-enc-fp8_e4m3fn.safetensors": "https://cnb.cool/ai-models/Kijai/WanVideo_comfy/-/lfs/3fe5173588270c22505d4f9158bb1644b78331b8614206a97e92760b960c9ffa"
   },
-  "upscale_models": {},
+  "upscale_models": {
+   
+  },
   "vae": {
+    "minimax_h3_video_vae_int8_convrot.safetensors": "https://cnb.cool/ai-models/Kijai/MiniMax-H3-experimental/-/lfs/9bb2d96f218c76babd85e0611b85ca8fb330a90546c01a0005e8a58a59593410",
     "minimax_h3_video_vae_fp16.safetensors": "https://cnb.cool/ai-models/Comfy-Org/MiniMax-H3/-/lfs/7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522",
     "minimax_h3_audio_vae_fp32.safetensors": "https://cnb.cool/ai-models/Comfy-Org/MiniMax-H3/-/lfs/8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48",
     "ace_1.5_vae.safetensors": "https://cnb.cool/ai-models/Comfy-Org/ace_step_1.5_ComfyUI_files/-/lfs/6de92e3a862acd287e08b024ac90f0783a8635451b728721a33ff03565bcb2bb",

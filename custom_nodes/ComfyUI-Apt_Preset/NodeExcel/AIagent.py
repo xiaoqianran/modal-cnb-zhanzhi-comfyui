@@ -88,7 +88,7 @@ def download_image_to_tensor(url):
 
 
 
-class Ai_doubao_seedream:
+class xxxAi_doubao_seedream:
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -976,7 +976,7 @@ try:
 except (ImportError, TypeError):
     ZhipuAI = None
     ZHIPUAI_AVAILABLE = False
-    print("[GLM_Nodes] 警告：zhipuai 库导入失败，可能是 httpx 版本不兼容。GLM相关节点将不可用。")
+
 
 def get_zhipuai_api_key():
     env_api_key = os.getenv("ZHIPUAI_API_KEY")
@@ -1038,7 +1038,7 @@ def analyze_glm_text_no_sdk(model, api_key, system_prompt, text_content, max_tok
 
 
 
-class AI_GLM_text:
+class xxAI_GLM_text:
     def __init__(self):
         self.api_key = get_zhipuai_api_key()
 
@@ -1091,6 +1091,10 @@ class AI_GLM_text:
             return (result, system_prompt)
         except Exception as e:
             return (f"处理失败: {str(e)}", system_prompt)
+
+
+
+
 
 def resize_to_limit(img, max_pixels=262144):
     width, height = img.size
@@ -1148,7 +1152,7 @@ def analyze_glm_image_no_sdk(images, model, api_key, system_prompt, user_prompt,
     except Exception as e:
         raise Exception(f"GLM-4V API调用失败: {str(e)}")
 
-class AI_GLM_image:
+class xxxAI_GLM_image:
     def __init__(self):
         self.api_key = get_zhipuai_api_key()
 

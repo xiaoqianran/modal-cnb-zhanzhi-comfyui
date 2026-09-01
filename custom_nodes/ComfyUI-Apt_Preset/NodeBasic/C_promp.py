@@ -374,110 +374,6 @@ class Coordinate_loadImage:
 #endregion-----------------------------
 
 
-
-
-class text_mul_Split:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "text": ("STRING", {"multiline": True}),
-                "delimiter": ("STRING", {
-                    "default": "\\n",
-                    "multiline": False,
-                    "tooltip": "Use \\n for newline, \\t for tab, \\s for space"
-                }),
-            },
-        }
-
-    RETURN_TYPES = ("LIST", "STRING", "STRING", "STRING", "STRING", 
-                    "STRING", "STRING", "STRING", "STRING")
-    RETURN_NAMES = ("list_output", "item1", "item2", "item3", "item4", 
-                    "item5", "item6", "item7", "item8")
-    #OUTPUT_IS_LIST = (True, False, False, False, False, False, False, False, False)
-    FUNCTION = "split_text"
-    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
-
-    def split_text(self, text, delimiter):
-        # 处理特殊转义字符
-        if delimiter == "\\n":
-            actual_delimiter = "\n"
-        elif delimiter == "\\t":
-            actual_delimiter = "\t"
-        elif delimiter == "\\s":
-            actual_delimiter = " "
-        else:
-            actual_delimiter = delimiter.strip()
-
-        # 使用实际分隔符进行分割
-        parts = [part.strip() for part in text.split(actual_delimiter)]
-
-        # 生成8个固定输出，不足补空字符串
-        output_items = parts[:8]
-        while len(output_items) < 8:
-            output_items.append("")
-
-
-        list_out = []
-        for text_item in parts:
-            list_out.append(text_item)
-        
-
-        return (list_out, *output_items)
-
-
-class text_list_combine :
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "text_list": (any_type,),  
-                "delimiter": (["newline","comma","backslash","space"], {"default": "comma"}),
-            },
-        }
-    
-    RETURN_TYPES = ("STRING",) 
-    RETURN_NAMES = ("text",) 
-    FUNCTION = "run"
-    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
-
-    INPUT_IS_LIST = True
-    OUTPUT_IS_LIST = (False,)  
-
-    def run(self, text_list, delimiter):
-        try:
-            delimiter = delimiter[0] if isinstance(delimiter, list) else delimiter
-            delimiter_map = {
-                "newline": "\n",
-                "comma": ",",
-                "backslash": "\\",
-                "space": " "
-            }
-            final_delimiter = delimiter_map.get(delimiter, ",")
-
-            flattened_list = []
-            for item in text_list:
-                if isinstance(item, list):
-                    flattened_list.extend(item)
-                else:
-                    flattened_list.append(item)
-
-            str_items = []
-            for item in flattened_list:
-                if item is None:
-                    continue
-                item_str = str(item).strip()
-                if item_str:
-                    str_items.append(item_str)
-
-            combined_text = final_delimiter.join(str_items)
-            return (combined_text,)
-        
-        except Exception as e:
-            return (f"合并失败: {str(e)}",)
-
-
-
 class text_mul_Join:
     @classmethod
     def INPUT_TYPES(cls):
@@ -575,6 +471,7 @@ class text_mul_Join:
             joined_text = "❌ No valid content to join"
 
         return (joined_text,)
+
 
 
 

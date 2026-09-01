@@ -1080,8 +1080,8 @@ class mask_sam_detctor:
             },
         }
 
-    RETURN_TYPES = ("MASK", "BOUNDING_BOX")
-    RETURN_NAMES = ("masks", "bboxes")
+    RETURN_TYPES = ("MASK", "BOUNDING_BOX", "MODEL")
+    RETURN_NAMES = ("masks", "bboxes", "model")
     FUNCTION = "run"
     CATEGORY = "Apt_Preset/mask"
     OUTPUT_NODE = True
@@ -1305,7 +1305,7 @@ permil_str千分比对角框，批量格式："[[x1, y1, x2, y2], [x1, y1, x2, y
         if model is None:
             b, h, w, _ = image.shape
             empty = torch.zeros((b, h, w), dtype=image.dtype, device=image.device)
-            return {"ui": ui, "result": (empty, [])}
+            return {"ui": ui, "result": (empty, [], None)}
 
         try:
             from comfy_extras.nodes_sam3 import SAM3_Detect as _SAM3Detect
@@ -1320,12 +1320,12 @@ permil_str千分比对角框，批量格式："[[x1, y1, x2, y2], [x1, y1, x2, y
                 refine_iterations=int(refine_iterations),
                 individual_masks=bool(individual_masks),
             )
-            return {"ui": ui, "result": (result[0], result[1])}
+            return {"ui": ui, "result": (result[0], result[1], model)}
         except Exception as e:
             print(f"mask_sam_detctor: SAM3 执行失败 -> {e}")
             b, h, w, _ = image.shape
             empty = torch.zeros((b, h, w), dtype=image.dtype, device=image.device)
-            return {"ui": ui, "result": (empty, [])}
+            return {"ui": ui, "result": (empty, [], None)}
 
 
 

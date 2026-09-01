@@ -6,6 +6,17 @@ import time
 import mimetypes
 from comfy_api.latest import io as comfy_api_io
 
+try:
+    from comfy_api.latest import InputImpl as _ComfyInputImpl
+except Exception:  # pragma: no cover - 兼容老版 comfy_api
+    try:
+        from comfy_api.input_impl import VideoFromFile as _VideoFromFileLegacy  # type: ignore
+
+        class _ComfyInputImpl:  # type: ignore[no-redef]
+            VideoFromFile = _VideoFromFileLegacy
+    except Exception:
+        _ComfyInputImpl = None  # type: ignore[assignment]
+
 import hashlib
 
 import numpy as np
@@ -34,6 +45,10 @@ import re
 import traceback
 import itertools
 import comfy
+import comfy.nested_tensor
+import comfy.utils
+
+from .C_flow import _stage_decode_payload, _stage_encode_payload
 
 from aiohttp import web
 from PIL import Image, ImageOps, ImageSequence
@@ -1204,6 +1219,136 @@ class IO_input_any:
 
 
 
+def _resolve_io_latent_path(latent_path, clip_index=0):
+    path = (latent_path or "").strip().strip('"').strip("'")
+    if not path:
+        path = "h3_context"
+
+    output_directory = folder_paths.get_output_directory()
+    candidates = [path, os.path.join(output_directory, path)]
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+        if not os.path.isdir(candidate):
+            continue
+
+        index = int(clip_index)
+        if index > 0:
+            endings = (f"_{index:05d}.safetensors", f"_clip{index:03d}.safetensors")
+            files = [os.path.join(candidate, filename) for filename in os.listdir(candidate) if filename.endswith(endings)]
+            if not files:
+                raise FileNotFoundError(f"IO_loadLatent: no saved latent for clip {index} in {candidate}")
+        else:
+            files = [os.path.join(candidate, filename) for filename in os.listdir(candidate) if filename.endswith(".safetensors")]
+            if not files:
+                raise FileNotFoundError(f"IO_loadLatent: no saved latents in {candidate}")
+        return max(files, key=os.path.getmtime)
+
+    raise FileNotFoundError(f"IO_loadLatent: {path!r} is neither a file nor a folder")
+
+
+class IO_loadLatent:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "latent_path": ("STRING", {
+                    "default": "h3_context",
+                    "tooltip": "Latent file or folder. Relative paths are resolved from the ComfyUI output folder.",
+                }),
+                "clip_index": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 9999,
+                    "tooltip": "Clip slot to load. 0 loads the newest safetensors file in the folder.",
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("Latent",)
+    FUNCTION = "load"
+    CATEGORY = "Apt_Preset/IO_Port"
+    DESCRIPTION = "Load a latent saved by IO_SaveLatent, flow_stage, or ComfyUI SaveLatent."
+
+    @classmethod
+    def IS_CHANGED(cls, latent_path, clip_index=0):
+        try:
+            path = _resolve_io_latent_path(latent_path, clip_index)
+            return f"{path}:{os.stat(path).st_mtime_ns}"
+        except Exception:
+            return float("NaN")
+
+    def load(self, latent_path, clip_index=0):
+        path = _resolve_io_latent_path(latent_path, clip_index)
+        data, metadata = comfy.utils.load_torch_file(path, safe_load=True, return_metadata=True)
+
+        if metadata is not None and "stage_payload" in metadata:
+            latent = _stage_decode_payload(path)
+            if not isinstance(latent, dict) or "samples" not in latent:
+                payload_type = json.loads(metadata["stage_payload"]).get("type", "unknown data")
+                raise ValueError(f"IO_loadLatent: {path} contains {payload_type}, not latent")
+            return (latent,)
+
+        if "video" in data and "audio" in data:
+            return ({"samples": comfy.nested_tensor.NestedTensor([data["video"], data["audio"]])},)
+
+        if "latent_tensor" in data:
+            multiplier = 1.0 if "latent_format_version_0" in data else 1.0 / 0.18215
+            return ({"samples": data["latent_tensor"].float() * multiplier},)
+
+        if "samples" in data:
+            return (data,)
+
+        raise ValueError(f"IO_loadLatent: {path} does not contain a supported latent")
+
+
+class IO_SaveLatent:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "latent": ("LATENT",),
+                "filename_prefix": ("STRING", {"default": "h3_context/clip"}),
+                "clip_index": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 9999,
+                    "tooltip": "Fixed clip slot to overwrite. 0 creates a new numbered file on every run.",
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("latent_path",)
+    FUNCTION = "save"
+    OUTPUT_NODE = True
+    CATEGORY = "Apt_Preset/IO_Port"
+    DESCRIPTION = "Save any ComfyUI latent while preserving its tensor and metadata fields."
+
+    def save(self, latent, filename_prefix, clip_index=0):
+        tensors, descriptor = _stage_encode_payload(latent, "latent")
+        folder, filename, counter, _, _ = folder_paths.get_save_image_path(
+            filename_prefix, folder_paths.get_output_directory()
+        )
+        if int(clip_index) > 0:
+            path = os.path.join(folder, f"{filename}_{int(clip_index):05d}.safetensors")
+        else:
+            path = os.path.join(folder, f"{filename}_{counter:05d}_.safetensors")
+        temp_path = path + ".tmp"
+        try:
+            comfy.utils.save_torch_file(
+                tensors,
+                temp_path,
+                metadata={"stage_payload": json.dumps(descriptor, ensure_ascii=False)},
+            )
+            os.replace(temp_path, path)
+        finally:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+        return (path,)
+
+
 class IO_load_anyimage:
     @classmethod
     def INPUT_TYPES(s):
@@ -1330,11 +1475,9 @@ class IO_image_select:
             "required": {
                 "images": ("IMAGE",),
                 "indexes": ("STRING", {"default": "1,2"}),
-                "canvas_operations": (["None", "Horizontal Flip", "Vertical Flip", "90 Degree Rotation", 
+                "canvas_operations": (["None", "Horizontal Flip", "Vertical Flip", "90 Degree Rotation",
                                        "180 Degree Rotation", "Horizontal Flip + 90 Degree Rotation", "Horizontal Flip + 180 Degree Rotation"], {"default": "None"}),
-            },
-            "optional": {
-                # 已移除 index 参数
+                "reverse_order": ("BOOLEAN", {"default": False}),
             }
         }
     
@@ -1346,7 +1489,8 @@ class IO_image_select:
     DESCRIPTION = """indexes按图像索引选择输出
     索引为：0，时，返回原输入，索引从1开始是第一张
     索引方式：正 “1,3,5” 逆向 “-1,-3”（-1为最后一张）
-    范围方式： “2-4”"""
+    范围方式： “2-4”
+    reverse_order为True时，输出顺序反转，如1-22变为22-1"""
     
     def parse_indexes(self, indexes_str, max_length):
         # 此方法保持不变
@@ -1384,18 +1528,19 @@ class IO_image_select:
                 unique_indexes.append(num)
         return unique_indexes
     
-    def SelectImages(self, images, indexes, canvas_operations):
-        # 移除了 index 参数
+    def SelectImages(self, images, indexes, canvas_operations, reverse_order):
         max_length = len(images)
         if max_length == 0:
             return (images, [])
-        
-        # 直接使用 indexes 解析逻辑
+
         select_numbers = self.parse_indexes(indexes, max_length)
-        
+
         if not select_numbers:
             print("Warning: No valid indexes found, return original input.")
             return (images, [])
+
+        if reverse_order:
+            select_numbers = select_numbers[::-1]
         
         select_list1 = np.array(select_numbers) - 1  # 转换为0-based索引
         exclude_list = np.setdiff1d(np.arange(max_length), select_list1)
@@ -2325,7 +2470,7 @@ class IO_LoadVideoBatch(_IO_LoadMediaBatchBase):
 
     NAME = "IO_LoadVideoBatch"
     CATEGORY = "Apt_Preset/IO_Port/batch_input"
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "INT", "INT")
+    RETURN_TYPES = ("STRING", "VIDEO", "STRING", "INT", "INT")
     RETURN_NAMES = ("video_list", "video_index", "name_index", "index", "total")
     FUNCTION = "load_video_batch"
     OUTPUT_IS_LIST = (True, False, False, False, False)
@@ -2338,6 +2483,20 @@ class IO_LoadVideoBatch(_IO_LoadMediaBatchBase):
     @classmethod
     def VALIDATE_INPUTS(cls, video_list: str = "", card_size: int = 120, index: int = 0, video_list_in=None, **kwargs):
         return super().VALIDATE_INPUTS(video_list, card_size, index, video_list_in, **kwargs)
+
+    def _build_video_from_file(self, path: str):
+        if not path or not os.path.isfile(path):
+            return None
+        impl = _ComfyInputImpl
+        if impl is None:
+            return None
+        try:
+            vff = getattr(impl, "VideoFromFile", None)
+            if vff is None:
+                return None
+            return vff(path)
+        except Exception:
+            return None
 
     def load_video_batch(self, video_list: str, card_size: int = 120, index: int = 0, video_list_in=None, unique_id: str = ""):
         video_list = self._first_scalar(video_list, "")
@@ -2353,7 +2512,7 @@ class IO_LoadVideoBatch(_IO_LoadMediaBatchBase):
 
         total = len(names)
         if total == 0:
-            return ([], "", "", 0, 0)
+            return ([], None, "", 0, 0)
 
         try:
             i = int(index)
@@ -2363,8 +2522,10 @@ class IO_LoadVideoBatch(_IO_LoadMediaBatchBase):
         current_path = names[i]
         name_without_ext = os.path.splitext(os.path.basename(current_path))[0] if current_path else ""
 
+        video_obj = self._build_video_from_file(current_path)
+
         self._emit_ui_sync(str(unique_id), names, i, int(card_size))
-        return (names, current_path, name_without_ext, int(i), int(total))
+        return (names, video_obj, name_without_ext, int(i), int(total))
 
 
 class IO_LoadAudioBatch(_IO_LoadMediaBatchBase):
@@ -2390,7 +2551,7 @@ class IO_LoadAudioBatch(_IO_LoadMediaBatchBase):
 
     NAME = "IO_LoadAudioBatch"
     CATEGORY = "Apt_Preset/IO_Port/batch_input"
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "INT", "INT")
+    RETURN_TYPES = ("STRING", "AUDIO", "STRING", "INT", "INT")
     RETURN_NAMES = ("audio_list", "audio_index", "name_index", "index", "total")
     FUNCTION = "load_audio_batch"
     OUTPUT_IS_LIST = (True, False, False, False, False)
@@ -2403,6 +2564,30 @@ class IO_LoadAudioBatch(_IO_LoadMediaBatchBase):
     @classmethod
     def VALIDATE_INPUTS(cls, audio_list: str = "", card_size: int = 120, index: int = 0, audio_list_in=None, **kwargs):
         return super().VALIDATE_INPUTS(audio_list, card_size, index, audio_list_in, **kwargs)
+
+    def _build_audio_from_file(self, path: str):
+        if not path or not os.path.isfile(path):
+            return None
+        if not SOUNDFILE_AVAILABLE or _sf is None:
+            return None
+        try:
+            data, sr = _sf.read(path, always_2d=True)  # shape: [T, C], float32/float64/int16...
+            if not isinstance(data, np.ndarray) or data.size == 0:
+                return None
+            if data.ndim == 1:
+                data = data[:, None]
+            # normalize dtype to float32 in [-1, 1]
+            if np.issubdtype(data.dtype, np.integer):
+                info = np.iinfo(data.dtype)
+                scale = max(1.0, float(info.max))
+                waveform = data.astype(np.float32) / scale
+            else:
+                waveform = data.astype(np.float32)
+            # ComfyUI AUDIO: torch.Tensor [B, C, T]
+            tensor = torch.from_numpy(waveform.T).contiguous().unsqueeze(0)  # [1, C, T]
+            return {"waveform": tensor, "sample_rate": int(sr)}
+        except Exception:
+            return None
 
     def load_audio_batch(self, audio_list: str, card_size: int = 120, index: int = 0, audio_list_in=None, unique_id: str = ""):
         audio_list = self._first_scalar(audio_list, "")
@@ -2418,7 +2603,7 @@ class IO_LoadAudioBatch(_IO_LoadMediaBatchBase):
 
         total = len(names)
         if total == 0:
-            return ([], "", "", 0, 0)
+            return ([], None, "", 0, 0)
 
         try:
             i = int(index)
@@ -2428,8 +2613,10 @@ class IO_LoadAudioBatch(_IO_LoadMediaBatchBase):
         current_path = names[i]
         name_without_ext = os.path.splitext(os.path.basename(current_path))[0] if current_path else ""
 
+        audio_obj = self._build_audio_from_file(current_path)
+
         self._emit_ui_sync(str(unique_id), names, i, int(card_size))
-        return (names, current_path, name_without_ext, int(i), int(total))
+        return (names, audio_obj, name_without_ext, int(i), int(total))
 
 
 def _resolve_media_preview_path(raw_path: str):

@@ -81,12 +81,6 @@ class text_sum:
                 "select": (sorted(list(all_titles)), {"default": ""}),
                 "prompt": ("STRING", {"default": "", "multiline": True}),
                 "negative": ("STRING", {"default": "", "multiline": False}),
-                "add_pos": ("STRING", {"default": "", "multiline": False}),
-                "add_neg": ("STRING", {"default": "", "multiline": False}),
-                "style": (["None"] + style_list()[0], {"default": "None"}),
-                "remove": ("STRING", {"multiline": False,"default": ""}),
-                "replace_target": ("STRING", {"multiline": False,"default": ""}),
-                "replace": ("STRING", {"multiline": False,"default": ""}),
             },
             "hidden": {"unique_id": "UNIQUE_ID"}
         }
@@ -96,10 +90,6 @@ class text_sum:
     FUNCTION = "run"
     CATEGORY = "Apt_Preset/prompt"
     NAME="text_sum"
-    
-    DESCRIPTION = """
-- 替换内容，移除内容：多个词汇同时进行，用@隔开。例如："a@b@c"
-- """
 
 
     @classmethod
@@ -215,30 +205,12 @@ class text_sum:
         except Exception as e:
             print(f"Error deleting title: {e}")
 
-    def run(self, style="default", negative="", replace_target="", replace="",remove="", add_pos="", add_neg="",  select_yaml: str = "", select: str = "", prompt: str = "", unique_id: str = "") -> Tuple[str]:
+    def run(self, negative="", select_yaml: str = "", select: str = "", prompt: str = "", unique_id: str = "") -> Tuple[str]:
         if len(prompt) > 4096: print(f"Warning: Prompt length ({len(prompt)}) exceeds recommended 4096 chars")
-        if select and prompt:
-            yaml_path = self.yaml_dir / select_yaml
-            try:
-                if yaml_path.exists():
-                    with open(yaml_path, 'r', encoding='utf-8') as f:
-                        data = yaml.safe_load(f) or {}
-                else: data = {}
-                if select not in data: data[select] = {}
-                data[select]["prompt"] = prompt
-                if negative: data[select]["negative"] = negative
-                asyncio.run(self._save_yaml(select_yaml, data))
-            except Exception as e: print(f"Error saving prompt: {e}")
-        if add_pos is not None and add_pos != "": prompt = prompt + "," + add_pos
-        if add_neg is not None and add_neg != "": negative = negative + "," + add_neg
         if isinstance(prompt, tuple): prompt = ", ".join(str(x) for x in prompt if x is not None)
         elif not isinstance(prompt, str): prompt = str(prompt)
         if isinstance(negative, tuple): negative = ", ".join(str(x) for x in negative if x is not None)
         elif not isinstance(negative, str): negative = str(negative)
-        prompt, negative = add_style_to_subject(style,  prompt, negative)
-        if remove is not None and remove!= "": prompt = clean_prompt(prompt, remove)
-        if replace_target is not None and replace_target!= "": 
-           prompt = multi_replace(prompt, replace_target, replace)
 
         pos= prompt
         neg = negative
@@ -249,6 +221,89 @@ class text_sum:
     @classmethod
     def VALIDATE_INPUTS(cls, select_yaml, select, prompt, unique_id): return True
 
+
+class text_sum_edit:
+    CUSTOM_YAML = "custom_yaml"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        yaml_dir = Path(__file__).parent / "yaml"
+        yaml_dir.mkdir(exist_ok=True)
+        yaml_files = sorted(path.name for path in yaml_dir.glob("*.yaml"))
+        return {
+            "required": {
+                "select_yaml": (yaml_files + [cls.CUSTOM_YAML], {
+                    "default": yaml_files[0] if yaml_files else cls.CUSTOM_YAML,
+                }),
+                "custom_yaml": ("STRING", {"default": "", "multiline": False}),
+                "edit_item": ("STRING", {"default": "", "multiline": False}),
+                "edit_mode": ("BOOLEAN", {
+                    "default": True,
+                    "label_on": "save",
+                    "label_off": "delete",
+                }),
+                "prompt": ("STRING", {"default": "", "multiline": True}),
+                "negative": ("STRING", {"default": "", "multiline": False}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("status",)
+    FUNCTION = "edit"
+    CATEGORY = "Apt_Preset/prompt"
+    OUTPUT_NODE = True
+
+    @classmethod
+    def _target_path(cls, select_yaml, custom_yaml):
+        yaml_dir = (Path(__file__).parent / "yaml").resolve()
+        if select_yaml == cls.CUSTOM_YAML:
+            filename = str(custom_yaml or "").strip()
+            if not filename:
+                raise ValueError("custom_yaml needs a file name")
+            if not filename.lower().endswith(".yaml"):
+                filename += ".yaml"
+        else:
+            filename = str(select_yaml or "").strip()
+            existing = {path.name for path in yaml_dir.glob("*.yaml")}
+            if filename not in existing:
+                raise ValueError("select_yaml must be an existing YAML file or custom_yaml")
+
+        if Path(filename).name != filename or Path(filename).suffix.lower() != ".yaml":
+            raise ValueError("YAML file name must be a local .yaml file name")
+        target = (yaml_dir / filename).resolve()
+        if target.parent != yaml_dir:
+            raise ValueError("YAML file must stay inside the text_sum yaml directory")
+        return target
+
+    async def edit(self, select_yaml, custom_yaml, edit_item, edit_mode, prompt, negative):
+        item = str(edit_item or "").strip()
+        if not item:
+            raise ValueError("edit_item needs a name")
+        if not isinstance(edit_mode, bool):
+            raise ValueError("edit_mode must be save or delete")
+        target = self._target_path(select_yaml, custom_yaml)
+        if target.exists():
+            with open(target, "r", encoding="utf-8") as file:
+                data = yaml.safe_load(file) or {}
+            if not isinstance(data, dict):
+                raise ValueError(f"{target.name} must contain a YAML mapping")
+        else:
+            data = {}
+        if not edit_mode:
+            if item not in data:
+                raise ValueError(f"{item} does not exist in {target.name}")
+            del data[item]
+            action = "Deleted"
+        else:
+            data[item] = {
+                "prompt": str(prompt or ""),
+                "negative": str(negative or ""),
+            }
+            action = "Saved"
+        await get_instance()._save_yaml(target.name, data)
+        get_instance().refresh_enums()
+        return (f"{action} {item} in {target.name}",)
+
 _instance = None
 def get_instance():
     global _instance
@@ -256,9 +311,3 @@ def get_instance():
     return _instance
 
 get_instance()
-
-
-
-
-
-

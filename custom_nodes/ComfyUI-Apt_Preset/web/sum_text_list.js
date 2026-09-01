@@ -2,6 +2,9 @@ import { app } from "../../../scripts/app.js";
 import { ComfyWidgets } from "../../../scripts/widgets.js";
 import { api } from "../../../scripts/api.js";
 
+const EDIT_NODE_TYPE = "text_sum_edit";
+const CUSTOM_YAML_OPTION = "custom_yaml";
+
 // Store for YAML/title data
 const promptListStore = {
     yamlFiles: [],
@@ -44,7 +47,7 @@ function setupSocketListeners() {
         
         // Update all NS-PromptList nodes
         app.graph._nodes.forEach(node => {
-            if (node.type === "text_sum") {
+            if (node.type === "text_sum" || node.type === EDIT_NODE_TYPE) {
                 updateNodeEnums(node);
             }
         });
@@ -104,17 +107,20 @@ async function reloadYamlList() {
 function updateNodeEnums(node) {
     const yamlWidget = findWidget(node, "select_yaml");
     const selectWidget = findWidget(node, "select");
+    const yamlFiles = node.type === EDIT_NODE_TYPE
+        ? [...promptListStore.yamlFiles, CUSTOM_YAML_OPTION]
+        : promptListStore.yamlFiles;
     
-    if (yamlWidget && promptListStore.yamlFiles.length > 0) {
+    if (yamlWidget && yamlFiles.length > 0) {
         // Update YAML options
         const currentYaml = yamlWidget.value;
-        yamlWidget.options.values = promptListStore.yamlFiles;
+        yamlWidget.options.values = yamlFiles;
         
         // Keep current selection if it still exists
-        if (promptListStore.yamlFiles.includes(currentYaml)) {
+        if (yamlFiles.includes(currentYaml)) {
             yamlWidget.value = currentYaml;
         } else {
-            yamlWidget.value = promptListStore.yamlFiles[0];
+            yamlWidget.value = yamlFiles[0];
         }
     }
     
@@ -249,11 +255,20 @@ app.registerExtension({
                     // Request fresh data when node is added
                     reloadYamlList();
                 }, 0);
+            } else if (node.type === EDIT_NODE_TYPE) {
+                setTimeout(() => {
+                    updateNodeEnums(node);
+                    reloadYamlList();
+                }, 0);
             }
         };
     },
     
     async nodeCreated(node) {
+        if (node.type === EDIT_NODE_TYPE) {
+            setTimeout(() => updateNodeEnums(node), 0);
+            return;
+        }
         if (node.type === "text_sum") {
             // 设置节点最小尺寸 
             node.size = [400, 300]; 

@@ -1050,7 +1050,7 @@ class sch_mask:
 
 
 
-class BatchSlice:
+class array_Slice:
     def __init__(self):
         pass
 
@@ -1058,19 +1058,19 @@ class BatchSlice:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "LIST": ("LIST", {"forceInput": True}),
+                "array": ("LIST", {"forceInput": True}),
                 "start": ("INT", {"default": 0, "min": -9007199254740991}),
                 "end": ("INT", {"default": -1, "min": -9007199254740991}),  # 默认-1表示到末尾
             }
         }
     
     RETURN_TYPES = (ANY_TYPE, )
-    RETURN_NAMES = ("Data", )
+    RETURN_NAMES = ("array", )
     FUNCTION = "run"
-    CATEGORY = "Apt_Preset/data/list|Batch"
+    CATEGORY = "Apt_Preset/data/list|Array"
 
-    def run(self, LIST: list, start: int, end: int):
-        list_length = len(LIST)
+    def run(self, array: list, start: int, end: int):
+        list_length = len(array)
         
         # 处理负数索引
         if start < 0:
@@ -1086,13 +1086,13 @@ class BatchSlice:
         if start > end:
             # 返回空列表或适当的默认值
             # 检查输入数据类型以返回相应类型的空值
-            if list_length > 0 and isinstance(LIST[0], torch.Tensor):
+            if list_length > 0 and isinstance(array[0], torch.Tensor):
                 # 如果是张量列表，返回空的张量
                 return (torch.tensor([]), )
             return ([], )
             
         # 执行切片操作
-        sliced_data = LIST[start:end]
+        sliced_data = array[start:end]
         
         # 如果列表中的元素是张量，考虑将它们堆叠成一个张量
         if len(sliced_data) > 0 and isinstance(sliced_data[0], torch.Tensor):
@@ -1108,7 +1108,7 @@ class BatchSlice:
 
 
 
-class MergeBatch:
+class array_Merge:
     def __init__(self):
         pass
 
@@ -1124,11 +1124,11 @@ class MergeBatch:
             },
         }
     
-    NAME = "list_MergeBatch"
+    NAME = "array_Merge"
     RETURN_TYPES = ("LIST", )
-    RETURN_NAMES = ("list", )
+    RETURN_NAMES = ("array", )
     FUNCTION = "run"
-    CATEGORY = "Apt_Preset/data/list|Batch"
+    CATEGORY = "Apt_Preset/data/list|Array"
 
     def run(self, unique_id, prompt, extra_pnginfo, **kwargs):
         node_list = extra_pnginfo["workflow"]["nodes"]  # list of dict including id, type

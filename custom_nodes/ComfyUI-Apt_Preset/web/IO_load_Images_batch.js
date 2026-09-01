@@ -721,16 +721,32 @@ app.registerExtension({
             const wList = getImageListWidget(this);
             const wSize = getCardSizeWidget(this);
 
-            // index 变化只需增量更新
+            // index 变化需要重绘高亮；用三重保险保证触发
             if (wIndex) {
                 const origCallback = wIndex.callback;
                 let lastValue = wIndex.value;
+                const onIndexChange = () => {
+                    const v = wIndex.value;
+                    if (v === lastValue) return;
+                    lastValue = v;
+                    ui.redraw(true); // 强制完整重绘，避免 DOM 被替换后增量更新失效
+                };
                 wIndex.callback = function (value) {
                     origCallback?.call(this, value);
-                    if (value === lastValue) return;
-                    lastValue = value;
-                    ui.redraw(false); // 增量更新
+                    onIndexChange();
                 };
+                // 备份：直接挂 DOM change/input 事件，绕过 ComfyUI 内部 callback 时机差异
+                const attachDomListeners = () => {
+                    const inputEl = wIndex.inputEl;
+                    if (inputEl && !inputEl._ioIndexListenerAttached) {
+                        inputEl._ioIndexListenerAttached = true;
+                        inputEl.addEventListener("change", () => onIndexChange());
+                        inputEl.addEventListener("input", () => onIndexChange());
+                    }
+                };
+                attachDomListeners();
+                setTimeout(attachDomListeners, 0);
+                setTimeout(attachDomListeners, 100);
             }
 
             // list 变化需要完整重绘

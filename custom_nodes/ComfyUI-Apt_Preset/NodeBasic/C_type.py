@@ -22,48 +22,6 @@ def make_3d_mask(mask):
 
 #region---------------type---------------
 
-class Pack:
-    def __init__(self):
-        pass
-
-    @classmethod
-    def INPUT_TYPES(self):
-        return {
-            "required": {},
-            "optional": {},
-            "hidden": {
-                "unique_id": "UNIQUE_ID",
-                "prompt": "PROMPT", 
-                "extra_pnginfo": "EXTRA_PNGINFO",
-            },
-        }
-    
-    NAME = "pack"
-    RETURN_TYPES = ("PACK", )
-    RETURN_NAMES = ("PACK", )
-    FUNCTION = "run"
-    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
-
-    def run(self, unique_id, prompt, extra_pnginfo, **kwargs):
-        node_list = extra_pnginfo["workflow"]["nodes"]  # list of dict including id, type
-        cur_node = next(n for n in node_list if str(n["id"]) == unique_id)
-        data = {}
-        pack = {
-            "id": unique_id,
-            "data": data,
-        }
-        for k, v in kwargs.items():
-            if k.startswith('value'):
-                i = int(k.split("_")[1])
-                data[i - 1] = {
-                    "name": cur_node["inputs"][i - 1]["name"],
-                    "type": cur_node["inputs"][i - 1]["type"],
-                    "value": v,
-                }
-
-        return (pack, )
-
-
 class ByPassTypeTuple(tuple):
 	def __getitem__(self, index):
 		if index > 0:
@@ -72,64 +30,6 @@ class ByPassTypeTuple(tuple):
 		if isinstance(item, str):
 			return AnyType(item)
 		return item
-
-
-
-class Unpack:
-    def __init__(self):
-        pass
-
-    @classmethod
-    def INPUT_TYPES(self):
-        return {
-            "required": {
-                "PACK": ("PACK", ),
-            },
-            "hidden": {
-                "unique_id": "UNIQUE_ID",
-                "prompt": "PROMPT", 
-                "extra_pnginfo": "EXTRA_PNGINFO",
-            },
-        }
-    
-    NAME = "unpack"
-    RETURN_TYPES = ByPassTypeTuple(("*", ))
-    RETURN_NAMES = ByPassTypeTuple(("value_1", ))
-    FUNCTION = "run"
-    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
-
-    def run(self, PACK: dict, unique_id, prompt, extra_pnginfo):
-        length = len(PACK["data"])
-        types = []
-        names = []
-        outputs = []
-        for i in range(length):
-            d = PACK["data"][i]
-            names.append(d["name"])
-            types.append(d["type"])
-            outputs.append(d["value"])
-        return tuple(outputs)
-
-
-
-class type_BasiPIPE:
-    
-    @classmethod
-    def INPUT_TYPES(self):
-        return {
-            "optional": {
-                "context": ("RUN_CONTEXT", ),
-            },
-        }
-    RETURN_TYPES = ("BASIC_PIPE",)
-    RETURN_NAMES = ("basic_pipe",)
-    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
-    
-    FUNCTION = "fn"
-
-    def fn(self, context):
-        pipe = (context['model'], context['clip'], context['vae'], context['positive'], context['negative'])
-        return pipe,
 
 
 
@@ -373,7 +273,7 @@ class type_Mask_List2Batch:
             return (empty_mask,)
 
 
-class type_BatchToList:
+class type_ArrayToList:
     def __init__(self):
         pass
 
@@ -381,21 +281,22 @@ class type_BatchToList:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "LIST": ("LIST", {"forceInput": True}),
+                "array": ("LIST", {"forceInput": True}),
             }
         }
     
-    TITLE = "Batch To List"
+    TITLE = "Array To List"
     RETURN_TYPES = (ANY_TYPE, )
+    RETURN_NAMES = ("list", )
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "run"
-    CATEGORY = "Apt_Preset/data/list|Batch"
+    CATEGORY = "Apt_Preset/data/list|Array"
 
-    def run(self, LIST: list):
-        return (LIST, )
+    def run(self, array: list):
+        return (array, )
 
 
-class type_ListToBatch:
+class type_ListToArray:
     def __init__(self):
         pass
 
@@ -403,19 +304,19 @@ class type_ListToBatch:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "ANY": (ANY_TYPE, {"forceInput": True}),
+                "list": (ANY_TYPE, {"forceInput": True}),
             }
         }
     
-    TITLE = "List To Batch"
+    TITLE = "List To Array"
     RETURN_TYPES = ("LIST", )
-    RETURN_NAMES = ("LIST", )
+    RETURN_NAMES = ("array", )
     INPUT_IS_LIST = True
     FUNCTION = "run"
-    CATEGORY = "Apt_Preset/data/list|Batch"
+    CATEGORY = "Apt_Preset/data/list|Array"
 
-    def run(self, ANY: list):
-        return (ANY, )
+    def run(self, list: list):
+        return (list, )
 
 
 
@@ -653,7 +554,7 @@ class type_AnyCast:
 #region---------------create--------------
 
 
-class create_any_List:
+class create_list:
     def __init__(self):
         pass
 
@@ -661,23 +562,21 @@ class create_any_List:
     def INPUT_TYPES(s):
         return {
             "required": {},
-            "optional": {},
             "hidden": {
                 "unique_id": "UNIQUE_ID",
-                "prompt": "PROMPT", 
+                "prompt": "PROMPT",
                 "extra_pnginfo": "EXTRA_PNGINFO",
             },
         }
-    
-    NAME = "create_any_List"
+
+    NAME = "create_list"
     RETURN_TYPES = (ANY_TYPE, )
+    RETURN_NAMES = ("list", )
     OUTPUT_IS_LIST = (True, )
     FUNCTION = "run"
     CATEGORY = "Apt_Preset/data"
 
     def run(self, unique_id, prompt, extra_pnginfo, **kwargs):
-        node_list = extra_pnginfo["workflow"]["nodes"]  # list of dict including id, type
-        cur_node = next(n for n in node_list if str(n["id"]) == unique_id)
         output_list = []
         for k, v in kwargs.items():
             if k.startswith(PACK_PREFIX):
@@ -686,7 +585,7 @@ class create_any_List:
 
 
 
-class create_any_batch:
+class create_array:
     def __init__(self):
         pass
 
@@ -694,22 +593,20 @@ class create_any_batch:
     def INPUT_TYPES(s):
         return {
             "required": {},
-            "optional": {},
             "hidden": {
                 "unique_id": "UNIQUE_ID",
-                "prompt": "PROMPT", 
+                "prompt": "PROMPT",
                 "extra_pnginfo": "EXTRA_PNGINFO",
             },
         }
-    
-    NAME = "create_any_batch"
-    RETURN_TYPES = ("LIST",)  
+
+    NAME = "create_array"
+    RETURN_TYPES = ("LIST",)
+    RETURN_NAMES = ("array",)
     FUNCTION = "run"
     CATEGORY = "Apt_Preset/data"
 
     def run(self, unique_id, prompt, extra_pnginfo, **kwargs):
-        node_list = extra_pnginfo["workflow"]["nodes"]  # list of dict including id, type
-        cur_node = next(n for n in node_list if str(n["id"]) == unique_id)
         output_list = []
         for k, v in kwargs.items():
             if k.startswith(PACK_PREFIX):

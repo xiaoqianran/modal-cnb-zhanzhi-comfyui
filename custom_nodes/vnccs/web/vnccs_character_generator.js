@@ -42,6 +42,7 @@ const DEFAULT_DATA = {
         temporal_overlap: 8,
     },
     emotion_generation: {
+        task_batch_size: 0,
         face_denoise: 0.55,
         use_sam: true,
         bbox_model: "bbox/face_yolov8m.pt",
@@ -104,7 +105,7 @@ const DEFAULT_DATA = {
     },
     upscaler: {
         mode: "seedvr",
-        model: "seedvr2_ema_3b-Q4_K_M.gguf",
+        model: "seedvr2_3b_fp8_e4m3fn.safetensors",
         vae: "ema_vae_fp16.safetensors",
         gan_model: "",
         device: "cuda:0",
@@ -141,14 +142,14 @@ const DEFAULT_DATA = {
         preset: "balanced",
         use_sam3_details_recovery: true,
         use_preset_values: true,
-        tolerance: 0.20,
-        softness: 0.16,
-        despill_strength: 0.50,
+        tolerance: 0.15,
+        softness: 0.12,
+        despill_strength: 0.65,
         edge_width: 3,
-        matte_cleanup: 0.20,
+        matte_cleanup: 0.10,
         foreground_recover: 0.35,
-        edge_decontaminate: 0.70,
-        edge_choke: 0.20,
+        edge_decontaminate: 0.75,
+        edge_choke: 0.08,
         matte_method: "guided_edge",
         screen_mode: "from_background",
         output_mode: "straight_rgba",
@@ -204,16 +205,12 @@ const DEFAULT_EMOTION_STAGES = [
 ];
 
 const WORKFLOW_UPSCALER_DIT_MODELS = [
-    "seedvr2_ema_3b-Q4_K_M.gguf",
-    "seedvr2_ema_3b-Q8_0.gguf",
-    "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
-    "seedvr2_ema_3b_fp16.safetensors",
-    "seedvr2_ema_7b-Q4_K_M.gguf",
-    "seedvr2_ema_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors",
-    "seedvr2_ema_7b_fp16.safetensors",
-    "seedvr2_ema_7b_sharp-Q4_K_M.gguf",
-    "seedvr2_ema_7b_sharp_fp8_e4m3fn_mixed_block35_fp16.safetensors",
-    "seedvr2_ema_7b_sharp_fp16.safetensors",
+    "seedvr2_3b_fp16.safetensors",
+    "seedvr2_3b_fp8_e4m3fn.safetensors",
+    "seedvr2_7b_fp16.safetensors",
+    "seedvr2_7b_fp8_e4m3fn_mixed_block35_fp16.safetensors",
+    "seedvr2_7b_sharp_fp16.safetensors",
+    "seedvr2_7b_sharp_fp8_e4m3fn_mixed_block35_fp16.safetensors",
 ];
 
 const WORKFLOW_UPSCALER_VAE_MODELS = [
@@ -221,7 +218,8 @@ const WORKFLOW_UPSCALER_VAE_MODELS = [
 ];
 
 const SEEDVR_ATTENTION_MODES = ["sdpa", "flash_attn_2", "flash_attn_3", "sageattn_2", "sageattn_3"];
-const SEEDVR_COLOR_CORRECTION_MODES = ["lab", "wavelet", "wavelet_adaptive", "hsv", "adain", "none"];
+const SEEDVR_COLOR_CORRECTION_MODES = ["lab", "wavelet", "adain", "none"];
+const NATIVE_SEEDVR_NODE_NAMES = ["SeedVR2Preprocess", "SeedVR2Conditioning", "SeedVR2PostProcessing"];
 
 const POSE_GENERATION_LORA_LABEL = "VNCCS Pose Studio QIE2511";
 const CLOTHES_CORE_LORA_LABEL = "VNCCS Clothes Core";
@@ -246,6 +244,26 @@ const CSS = `
     padding: 10px 10px 64px;
     overflow-y: auto;
 }
+.vnccs-seedvr-cards { display:flex; flex-direction:column; gap:7px; }
+.vnccs-seedvr-picker { display:flex; flex-direction:column; gap:8px; }
+.vnccs-seedvr-picker-menu { display:none; flex-direction:column; gap:8px; padding:8px; border:1px solid rgba(255,143,163,.18); border-radius:10px; background:rgba(8,8,12,.48); }
+.vnccs-seedvr-picker.is-open .vnccs-seedvr-picker-menu { display:flex; }
+.vnccs-seedvr-card { display:flex; flex-direction:column; gap:5px; padding:10px 12px 8px; border:1px solid rgba(0,214,143,.25); border-radius:10px; background:rgba(0,214,143,.05); cursor:default; position:relative; overflow:hidden; transition:all .16s ease; }
+.vnccs-seedvr-card.is-picker-head { min-height:58px; cursor:pointer; }
+.vnccs-seedvr-card.is-installed { cursor:pointer; }
+.vnccs-seedvr-card.is-installed:hover, .vnccs-seedvr-card.is-picker-head:hover { border-color:rgba(0,214,143,.42); background:rgba(0,214,143,.08); }
+.vnccs-seedvr-card.is-selected { border-color:#ff8fa3; background:rgba(255,143,163,.12); box-shadow:0 0 0 1px rgba(255,143,163,.12) inset; }
+.vnccs-seedvr-card.is-missing { opacity:.92; }
+.vnccs-seedvr-card-head { display:flex; align-items:center; gap:7px; min-width:0; }
+.vnccs-seedvr-card-name { flex:1; min-width:0; color:#e8e8f0; font-size:13px; font-weight:700; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vnccs-seedvr-card-dot { width:12px; height:12px; border-radius:50%; flex:none; background:#ff627d; }
+.vnccs-seedvr-card.is-installed .vnccs-seedvr-card-dot { background:#00d68f; }
+.vnccs-seedvr-card-status { flex:none; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#ff627d; }
+.vnccs-seedvr-card.is-installed .vnccs-seedvr-card-status { color:#00d68f; }
+.vnccs-seedvr-card-desc { color:#aaa7b5; font-size:11px; line-height:1.4; }
+.vnccs-seedvr-download { margin-top:2px; width:100%; padding:7px 9px; border:1px solid rgba(255,143,163,.32); border-radius:7px; background:rgba(255,143,163,.08); color:#ffb4c1; font-family:inherit; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; cursor:pointer; }
+.vnccs-seedvr-download:hover { background:rgba(255,143,163,.14); }
+.vnccs-seedvr-download:disabled { opacity:.45; cursor:wait; }
 .vnccs-pipe-settings-open {
     position: absolute;
     left: 12px;
@@ -322,6 +340,11 @@ const CSS = `
     display: grid;
     grid-template-columns: 1fr;
     gap: 4px;
+}
+.vnccs-pipe-field-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
 }
 .vnccs-pipe-label {
     color: #9898a8;
@@ -917,6 +940,12 @@ function readData(node) {
         ) {
             data.emotion_generation.use_sam = Boolean(parsed.emotion_generation.use_sam_model);
         }
+        if (String(data.upscaler?.model || "").startsWith("seedvr2_ema_") || String(data.upscaler?.model || "").endsWith(".gguf")) {
+            data.upscaler.model = "seedvr2_3b_fp8_e4m3fn.safetensors";
+        }
+        if (!SEEDVR_COLOR_CORRECTION_MODES.includes(data.upscaler?.color_correction)) {
+            data.upscaler.color_correction = "lab";
+        }
         return data;
     } catch {
         return JSON.parse(JSON.stringify(DEFAULT_DATA));
@@ -956,6 +985,13 @@ class CharacterGeneratorWidget {
         this.data = readData(node);
         this.seedvrAttention = { current: null, available: SEEDVR_ATTENTION_MODES };
         this.ganUpscaleModels = [];
+        this.seedvrAssets = null;
+        this.seedvrDownloads = {};
+        this.seedvrPollTimer = null;
+        this.nativeSeedvrAvailable = null;
+        this.nativeSeedvrMissing = [];
+        this.seedvrUpdateModalShown = false;
+        this.seedvrModelPickerOpen = false;
         this.syncCharacterSourceData();
         this.stages = this.currentStages();
         this.stageState = Object.fromEntries(this.stages.map(([key]) => [key, { status: "waiting", images: null, message: "" }]));
@@ -979,6 +1015,7 @@ class CharacterGeneratorWidget {
         this.build();
         this.bindEvents();
         this.loadNodeDefs();
+        this.loadSeedvrAssets();
     }
 
     build() {
@@ -1033,6 +1070,7 @@ class CharacterGeneratorWidget {
             this.syncCharacterSourceData();
             this.syncStagesFromData();
             writeData(this.node, this.data);
+            return this.validateNativeSeedvr(true);
         };
         registerCleanup(this.node, () => delete this.node._vnccsCharacterGeneratorSyncBeforeQueue);
 
@@ -1043,6 +1081,7 @@ class CharacterGeneratorWidget {
         this.previewResizeObserver.observe(this.previewEl);
         registerCleanup(this.node, () => this.previewResizeObserver?.disconnect());
         registerCleanup(this.node, () => clearInterval(this.regenerateTimer));
+        registerCleanup(this.node, () => clearInterval(this.seedvrPollTimer));
         if (this.isClone) {
             this.sourceSyncTimer = setInterval(() => {
                 const previous = this.data.nsfw_enabled;
@@ -1074,19 +1113,24 @@ class CharacterGeneratorWidget {
                 this.finishRegenerate();
             } else {
                 const status = detail.status || "waiting";
+                const previousStageState = this.stageState[stage] || {};
+                const hasImages = Object.prototype.hasOwnProperty.call(detail, "images");
                 if (status === "running") {
-                    this.resetStagesFrom(stage);
+                    const continuingBatch = previousStageState.status === "running"
+                        && (Boolean(detail.append_images) || !hasImages);
+                    if (!continuingBatch) this.resetStagesFrom(stage);
                     if (stage === "pose_generation" || stage === "original_pose_generation" || stage === "source_upscaler") {
                         this.userSelectedPreview = false;
                         if (!this.data.ui) this.data.ui = {};
                         this.data.ui.user_selected_preview = false;
                     }
                 }
-                const previousStageState = this.stageState[stage] || {};
-                const hasImages = Object.prototype.hasOwnProperty.call(detail, "images");
+                const nextImages = hasImages && detail.append_images
+                    ? [...(previousStageState.images || []), ...(detail.images || [])]
+                    : (hasImages ? detail.images : (previousStageState.images || null));
                 this.stageState[stage] = {
                     status,
-                    images: hasImages ? detail.images : (previousStageState.images || null),
+                    images: nextImages,
                     message: detail.message || "",
                     current: detail.current,
                     total: detail.total,
@@ -1310,46 +1354,13 @@ class CharacterGeneratorWidget {
                 ],
             });
             groups.push({
-                title: "SeedVR2LoadDiTModel",
+                title: "Native SeedVR2",
                 fields: [
-                    select("upscaler", "model", "model", WORKFLOW_UPSCALER_DIT_MODELS, { nodeName: "SeedVR2LoadDiTModel", inputName: "model" }),
-                    select("upscaler", "device", "device", ["cuda:0", "cpu"], { nodeName: "SeedVR2LoadDiTModel", inputName: "device" }),
-                    select("upscaler", "offload_device", "offload_device", ["cpu", "cuda:0"], { nodeName: "SeedVR2LoadDiTModel", inputName: "offload_device" }),
-                    number("upscaler", "blocks_to_swap", "blocks_to_swap", 0, 1000, 1),
-                    check("upscaler", "swap_io_components", "swap_io_components"),
-                    check("upscaler", "cache_dit", "cache_model"),
-                    select("upscaler", "attention_mode", "attention_mode", this.seedvrAttention.available, { nodeName: "SeedVR2LoadDiTModel", inputName: "attention_mode" }),
-                    check("upscaler", "attention_mode_manual", "Keep selected attention mode (disable auto-detect)"),
-                ],
-            });
-            groups.push({
-                title: "SeedVR2LoadVAEModel",
-                fields: [
-                    select("upscaler", "vae", "model", WORKFLOW_UPSCALER_VAE_MODELS, { nodeName: "SeedVR2LoadVAEModel", inputName: "model" }),
-                    check("upscaler", "encode_tiled", "encode_tiled"),
-                    number("upscaler", "encode_tile_size", "encode_tile_size", 64, 8192, 8),
-                    number("upscaler", "encode_tile_overlap", "encode_tile_overlap", 0, 8192, 8),
-                    check("upscaler", "decode_tiled", "decode_tiled"),
-                    number("upscaler", "decode_tile_size", "decode_tile_size", 64, 8192, 8),
-                    number("upscaler", "decode_tile_overlap", "decode_tile_overlap", 0, 8192, 8),
-                    select("upscaler", "tile_debug", "tile_debug", ["false", "true"], { nodeName: "SeedVR2LoadVAEModel", inputName: "tile_debug" }),
-                    check("upscaler", "cache_vae", "cache_model"),
-                ],
-                note: "device and offload_device are shared with the DiT loader.",
-            });
-            groups.push({
-                title: "SeedVR2VideoUpscaler",
-                fields: [
-                    number("upscaler", "resolution", "resolution", 64, 16384, 8),
-                    number("upscaler", "max_resolution", "max_resolution", 64, 32768, 8),
-                    number("upscaler", "batch_size", "batch_size", 1, 1024, 1),
-                    check("upscaler", "uniform_batch_size", "uniform_batch_size"),
-                    select("upscaler", "color_correction", "color_correction", SEEDVR_COLOR_CORRECTION_MODES, { nodeName: "SeedVR2VideoUpscaler", inputName: "color_correction" }),
-                    number("upscaler", "temporal_overlap", "temporal_overlap", 0, 1024, 1),
-                    number("upscaler", "prepend_frames", "prepend_frames", 0, 1024, 1),
-                    number("upscaler", "input_noise_scale", "input_noise_scale", 0, 100, 0.001),
-                    number("upscaler", "latent_noise_scale", "latent_noise_scale", 0, 100, 0.001),
-                    check("upscaler", "enable_debug", "enable_debug"),
+                    select("upscaler", "model", "diffusion model", WORKFLOW_UPSCALER_DIT_MODELS, { nodeName: "UNETLoader", inputName: "unet_name" }),
+                    select("upscaler", "vae", "VAE", WORKFLOW_UPSCALER_VAE_MODELS, { nodeName: "VAELoader", inputName: "vae_name" }),
+                    number("upscaler", "resolution", "target short edge", 16, 16384, 2),
+                    number("upscaler", "max_resolution", "maximum edge (0 = unlimited)", 0, 16384, 2),
+                    select("upscaler", "color_correction", "color correction", SEEDVR_COLOR_CORRECTION_MODES, { nodeName: "SeedVR2PostProcessing", inputName: "color_correction_method" }),
                 ],
             });
             groups.push({
@@ -1682,6 +1693,20 @@ class CharacterGeneratorWidget {
         this.root.appendChild(backdrop);
         this.modalEl = backdrop;
         ok.focus();
+    }
+
+    validateNativeSeedvr(showModal = false) {
+        if ((this.data.upscaler?.mode || "seedvr") !== "seedvr") return true;
+        // Do not block Queue while /object_info is still loading.
+        if (this.nativeSeedvrAvailable !== false) return true;
+        if (showModal) {
+            const missing = this.nativeSeedvrMissing.length ? `\n\nMissing nodes: ${this.nativeSeedvrMissing.join(", ")}` : "";
+            this.showModal(
+                "ComfyUI Update Required",
+                `Native SeedVR2 is not available in this ComfyUI installation. Update ComfyUI to the latest release and restart it before using SeedVR upscaling.${missing}`,
+            );
+        }
+        return false;
     }
 
     closeModal() {
@@ -2049,9 +2074,9 @@ class CharacterGeneratorWidget {
             "VNCCS_QWEN_Encoder",
             "KSampler",
             "VAEDecodeTiled",
-            "SeedVR2LoadDiTModel",
-            "SeedVR2LoadVAEModel",
-            "SeedVR2VideoUpscaler",
+            "UNETLoader",
+            "VAELoader",
+            ...NATIVE_SEEDVR_NODE_NAMES,
             "UpscaleModelLoader",
             "VNCCSChromaKey",
             "UltralyticsDetectorProvider",
@@ -2086,6 +2111,15 @@ class CharacterGeneratorWidget {
             if (!this.nodeDefs[name] && allNodeDefs?.[name]) {
                 this.nodeDefs[name] = allNodeDefs[name];
             }
+        }
+        this.nativeSeedvrMissing = NATIVE_SEEDVR_NODE_NAMES.filter(name => !this.nodeDefs[name]);
+        if (this.nodeDefs.SeedVR2PostProcessing && !this.getInputSpec("SeedVR2PostProcessing", "color_correction_method")) {
+            this.nativeSeedvrMissing.push("SeedVR2PostProcessing.color_correction_method");
+        }
+        this.nativeSeedvrAvailable = this.nativeSeedvrMissing.length === 0;
+        if (!this.nativeSeedvrAvailable && !this.seedvrUpdateModalShown && (this.data.upscaler?.mode || "seedvr") === "seedvr") {
+            this.seedvrUpdateModalShown = true;
+            this.validateNativeSeedvr(true);
         }
         await Promise.all([
             this.loadSeedvrAttentionInfo(),
@@ -2199,7 +2233,8 @@ class CharacterGeneratorWidget {
             prompt: "Prompt text used for the remove-clothes/preparation stage.",
             gan_model: "Upscale model used when GAN upscaling is selected.",
             model: "SeedVR diffusion model used for the upscaler stage.",
-            resolution: "Output resolution target for SeedVR upscaling.",
+            resolution: "Target size of the shortest output edge in pixels.",
+            max_resolution: "Maximum size of either output edge in pixels. Set to 0 to disable the limit.",
             color_correction: "SeedVR color correction mode. Try adain, wavelet, or none if lab causes color shifts on your GPU.",
             attention_mode: "Attention backend for SeedVR. Auto-detected from installed ComfyUI packages until changed manually.",
             preset: "Strength preset for chroma/background removal.",
@@ -2256,6 +2291,11 @@ class CharacterGeneratorWidget {
             input = document.createElement("input");
             input.className = "vnccs-pipe-input";
             input.type = type;
+            if (type === "number" && options && !Array.isArray(options)) {
+                for (const attribute of ["min", "max", "step"]) {
+                    if (options[attribute] !== undefined) input[attribute] = options[attribute];
+                }
+            }
             this.protectNativeControl(input);
         }
         input.value = this.data[section][key];
@@ -2430,6 +2470,109 @@ class CharacterGeneratorWidget {
         return String(modeWidget?.value || "").toLowerCase() === "anima";
     }
 
+    async loadSeedvrAssets(force = false) {
+        try {
+            const response = await api.fetchApi(`/vnccs/character_generator/seedvr_models${force ? "?refresh=1" : ""}`);
+            const config = await response.json();
+            if (!response.ok || config.error) throw new Error(config.error || "Unable to load SeedVR2 models");
+            this.seedvrAssets = {
+                models: config.models || [],
+                vae: config.vae || [],
+            };
+            this.renderSettings();
+        } catch (error) {
+            console.warn("[VNCCS] SeedVR2 model cards unavailable", error);
+        }
+    }
+
+    seedvrRelativePath(entry) {
+        return String(entry?.local_path || "").replace(/\\/g, "/").split("/").slice(2).join("/");
+    }
+
+    async downloadSeedvrAsset(category, entry) {
+        const key = `${category}:${entry.name}`;
+        this.seedvrDownloads[key] = { status: "queued", message: "Queued" };
+        this.renderSettings();
+        const response = await api.fetchApi("/vnccs/character_generator/seedvr_download", {
+            method: "POST", headers: { "Content-Type": "application/json", "X-VNCCS-CSRF": "1" },
+            body: JSON.stringify({ category, name: entry.name }),
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error) {
+            this.seedvrDownloads[key] = { status: "error", message: payload.error || "Download failed" };
+            this.renderSettings();
+            return;
+        }
+        if (!this.seedvrPollTimer) this.seedvrPollTimer = setInterval(async () => {
+            const statusResponse = await api.fetchApi("/vnccs/character_generator/seedvr_download_status");
+            this.seedvrDownloads = await statusResponse.json();
+            const active = Object.values(this.seedvrDownloads).some(item => ["queued", "downloading"].includes(item?.status));
+            if (!active) {
+                clearInterval(this.seedvrPollTimer);
+                this.seedvrPollTimer = null;
+                await this.loadSeedvrAssets(true);
+            } else this.renderSettings();
+        }, 2000);
+    }
+
+    buildSeedvrCard(entry, { pickerHead = false } = {}) {
+        const rel = this.seedvrRelativePath(entry);
+        const key = `models:${entry.name}`;
+        const download = this.seedvrDownloads[key] || {};
+        const status = ["queued", "downloading", "error"].includes(download.status) ? download.status : entry.status;
+        const installed = status === "installed";
+        const ready = installed;
+        const selected = this.data.upscaler.model === rel;
+        const card = document.createElement("div");
+        card.className = `vnccs-seedvr-card ${ready ? "is-installed" : "is-missing"}${selected ? " is-selected" : ""}${pickerHead ? " is-picker-head" : ""}`;
+        const displayStatus = status || "missing";
+        card.innerHTML = `<div class="vnccs-seedvr-card-head"><span class="vnccs-seedvr-card-dot"></span><span class="vnccs-seedvr-card-name" title="${entry.name}">${entry.name}</span><span class="vnccs-seedvr-card-status">${displayStatus}</span></div><div class="vnccs-seedvr-card-desc">${entry.description || ""}</div>`;
+        if (pickerHead) {
+            card.onclick = () => {
+                this.seedvrModelPickerOpen = !this.seedvrModelPickerOpen;
+                this.renderSettings();
+            };
+        } else if (installed) {
+            card.onclick = () => {
+                this.set("upscaler", "model", rel);
+                this.seedvrModelPickerOpen = false;
+                this.renderSettings();
+            };
+        } else {
+            const button = document.createElement("button");
+            button.className = "vnccs-seedvr-download";
+            button.textContent = status === "error" ? (download.message || "Retry") : (["queued", "downloading"].includes(status) ? (download.message || "Downloading…") : "Install / Download");
+            button.disabled = ["queued", "downloading"].includes(status);
+            button.onclick = event => {
+                event.stopPropagation();
+                this.downloadSeedvrAsset("models", entry);
+            };
+            card.appendChild(button);
+        }
+        return card;
+    }
+
+    seedvrModelCards() {
+        const container = document.createElement("div");
+        container.className = "vnccs-seedvr-cards";
+        if (!this.seedvrAssets) {
+            container.textContent = "Loading model catalogue…";
+            return container;
+        }
+        const entries = this.seedvrAssets.models || [];
+        const selected = entries.find(entry => this.seedvrRelativePath(entry) === this.data.upscaler.model) || entries[0];
+        if (!selected) return container;
+        const picker = document.createElement("div");
+        picker.className = `vnccs-seedvr-picker${this.seedvrModelPickerOpen ? " is-open" : ""}`;
+        picker.appendChild(this.buildSeedvrCard(selected, { pickerHead: true }));
+        const menu = document.createElement("div");
+        menu.className = "vnccs-seedvr-picker-menu";
+        entries.forEach(entry => menu.appendChild(this.buildSeedvrCard(entry)));
+        picker.appendChild(menu);
+        container.appendChild(picker);
+        return container;
+    }
+
     renderSettings() {
         this.syncCharacterSourceData();
         this.syncStagesFromData();
@@ -2455,6 +2598,7 @@ class CharacterGeneratorWidget {
                 this.faceDenoiseSlider(),
             ]));
             const faceDetailerFields = [
+                this.faceDetailerNumberField("task_batch_size", "task_batch_size (0 = auto)", { min: 0, max: 32, step: 1 }),
                 this.field("emotion_generation", "use_sam", "Use SAM", "checkbox"),
                 this.faceDetailerNumberField("bbox_threshold", "bbox_threshold", { min: 0, max: 1, step: 0.01 }),
                 this.faceDetailerNumberField("bbox_dilation", "bbox_dilation", { min: 0, max: 128, step: 1 }),
@@ -2496,11 +2640,16 @@ class CharacterGeneratorWidget {
                 this.field("upscaler", "gan_model", "model", "select", ganOptions),
             );
         } else if (this.data.upscaler.mode !== "off") {
+            const resolutionFields = document.createElement("div");
+            resolutionFields.className = "vnccs-pipe-field-row";
+            resolutionFields.append(
+                this.field("upscaler", "resolution", "target short edge", "number", { min: 16, max: 16384, step: 2 }),
+                this.field("upscaler", "max_resolution", "maximum edge", "number", { min: 0, max: 16384, step: 2 }),
+            );
             upscalerFields.push(
-                this.field("upscaler", "model", "dit model", "select", this.getWorkflowModelOptions("SeedVR2LoadDiTModel", "model", WORKFLOW_UPSCALER_DIT_MODELS, this.data.upscaler.model)),
-                this.field("upscaler", "resolution", "resolution", "number"),
-                this.field("upscaler", "color_correction", "color correction", "select", this.getOptions("SeedVR2VideoUpscaler", "color_correction", SEEDVR_COLOR_CORRECTION_MODES, this.data.upscaler.color_correction)),
-                this.field("upscaler", "attention_mode", "attention mode", "select", this.getOptions("SeedVR2LoadDiTModel", "attention_mode", this.seedvrAttention.available, this.data.upscaler.attention_mode)),
+                this.seedvrModelCards(),
+                resolutionFields,
+                this.field("upscaler", "color_correction", "color correction", "select", this.getOptions("SeedVR2PostProcessing", "color_correction_method", SEEDVR_COLOR_CORRECTION_MODES, this.data.upscaler.color_correction)),
             );
         }
         this.settingsEl.appendChild(this.block("Upscaler", upscalerFields));
@@ -3061,11 +3210,13 @@ app.registerExtension({
     async setup() {
         if (app._vnccsCharacterGeneratorQueueHooked) return;
         app._vnccsCharacterGeneratorQueueHooked = true;
-        const originalQueuePrompt = app.queuePrompt?.bind(app);
-        if (!originalQueuePrompt) return;
+        const queuePrompt = app.queuePrompt;
+        if (typeof queuePrompt !== "function") return;
+        const originalQueuePrompt = (...args) => queuePrompt.apply(app, args);
         app.queuePrompt = async function (...args) {
             for (const node of app.graph?._nodes || []) {
-                node._vnccsCharacterGeneratorSyncBeforeQueue?.();
+                if (node.mode === 2 || node.mode === 4) continue;
+                if (node._vnccsCharacterGeneratorSyncBeforeQueue?.() === false) return;
             }
             return originalQueuePrompt(...args);
         };

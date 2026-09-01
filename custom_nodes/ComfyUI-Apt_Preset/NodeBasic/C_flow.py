@@ -3,17 +3,27 @@ from comfy import model_management
 from comfy.utils import common_upscale
 import torch
 import numpy as np
+import av
 from PIL import Image
 import base64
 import io
 import json
+import hashlib
+import math
+from datetime import datetime
 from typing import Tuple
+from collections.abc import Mapping
+from fractions import Fraction
 from server import PromptServer
 from aiohttp import web
 import os
 import inspect
+import subprocess
 import nodes
 import comfy.utils
+import comfy.nested_tensor
+from comfy_api.latest import InputImpl, Types
+from comfy_execution.graph_utils import ExecutionBlocker
 
 
 
@@ -26,20 +36,15 @@ from ..office_unit import ImageUpscaleWithModel,UpscaleModelLoader
 
 
 
-has_gpu = torch.cuda.is_available()
-gpu_count = torch.cuda.device_count()
+GIB = 1024 ** 3
 
-def get_gpu_memory_info(gpu_index=0):
-    if not has_gpu or gpu_index >= gpu_count:
-        return None, None
-    try:
-        gpu_prop = torch.cuda.get_device_properties(gpu_index)
-        total = gpu_prop.total_memory / (1024 ** 3)
-        used = torch.cuda.memory_allocated(gpu_index) / (1024 ** 3)
-        return round(total, 2), round(used, 2)
-    except Exception as e:
-        print(f"获取GPU{gpu_index}信息出错: {e}")
-        return None, None
+
+def get_auto_reserved_vram(total_vram):
+    if total_vram <= 8.0:
+        return 0.6
+    if total_vram <= 16.0:
+        return 0.8
+    return 1.0
 
 class flow_low_gpu:
     @classmethod
@@ -67,26 +72,30 @@ class flow_low_gpu:
     FUNCTION = "set_vram"
     CATEGORY = "Apt_Preset/flow"
 
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("nan")
+
     def set_vram(self, anything, reserved, mode="auto", unique_id=None, extra_pnginfo=None):
-        reserved_bytes = int(max(0.0, reserved) * (1024 ** 3))
-        
-        if mode == "auto":
-            if has_gpu:
-                total_gpu, used_gpu = get_gpu_memory_info(gpu_index=0)
-                if total_gpu and used_gpu and total_gpu > 0:
-                    auto_reserved = used_gpu + reserved
-                    auto_reserved = max(0.0, min(auto_reserved, total_gpu))
-                    model_management.EXTRA_RESERVED_VRAM = int(auto_reserved * (1024 ** 3))
-                    print(f'✅ 自动显存预留模式生效 | 总显存={total_gpu}GB | 已用={used_gpu}GB | 最终预留={auto_reserved:.2f}GB')
-                else:
-                    model_management.EXTRA_RESERVED_VRAM = reserved_bytes
-                    print(f'⚠️ 自动模式读取显存失败，启用兜底预留值: {reserved}GB')
-            else:
-                model_management.EXTRA_RESERVED_VRAM = reserved_bytes
-                print(f'⚠️ 无可用GPU，自动模式失效，使用手动预留值: {reserved}GB')
+        requested_reserved = max(0.0, reserved)
+        device = model_management.get_torch_device()
+        device_type = getattr(device, "type", None)
+
+        if device_type in (None, "cpu", "mps"):
+            final_reserved = requested_reserved
+            print(f'flow_low_gpu: 未检测到独立GPU，使用预留值 {final_reserved:.2f}GB')
         else:
-            model_management.EXTRA_RESERVED_VRAM = reserved_bytes
-            print(f'✅ 手动显存预留模式生效 | 固定预留={reserved}GB')
+            total_vram = model_management.get_total_memory(device) / GIB
+            max_reserved = max(0.0, total_vram - 0.8)
+            if mode == "auto":
+                auto_reserved = get_auto_reserved_vram(total_vram)
+                final_reserved = min(max(requested_reserved, auto_reserved), max_reserved)
+                print(f'flow_low_gpu: 自动显存预留生效 | 设备={device} | 总显存={total_vram:.2f}GB | 预留={final_reserved:.2f}GB')
+            else:
+                final_reserved = min(requested_reserved, max_reserved)
+                print(f'flow_low_gpu: 手动显存预留生效 | 设备={device} | 预留={final_reserved:.2f}GB')
+
+        model_management.EXTRA_RESERVED_VRAM = int(final_reserved * GIB)
 
         return (anything,)
 
@@ -579,100 +588,6 @@ async def apt_preset_flow_bridge_image_save_edit(request):
 
 
 
-class flow_auto_pixel:
-    upscale_methods = ["bicubic","nearest-exact", "bilinear", "area",  "lanczos"]
-    crop_methods = ["disabled", "center"]
-    # 包含英文的选项列表
-    threshold_types = ["(W+H) < threshold", "W*H < threshold", "width <= height", "width > height"]
-    
-    @classmethod
-    def INPUT_TYPES(s):
-        return {"required": { 
-                "model_name": (folder_paths.get_filename_list("upscale_models"), ),
-                "image": ("IMAGE",), 
-                "threshold_type": (s.threshold_types,),  # 使用更新后的选项列表
-                "pixels_threshold": ("INT", { "min": 0, "max": 90000,  "step": 1,}),
-                "upscale_method_True": (s.upscale_methods,),
-                "upscale_method_False": (s.upscale_methods,),
-                "low_pixels_True": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.01}),      # 名称修改
-                "high_pixels_False": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.01}),   # 名称修改
-                "divisible_by": ("INT", { "default": 8, "min": 0, "max": 512, "step": 1, }),
-                }
-                }
-    
-
-    RETURN_TYPES = ("IMAGE", )  
-    RETURN_NAMES = ("image", )  
-    FUNCTION = "auto_pixel"
-    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
-
-    def auto_pixel(self, model_name, image, threshold_type, 
-                pixels_threshold, upscale_method_True, upscale_method_False, low_pixels_True, high_pixels_False, divisible_by):
-
-
-        # 处理不同维度的图像张量
-        if len(image.shape) == 3:
-            # 形状为 (H, W, C) 的单张图像
-            height, width, channels = image.shape
-            batch_size = 1
-        elif len(image.shape) == 4:
-            # 形状为 (B, H, W, C) 的批次图像
-            batch_size, height, width, channels = image.shape
-        else:
-            raise ValueError(f"Unsupported image shape: {image.shape}")
-
-        # 根据选择的threshold_type确定使用哪种逻辑
-        if threshold_type == "(W+H) < threshold":
-            if (width + height) < pixels_threshold:
-                megapixels = low_pixels_True
-                upscale_method = upscale_method_True
-            else:
-                megapixels = high_pixels_False
-                upscale_method = upscale_method_False
-        elif threshold_type == "W*H < threshold":
-            if (width * height) < pixels_threshold:
-                megapixels = low_pixels_True
-                upscale_method = upscale_method_True
-            else:
-                megapixels = high_pixels_False
-                upscale_method = upscale_method_False
-        elif threshold_type == "width <= height":
-            megapixels = low_pixels_True
-            upscale_method = upscale_method_True
-        elif threshold_type == "width > height":
-            megapixels = high_pixels_False
-            upscale_method = upscale_method_False
-            
-        model = UpscaleModelLoader().load_model(model_name)[0]
-        image = ImageUpscaleWithModel().upscale(model, image)[0]
-
-        if len(image.shape) == 3:
-            H, W, C = image.shape
-        else:  # len(image.shape) == 4
-            B, H, W, C = image.shape
-        
-        if divisible_by > 1:
-            new_width = W - (W % divisible_by)
-            new_height = H - (H % divisible_by)
-            
-            if new_width == 0:
-                new_width = divisible_by
-            if new_height == 0:
-                new_height = divisible_by
-            if new_width != W or new_height != H:
-                # 根据图像维度调整处理方式
-                if len(image.shape) == 3:
-                    image = image.movedim(-1, 0)  # (H, W, C) -> (C, H, W)
-                    image = common_upscale(image.unsqueeze(0), new_width, new_height, upscale_method, "center")
-                    image = image.squeeze(0).movedim(0, -1)  # (C, H, W) -> (H, W, C)
-                else:  # len(image.shape) == 4
-                    image = image.movedim(-1, 1)  # (B, H, W, C) -> (B, C, H, W)
-                    image = common_upscale(image, new_width, new_height, upscale_method, "center")
-                    image = image.movedim(1, -1)  # (B, C, H, W) -> (B, H, W, C)
-
-        return (image,)
-
-
 
 class flow_case_tentor:
     @classmethod
@@ -958,7 +873,7 @@ class flow_sch_control:
     FUNCTION = "set_range"
     RETURN_TYPES = ("INT", "INT",)
     RETURN_NAMES = ("seedIndex", "total",)
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
 
     def set_range(
         self,
@@ -1026,7 +941,7 @@ class flow_tensor_Unify:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("unified_image", "unified_mask")
     FUNCTION = "unify_media"
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
     
     def unify_media(self, keep_alpha=False, image=None, mask=None):
         if image is None:
@@ -1129,6 +1044,155 @@ class flow_BooleanSwitch:
                 return (ExecutionBlocker(None),)
             else:
                 return ({},)
+
+
+class flow_stage_index_switch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "stage_index": ("INT", {"default": 1, "min": 1, "max": 10000, "step": 1}),
+                "open_stage_index": ("INT", {"default": 1, "min": 1, "max": 10000, "step": 1}),
+            },
+            "optional": {
+                "any_input": (any_type, {"lazy": True}),
+            },
+        }
+
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("any_output",)
+    FUNCTION = "process"
+    CATEGORY = "Apt_Preset/flow"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
+    def check_lazy_status(self, stage_index, open_stage_index, any_input=None):
+        if stage_index == open_stage_index and any_input is None:
+            return ["any_input"]
+        return []
+
+    def process(self, stage_index, open_stage_index, any_input=None):
+        if stage_index == open_stage_index and any_input is not None:
+            return (any_input,)
+
+        if ExecutionBlocker is not None:
+            return (ExecutionBlocker(None),)
+        return ({},)
+
+
+def _frame_slice_indices(length, start_frame, end_frame, device=None):
+    if length < 1:
+        raise ValueError("flow_frame_slice: input contains no frames")
+
+    def normalize(index):
+        index = int(index)
+        if index < 0:
+            index += length
+        return max(0, min(length - 1, index))
+
+    start = normalize(start_frame)
+    end = normalize(end_frame)
+    step = 1 if start <= end else -1
+    return torch.arange(start, end + step, step, device=device, dtype=torch.long)
+
+
+def _frame_slice_tensor(tensor, indices, dim=0):
+    return torch.index_select(tensor, dim, indices.to(tensor.device)).clone()
+
+
+class flow_frame_slice:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "start_frame": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647, "step": 1}),
+                "end_frame": ("INT", {"default": -1, "min": -2147483648, "max": 2147483647, "step": 1}),
+            },
+            "optional": {
+                "image": ("IMAGE",),
+                "latent": ("LATENT",),
+                "video": ("VIDEO",),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "LATENT", "VIDEO")
+    RETURN_NAMES = ("image", "latent", "video")
+    FUNCTION = "slice_frames"
+    CATEGORY = "Apt_Preset/flow"
+
+    def slice_frames(self, start_frame=0, end_frame=-1, image=None, latent=None, video=None):
+        image_out = ExecutionBlocker(None)
+        latent_out = ExecutionBlocker(None)
+        video_out = ExecutionBlocker(None)
+
+        if image is not None:
+            indices = _frame_slice_indices(image.shape[0], start_frame, end_frame, image.device)
+            image_out = _frame_slice_tensor(image, indices)
+
+        if latent is not None:
+            samples = latent.get("samples")
+            if not isinstance(samples, torch.Tensor):
+                raise TypeError("flow_frame_slice: latent samples must be a tensor")
+            indices = _frame_slice_indices(samples.shape[0], start_frame, end_frame, samples.device)
+            latent_out = latent.copy()
+            latent_out["samples"] = _frame_slice_tensor(samples, indices)
+
+            noise_mask = latent.get("noise_mask")
+            if isinstance(noise_mask, torch.Tensor):
+                if noise_mask.shape[0] == samples.shape[0]:
+                    latent_out["noise_mask"] = _frame_slice_tensor(noise_mask, indices)
+                else:
+                    latent_out["noise_mask"] = noise_mask.clone()
+
+            batch_index = latent.get("batch_index")
+            if isinstance(batch_index, (list, tuple)) and len(batch_index) == samples.shape[0]:
+                latent_out["batch_index"] = [batch_index[index] for index in indices.cpu().tolist()]
+
+        if video is not None:
+            components = video.get_components()
+            images = components.images
+            indices = _frame_slice_indices(images.shape[0], start_frame, end_frame, images.device)
+            video_images = _frame_slice_tensor(images, indices)
+
+            alpha = components.alpha
+            if isinstance(alpha, torch.Tensor):
+                if alpha.ndim > 0 and alpha.shape[0] == images.shape[0]:
+                    alpha = _frame_slice_tensor(alpha, indices)
+                else:
+                    alpha = alpha.clone()
+
+            audio = components.audio
+            if audio is not None:
+                frame_rate = float(components.frame_rate)
+                if frame_rate <= 0:
+                    raise ValueError("flow_frame_slice: video frame rate must be greater than zero")
+                waveform = audio.get("waveform")
+                sample_rate = int(audio.get("sample_rate", 0))
+                if isinstance(waveform, torch.Tensor) and sample_rate > 0:
+                    selected = indices.cpu()
+                    first_frame = int(selected.min().item())
+                    last_frame = int(selected.max().item()) + 1
+                    sample_start = round(first_frame / frame_rate * sample_rate)
+                    sample_end = round(last_frame / frame_rate * sample_rate)
+                    waveform = waveform[..., sample_start:sample_end].clone()
+                    if int(selected[0]) > int(selected[-1]):
+                        waveform = torch.flip(waveform, dims=(-1,))
+                    audio = dict(audio)
+                    audio["waveform"] = waveform
+
+            video_components = Types.VideoComponents(
+                images=video_images,
+                alpha=alpha,
+                audio=audio,
+                frame_rate=components.frame_rate,
+                metadata=components.metadata,
+            )
+            bit_depth = video.get_bit_depth() if hasattr(video, "get_bit_depth") else 8
+            video_out = InputImpl.VideoFromComponents(video_components, bit_depth=bit_depth)
+
+        return image_out, latent_out, video_out
 
 
 
@@ -1317,6 +1381,1050 @@ class AlwaysEqualProxy(str):
 any_type = AlwaysEqualProxy("*")
 def ByPassTypeTuple(t): return t
 
+
+_STAGE_BRIDGE_VERSION = 1
+_STAGE_BRIDGE_TYPES = ["auto", "latent", "image", "mask", "video", "audio", "tensor", "json"]
+_STAGE_INFO_TYPE = "FLOW_STAGE_INFO"
+_STAGE_ACTIVE_RUN_IDS = {}
+_STAGE_BEGIN_NODE_IDS = {}
+
+
+def _stage_safe_name(value):
+    value = str(value or "default").strip() or "default"
+    readable = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in value)[:48]
+    return f"{readable}_{hashlib.sha256(value.encode('utf-8')).hexdigest()[:10]}"
+
+
+def _stage_root_dir():
+    root = os.path.abspath(os.path.join(folder_paths.get_output_directory(), ".apt_stage_bridge"))
+    os.makedirs(root, exist_ok=True)
+    return root
+
+
+def _stage_run_dir(run_id):
+    root = _stage_root_dir()
+    path = os.path.abspath(os.path.join(root, _stage_safe_name(run_id)))
+    if os.path.commonpath((root, path)) != root:
+        raise ValueError("flow_stage: invalid run_id")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _stage_new_run_id():
+    base = datetime.now().strftime("%y%m%d%H%M%S")
+    root = _stage_root_dir()
+    candidate = base
+    suffix = 0
+    while os.path.exists(os.path.join(root, _stage_safe_name(candidate))):
+        suffix += 1
+        candidate = f"{base}_{suffix:03d}"
+    return candidate
+
+
+def _stage_feedback(unique_id, widget_name, value):
+    if unique_id is None:
+        return
+    try:
+        server = PromptServer.instance
+        PromptServer.instance.send_sync(
+            "node-feedback",
+            {"node_id": unique_id, "widget_name": widget_name, "type": "value", "value": value},
+            server.client_id,
+        )
+    except Exception:
+        pass
+
+
+def _stage_state_path(run_dir):
+    return os.path.join(run_dir, "state.json")
+
+
+def _stage_load_state(run_dir):
+    path = _stage_state_path(run_dir)
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as handle:
+        state = json.load(handle)
+    if state.get("version") != _STAGE_BRIDGE_VERSION:
+        raise ValueError("flow_stage: unsupported state version")
+    return state
+
+
+def _stage_write_json(path, value):
+    temp_path = path + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(value, handle, ensure_ascii=False, indent=2)
+    os.replace(temp_path, path)
+
+
+def _stage_json_value(value):
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, (list, tuple)):
+        return [_stage_json_value(item) for item in value]
+    if isinstance(value, Mapping):
+        return {str(key): _stage_json_value(item) for key, item in value.items()}
+    raise TypeError(f"flow_stage: {type(value).__name__} cannot be stored as JSON")
+
+
+def _stage_cpu_tensor(value):
+    if not isinstance(value, torch.Tensor):
+        raise TypeError(f"flow_stage: expected a tensor, got {type(value).__name__}")
+    return value.detach().to(device="cpu").contiguous()
+
+
+def _stage_detect_type(data, requested):
+    if requested != "auto":
+        return requested
+    if hasattr(data, "get_components"):
+        return "video"
+    if isinstance(data, Mapping) and "samples" in data:
+        return "latent"
+    if isinstance(data, Mapping) and isinstance(data.get("latent"), Mapping) and "samples" in data["latent"]:
+        return "latent"
+    if isinstance(data, Mapping) and "waveform" in data:
+        return "audio"
+    if isinstance(data, torch.Tensor):
+        if data.ndim == 4 and data.shape[-1] in (1, 3, 4):
+            return "image"
+        if data.ndim == 3:
+            return "mask"
+        return "tensor"
+    return "json"
+
+
+def _stage_encode_payload(data, requested_type):
+    payload_type = _stage_detect_type(data, requested_type)
+    if payload_type == "latent" and isinstance(data, Mapping) and "samples" not in data:
+        data = data.get("latent")
+    elif payload_type == "image" and isinstance(data, Mapping) and isinstance(data.get("images"), torch.Tensor):
+        data = data["images"]
+    tensors = {"stage_format": torch.empty(0, dtype=torch.uint8)}
+    descriptor = {"version": _STAGE_BRIDGE_VERSION, "type": payload_type}
+
+    if payload_type == "latent":
+        if not isinstance(data, Mapping) or "samples" not in data:
+            raise TypeError("flow_stage: latent data must contain samples")
+        samples = data["samples"]
+        if isinstance(samples, comfy.nested_tensor.NestedTensor):
+            names = []
+            for index, tensor in enumerate(samples.unbind()):
+                name = f"samples_{index}"
+                tensors[name] = _stage_cpu_tensor(tensor)
+                names.append(name)
+            descriptor["samples"] = {"nested": True, "names": names}
+        else:
+            tensors["samples"] = _stage_cpu_tensor(samples)
+            descriptor["samples"] = {"nested": False, "names": ["samples"]}
+
+        fields = []
+        for index, (key, value) in enumerate(data.items()):
+            if key == "samples":
+                continue
+            if isinstance(value, comfy.nested_tensor.NestedTensor):
+                names = []
+                for nested_index, tensor in enumerate(value.unbind()):
+                    name = f"field_{index}_{nested_index}"
+                    tensors[name] = _stage_cpu_tensor(tensor)
+                    names.append(name)
+                fields.append({"key": str(key), "nested_tensors": names})
+            elif isinstance(value, torch.Tensor):
+                name = f"field_{index}"
+                tensors[name] = _stage_cpu_tensor(value)
+                fields.append({"key": str(key), "tensor": name})
+            else:
+                fields.append({"key": str(key), "value": _stage_json_value(value)})
+        descriptor["fields"] = fields
+
+    elif payload_type in ("image", "mask", "tensor"):
+        tensors["data"] = _stage_cpu_tensor(data)
+
+    elif payload_type == "audio":
+        if not isinstance(data, Mapping) or "waveform" not in data:
+            raise TypeError("flow_stage: audio data must contain waveform")
+        tensors["waveform"] = _stage_cpu_tensor(data["waveform"])
+        descriptor["sample_rate"] = int(data["sample_rate"])
+
+    elif payload_type == "video":
+        if not hasattr(data, "get_components"):
+            raise TypeError("flow_stage: video data must provide get_components()")
+        components = data.get_components()
+        tensors["images"] = _stage_cpu_tensor(components.images)
+        if components.alpha is not None:
+            tensors["alpha"] = _stage_cpu_tensor(components.alpha)
+            descriptor["alpha"] = True
+        audio = components.audio
+        if audio is not None:
+            tensors["audio_waveform"] = _stage_cpu_tensor(audio["waveform"])
+            descriptor["audio_sample_rate"] = int(audio["sample_rate"])
+        frame_rate = Fraction(components.frame_rate)
+        descriptor["frame_rate"] = [frame_rate.numerator, frame_rate.denominator]
+        descriptor["bit_depth"] = int(data.get_bit_depth()) if hasattr(data, "get_bit_depth") else 8
+        if components.metadata is not None:
+            descriptor["metadata"] = _stage_json_value(components.metadata)
+
+    elif payload_type == "json":
+        descriptor["value"] = _stage_json_value(data)
+    else:
+        raise ValueError(f"flow_stage: unsupported data type {payload_type}")
+
+    return tensors, descriptor
+
+
+def _stage_decode_payload(path):
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"flow_stage: checkpoint not found: {path}")
+    tensors, metadata = comfy.utils.load_torch_file(path, safe_load=True, return_metadata=True)
+    if metadata is None or "stage_payload" not in metadata:
+        raise ValueError("flow_stage: checkpoint metadata is missing")
+    descriptor = json.loads(metadata["stage_payload"])
+    if descriptor.get("version") != _STAGE_BRIDGE_VERSION:
+        raise ValueError("flow_stage: unsupported checkpoint version")
+    payload_type = descriptor["type"]
+
+    if payload_type == "latent":
+        sample_info = descriptor["samples"]
+        sample_tensors = [tensors[name] for name in sample_info["names"]]
+        samples = comfy.nested_tensor.NestedTensor(sample_tensors) if sample_info["nested"] else sample_tensors[0]
+        data = {"samples": samples}
+        for field in descriptor.get("fields", []):
+            if "nested_tensors" in field:
+                data[field["key"]] = comfy.nested_tensor.NestedTensor(
+                    [tensors[name] for name in field["nested_tensors"]]
+                )
+            else:
+                data[field["key"]] = tensors[field["tensor"]] if "tensor" in field else field.get("value")
+        return data
+    if payload_type in ("image", "mask", "tensor"):
+        return tensors["data"]
+    if payload_type == "audio":
+        return {"waveform": tensors["waveform"], "sample_rate": int(descriptor["sample_rate"])}
+    if payload_type == "video":
+        audio = None
+        if "audio_waveform" in tensors:
+            audio = {
+                "waveform": tensors["audio_waveform"],
+                "sample_rate": int(descriptor["audio_sample_rate"]),
+            }
+        numerator, denominator = descriptor["frame_rate"]
+        components = Types.VideoComponents(
+            images=tensors["images"],
+            alpha=tensors.get("alpha"),
+            audio=audio,
+            frame_rate=Fraction(numerator, denominator),
+            metadata=descriptor.get("metadata"),
+        )
+        return InputImpl.VideoFromComponents(components, bit_depth=int(descriptor.get("bit_depth", 8)))
+    if payload_type == "json":
+        return descriptor.get("value")
+    raise ValueError(f"flow_stage: unsupported checkpoint type {payload_type}")
+
+
+class flow_stage_begin:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "run_id": ("STRING", {"default": "default"}),
+                "total": ("INT", {"default": 3, "min": 1, "max": 5000}),
+                "current_index": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 5000,
+                    "tooltip": "当前阶段（1～总阶段数）；可手动选择断点阶段，完成后自动回到1",
+                }),
+            },
+            "optional": {
+                "initial_data": (any_type,),
+            },
+            "hidden": {"unique_id": "UNIQUE_ID"},
+        }
+
+    RETURN_TYPES = (_STAGE_INFO_TYPE, "INT")
+    RETURN_NAMES = ("stage_info", "stage_index")
+    FUNCTION = "begin"
+    CATEGORY = "Apt_Preset/flow"
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("nan")
+
+    def begin(self, run_id, total, current_index=1,
+              initial_data=None, unique_id=None):
+        total = int(total)
+        requested_index = int(current_index)
+        if requested_index < 1 or requested_index > total:
+            raise ValueError(f"flow_stage_begin: current_index must be between 1 and {total}")
+
+        node_key = str(unique_id or "")
+        effective_run_id = str(run_id or "").strip()
+        if (not effective_run_id or effective_run_id == "default") and node_key:
+            effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "")
+
+        state = None
+        run_dir = None
+        if effective_run_id:
+            run_dir = _stage_run_dir(effective_run_id)
+            state = _stage_load_state(run_dir)
+
+        stage_index = requested_index - 1
+        if stage_index == 0:
+            effective_run_id = _stage_new_run_id()
+            run_dir = _stage_run_dir(effective_run_id)
+            state = None
+            data = initial_data
+        else:
+            if not effective_run_id or state is None:
+                raise ValueError(
+                    "flow_stage_begin: cannot resume from this stage because the previous run checkpoint is missing"
+                )
+            if int(state["total"]) != total:
+                raise ValueError("flow_stage_begin: total does not match the saved run")
+            if not state.get("complete", False) and int(state["next_stage"]) == stage_index:
+                filename = state.get("payload")
+            else:
+                filename = f"stage_{stage_index - 1:05d}.safetensors"
+            if filename is None:
+                if not state.get("control_only", False):
+                    raise ValueError("flow_stage_begin: previous stage checkpoint is missing")
+                data = None
+            else:
+                if not filename or os.path.basename(filename) != filename:
+                    raise ValueError("flow_stage_begin: invalid checkpoint filename")
+                payload_path = os.path.join(run_dir, filename)
+                if os.path.isfile(payload_path):
+                    data = _stage_decode_payload(payload_path)
+                elif state.get("control_only", False):
+                    filename = None
+                    data = None
+                else:
+                    raise FileNotFoundError(f"flow_stage_begin: checkpoint not found: {payload_path}")
+            if state.get("complete", False) or int(state["next_stage"]) != stage_index:
+                state = {
+                    "version": _STAGE_BRIDGE_VERSION,
+                    "run_id": effective_run_id,
+                    "total": total,
+                    "completed_stage": stage_index - 1,
+                    "next_stage": stage_index,
+                    "payload": filename,
+                    "payload_type": "auto" if filename is not None else None,
+                    "control_only": filename is None,
+                    "complete": False,
+                    "restart_pending": True,
+                }
+                _stage_write_json(_stage_state_path(run_dir), state)
+
+        if node_key:
+            _STAGE_ACTIVE_RUN_IDS[node_key] = effective_run_id
+            _STAGE_BEGIN_NODE_IDS[effective_run_id] = node_key
+        _stage_feedback(unique_id, "run_id", effective_run_id)
+        _stage_feedback(unique_id, "current_index", stage_index + 1)
+
+        stage_info = {
+            "version": _STAGE_BRIDGE_VERSION,
+            "run_id": effective_run_id,
+            "stage_index": stage_index,
+            "total": total,
+            "is_first": stage_index == 0,
+            "is_last": stage_index == total - 1,
+            "stage_data": data,
+        }
+        return stage_info, stage_index + 1
+
+
+def _stage_validate_info(stage_info):
+    if not isinstance(stage_info, Mapping):
+        raise TypeError("flow_stage: stage_info must come from flow_stage_begin")
+    if int(stage_info.get("version", -1)) != _STAGE_BRIDGE_VERSION:
+        raise ValueError("flow_stage: unsupported stage_info version")
+    run_id = str(stage_info.get("run_id") or "").strip()
+    stage_index = int(stage_info.get("stage_index", -1))
+    total = int(stage_info.get("total", 0))
+    if not run_id or total < 1 or stage_index < 0 or stage_index >= total:
+        raise ValueError("flow_stage: invalid stage_info")
+    return run_id, stage_index, total
+
+
+class flow_stage_data:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "stage_info": (_STAGE_INFO_TYPE,),
+            },
+        }
+
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("data",)
+    FUNCTION = "get_data"
+    CATEGORY = "Apt_Preset/flow"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
+    def get_data(self, stage_info):
+        _stage_validate_info(stage_info)
+        data = stage_info.get("stage_data")
+        if data is None:
+            return (ExecutionBlocker(None),)
+        return (data,)
+
+
+class flow_stage_unpack:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "stage_info": (_STAGE_INFO_TYPE,),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK", "LATENT", "VIDEO", "AUDIO", "STRING")
+    RETURN_NAMES = ("image", "mask", "latent", "video", "audio", "text")
+    FUNCTION = "unpack"
+    CATEGORY = "Apt_Preset/flow"
+
+    def unpack(self, stage_info):
+        _stage_validate_info(stage_info)
+        data = stage_info.get("stage_data")
+        image = ExecutionBlocker(None)
+        mask = ExecutionBlocker(None)
+        latent = ExecutionBlocker(None)
+        video = ExecutionBlocker(None)
+        audio = ExecutionBlocker(None)
+        text = ExecutionBlocker(None)
+
+        if data is None:
+            return image, mask, latent, video, audio, text
+
+        payload_type = _stage_detect_type(data, "auto")
+        if payload_type == "image":
+            image = data
+        elif payload_type == "mask":
+            mask = data
+        elif payload_type == "latent":
+            latent = data.get("latent") if "samples" not in data else data
+        elif payload_type == "video":
+            video = data
+        elif payload_type == "audio":
+            audio = data
+        elif isinstance(data, str):
+            text = data
+
+        return image, mask, latent, video, audio, text
+
+
+def _stage_list_collect(run_dir, total):
+    items = []
+    for i in range(total):
+        path = os.path.join(run_dir, f"stage_{i:05d}.safetensors")
+        if os.path.isfile(path):
+            items.append(_stage_decode_payload(path))
+    return items
+
+
+class flow_stage_end:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "stage_info": (_STAGE_INFO_TYPE,),
+                "data_type": (_STAGE_BRIDGE_TYPES, {"default": "auto"}),
+                "unload_models": ("BOOLEAN", {"default": False}),
+                "free_memory": ("BOOLEAN", {"default": True}),
+                "free_memory_interval": ("INT", {"default": 1, "min": 1, "max": 4096, "step": 1}),
+            },
+            "optional": {
+                "data": (any_type,),
+            },
+        }
+
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("list_data",)
+    OUTPUT_IS_LIST = (True,)
+    FUNCTION = "commit"
+    CATEGORY = "Apt_Preset/flow"
+    OUTPUT_NODE = True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("nan")
+
+    def commit(self, data=None, stage_info=None, data_type="auto", unload_models=False, free_memory=True, free_memory_interval=1):
+        run_id, stage_index, total = _stage_validate_info(stage_info)
+
+        run_dir = _stage_run_dir(run_id)
+        state = _stage_load_state(run_dir)
+        if stage_index == 0:
+            restart_pending = bool(
+                state is not None
+                and state.get("restart_pending", False)
+                and int(state.get("next_stage", -1)) == 0
+            )
+            if state is not None and not state.get("complete", False) and not restart_pending:
+                raise ValueError("flow_stage_end: an active run already exists for this run_id")
+        else:
+            if state is None or state.get("complete", False):
+                raise ValueError("flow_stage_end: previous stage state is missing")
+            if int(state["total"]) != total or int(state["next_stage"]) != stage_index:
+                raise ValueError("flow_stage_end: stage order does not match the saved state")
+
+        filename = None
+        payload_type = None
+        if data is not None:
+            tensors, descriptor = _stage_encode_payload(data, data_type)
+            filename = f"stage_{stage_index:05d}.safetensors"
+            payload_path = os.path.join(run_dir, filename)
+            temp_path = payload_path + ".tmp"
+            try:
+                comfy.utils.save_torch_file(
+                    tensors,
+                    temp_path,
+                    metadata={"stage_payload": json.dumps(descriptor, ensure_ascii=False)},
+                )
+                os.replace(temp_path, payload_path)
+            finally:
+                if os.path.isfile(temp_path):
+                    os.remove(temp_path)
+            payload_type = descriptor["type"]
+
+        complete = stage_index == total - 1
+        next_state = {
+            "version": _STAGE_BRIDGE_VERSION,
+            "run_id": str(run_id),
+            "total": total,
+            "completed_stage": stage_index,
+            "next_stage": stage_index + 1,
+            "payload": filename,
+            "payload_type": payload_type,
+            "control_only": data is None,
+            "complete": complete,
+        }
+        _stage_write_json(_stage_state_path(run_dir), next_state)
+
+        begin_node_id = _STAGE_BEGIN_NODE_IDS.get(run_id)
+        _stage_feedback(begin_node_id, "current_index", 1 if complete else stage_index + 2)
+        if complete:
+            _STAGE_BEGIN_NODE_IDS.pop(run_id, None)
+
+        PromptServer.instance.prompt_queue.set_flag("unload_models", bool(unload_models))
+        should_free_memory = free_memory and (stage_index + 1) % free_memory_interval == 0
+        PromptServer.instance.prompt_queue.set_flag("free_memory", should_free_memory)
+
+        list_data = ExecutionBlocker(None)
+        if complete:
+            list_data = _stage_list_collect(run_dir, total)
+
+        if not complete:
+            server = PromptServer.instance
+            server.send_sync("add-queue", {}, server.client_id)
+
+        if filename is None:
+            message = f"stage {stage_index + 1}/{total} completed (control only)"
+        else:
+            message = f"stage {stage_index + 1}/{total} saved: {payload_path}"
+        return {"ui": {"text": [message]}, "result": (list_data,)}
+
+
+def _stage_batch_dir(run_id):
+    run_dir = _stage_run_dir(run_id)
+    path = os.path.join(run_dir, "batches")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _stage_batch_save(data, batch_dir, kind, stage_index, storage_kind=None):
+    tensors, descriptor = _stage_encode_payload(data, kind)
+    filename = f"{storage_kind or kind}_{stage_index:05d}.safetensors"
+    path = os.path.join(batch_dir, filename)
+    temp_path = path + ".tmp"
+    try:
+        comfy.utils.save_torch_file(
+            tensors,
+            temp_path,
+            metadata={"stage_payload": json.dumps(descriptor, ensure_ascii=False)},
+        )
+        os.replace(temp_path, path)
+    finally:
+        if os.path.isfile(temp_path):
+            os.remove(temp_path)
+
+
+def _stage_batch_load(batch_dir, kind, stage_index):
+    path = os.path.join(batch_dir, f"{kind}_{stage_index:05d}.safetensors")
+    if not os.path.isfile(path):
+        return None
+    return _stage_decode_payload(path)
+
+
+def _stage_batch_concat_image(items):
+    if not items:
+        return ExecutionBlocker(None)
+    ref = items[0]
+    ref_h, ref_w = int(ref.shape[1]), int(ref.shape[2])
+    out = [ref]
+    for tensor in items[1:]:
+        if tensor.shape[1:] != ref.shape[1:]:
+            tensor = common_upscale(
+                tensor.movedim(-1, 1), ref_w, ref_h, "bilinear", "center"
+            ).movedim(1, -1)
+        out.append(tensor)
+    return torch.cat(out, dim=0)
+
+
+def _stage_batch_concat_mask(items):
+    if not items:
+        return ExecutionBlocker(None)
+    normalized = [tensor.unsqueeze(0) if tensor.ndim == 2 else tensor for tensor in items]
+    ref = normalized[0]
+    ref_h, ref_w = int(ref.shape[-2]), int(ref.shape[-1])
+    out = [ref]
+    for tensor in normalized[1:]:
+        if tensor.shape[-2:] != ref.shape[-2:]:
+            tensor = common_upscale(
+                tensor.unsqueeze(1), ref_w, ref_h, "bilinear", "center"
+            ).squeeze(1)
+        out.append(tensor)
+    return torch.cat(out, dim=0)
+
+
+def _stage_latent_to_list(samples):
+    if isinstance(samples, comfy.nested_tensor.NestedTensor):
+        return list(samples.unbind())
+    return [samples[index] for index in range(samples.shape[0])]
+
+
+def _stage_batch_concat_latent(items):
+    if not items:
+        return ExecutionBlocker(None)
+    merged = items[0]
+    samples_out = merged.copy()
+    s1 = merged["samples"]
+    use_nested = isinstance(s1, comfy.nested_tensor.NestedTensor)
+    for nxt in items[1:]:
+        s2 = nxt["samples"]
+        if use_nested or isinstance(s2, comfy.nested_tensor.NestedTensor):
+            use_nested = True
+            s1 = comfy.nested_tensor.NestedTensor(_stage_latent_to_list(s1) + _stage_latent_to_list(s2))
+        else:
+            if s1.shape[1:] != s2.shape[1:]:
+                s2 = common_upscale(s2, s1.shape[3], s1.shape[2], "bilinear", "center")
+            s1 = torch.cat((s1, s2), dim=0)
+    samples_out["samples"] = s1
+    return samples_out
+
+
+def _stage_batch_concat_audio(items):
+    if not items:
+        return ExecutionBlocker(None)
+    sample_rate = int(items[0]["sample_rate"])
+    waveforms = [item["waveform"] for item in items]
+    return {"waveform": torch.cat(waveforms, dim=2), "sample_rate": sample_rate}
+
+
+def _stage_video_segment_path(batch_dir, stage_index):
+    return os.path.join(batch_dir, "video_segments", f"{stage_index:05d}.mp4")
+
+
+def _stage_video_reference_path(batch_dir):
+    return os.path.join(batch_dir, "video_reference.json")
+
+
+def _stage_video_normalize_audio(audio, sample_rate, channels, length):
+    if audio is None:
+        waveform = torch.zeros((1, channels, length), dtype=torch.float32)
+    else:
+        waveform = audio["waveform"]
+        source_rate = int(audio["sample_rate"])
+        if source_rate != sample_rate:
+            resampled_length = max(1, round(waveform.shape[-1] * sample_rate / source_rate))
+            waveform = torch.nn.functional.interpolate(waveform, size=resampled_length, mode="linear", align_corners=False)
+        source_channels = int(waveform.shape[1])
+        if source_channels != channels:
+            if channels == 1:
+                waveform = waveform.mean(dim=1, keepdim=True)
+            elif source_channels == 1:
+                waveform = waveform.repeat(1, channels, 1)
+            elif source_channels > channels:
+                waveform = waveform[:, :channels]
+            else:
+                waveform = torch.cat((waveform, waveform[:, -1:].repeat(1, channels - source_channels, 1)), dim=1)
+        if waveform.shape[-1] < length:
+            waveform = torch.nn.functional.pad(waveform, (0, length - waveform.shape[-1]))
+        else:
+            waveform = waveform[..., :length]
+    return {"waveform": waveform, "sample_rate": sample_rate}
+
+
+def _stage_save_video_segment(video, batch_dir, stage_index):
+    components = video.get_components()
+    images = components.images
+    audio = components.audio
+    reference_path = _stage_video_reference_path(batch_dir)
+    if stage_index == 0:
+        audio_sample_rate = int(audio["sample_rate"]) if audio is not None else 0
+        source_audio_channels = int(audio["waveform"].shape[1]) if audio is not None else 0
+        audio_channels = source_audio_channels if source_audio_channels in (1, 2, 6) else (2 if source_audio_channels else 0)
+        frame_rate = Fraction(components.frame_rate)
+        reference = {
+            "width": int(images.shape[2]),
+            "height": int(images.shape[1]),
+            "frame_rate": [frame_rate.numerator, frame_rate.denominator],
+            "bit_depth": int(video.get_bit_depth()) if hasattr(video, "get_bit_depth") else 8,
+            "audio_sample_rate": audio_sample_rate,
+            "audio_channels": audio_channels,
+        }
+        _stage_write_json(reference_path, reference)
+    else:
+        if not os.path.isfile(reference_path):
+            raise ValueError("flow_stage: first video segment information is missing")
+        with open(reference_path, "r", encoding="utf-8") as handle:
+            reference = json.load(handle)
+
+    width = int(reference["width"])
+    height = int(reference["height"])
+    if images.shape[1:3] != (height, width):
+        images = common_upscale(images.movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+    numerator, denominator = reference["frame_rate"]
+    frame_rate = Fraction(numerator, denominator)
+    normalized = Types.VideoComponents(
+        images=images,
+        audio=(
+            _stage_video_normalize_audio(
+                audio,
+                int(reference["audio_sample_rate"]),
+                int(reference["audio_channels"]),
+                max(1, math.ceil(images.shape[0] * int(reference["audio_sample_rate"]) / frame_rate)),
+            )
+            if int(reference["audio_sample_rate"]) > 0 else None
+        ),
+        frame_rate=frame_rate,
+    )
+    path = _stage_video_segment_path(batch_dir, stage_index)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temp_path = path + ".tmp.mp4"
+    try:
+        normalized_video = InputImpl.VideoFromComponents(normalized, bit_depth=int(reference["bit_depth"]))
+        normalized_video.save_to(
+            temp_path,
+            format=Types.VideoContainer.MP4,
+            codec=Types.VideoCodec.H264,
+            crf=18.0,
+        )
+        os.replace(temp_path, path)
+    finally:
+        if os.path.isfile(temp_path):
+            os.remove(temp_path)
+    return path
+
+
+def _stage_concat_video_segments(paths, output_path):
+    temp_path = output_path + ".tmp.mp4"
+    try:
+        with av.open(paths[0], mode="r") as first:
+            templates = [stream for stream in first.streams if stream.type in ("video", "audio")]
+            if not templates:
+                raise ValueError("flow_stage: saved segment has no usable stream")
+            with av.open(temp_path, mode="w", format="mp4", options={"movflags": "use_metadata_tags+faststart"}) as output:
+                output_streams = [output.add_stream_from_template(stream, opaque=True) for stream in templates]
+                timeline = Fraction(0)
+                for path in paths:
+                    with av.open(path, mode="r") as source:
+                        streams = [stream for stream in source.streams if stream.type in ("video", "audio")]
+                        if len(streams) != len(templates):
+                            raise ValueError("flow_stage: segment stream layouts do not match")
+                        bases = {}
+                        segment_end = Fraction(0)
+                        for packet in source.demux(streams):
+                            if packet.dts is None and packet.pts is None:
+                                continue
+                            stream_index = streams.index(packet.stream)
+                            template = templates[stream_index]
+                            if packet.stream.type != template.type or packet.stream.codec_context.name != template.codec_context.name:
+                                raise ValueError("flow_stage: segment codecs do not match")
+                            time_base = Fraction(packet.time_base or packet.stream.time_base)
+                            timestamps = [value for value in (packet.dts, packet.pts) if value is not None]
+                            base = bases.setdefault(stream_index, min(timestamps))
+                            offset = int(timeline / time_base)
+                            if packet.dts is not None:
+                                packet.dts = packet.dts - base + offset
+                            if packet.pts is not None:
+                                packet.pts = packet.pts - base + offset
+                            packet.time_base = time_base
+                            packet.stream = output_streams[stream_index]
+                            end_value = max(value for value in (packet.dts, packet.pts) if value is not None)
+                            segment_end = max(segment_end, (end_value + int(packet.duration or 0)) * time_base - timeline)
+                            output.mux(packet)
+                        if segment_end <= 0:
+                            raise ValueError("flow_stage: saved segment is empty")
+                        timeline += segment_end
+        os.replace(temp_path, output_path)
+    finally:
+        if os.path.isfile(temp_path):
+            os.remove(temp_path)
+    return InputImpl.VideoFromFile(output_path)
+
+
+def _stage_collect_outputs(batch_dir, total):
+    images = [_stage_batch_load(batch_dir, "image", index) for index in range(total)]
+    masks = [_stage_batch_load(batch_dir, "mask", index) for index in range(total)]
+    latents = [_stage_batch_load(batch_dir, "latent", index) for index in range(total)]
+    audios = [_stage_batch_load(batch_dir, "audio", index) for index in range(total)]
+    video_paths = [_stage_video_segment_path(batch_dir, index) for index in range(total)]
+    video_paths = [path for path in video_paths if os.path.isfile(path)]
+    merged_video = (
+        _stage_concat_video_segments(video_paths, os.path.join(batch_dir, "merged_video.mp4"))
+        if video_paths else ExecutionBlocker(None)
+    )
+    return (
+        _stage_batch_concat_image([item for item in images if item is not None]),
+        _stage_batch_concat_mask([item for item in masks if item is not None]),
+        _stage_batch_concat_latent([item for item in latents if item is not None]),
+        merged_video,
+        _stage_batch_concat_audio([item for item in audios if item is not None]),
+    )
+
+
+def _stage_collect_blockers():
+    return tuple(ExecutionBlocker(None) for _ in range(5))
+
+
+class _StageBatchDynamicInputs(dict):
+    """Provide the dynamic `value_*` slot for flow_stage_list / flow_stage_collect_multi.
+
+    This dict MUST be a real mapping (with at least one key) so it round-trips
+    through `json.dumps` / `json.loads` correctly. The previous implementation
+    relied on the ``__contains__`` / ``__getitem__`` overrides of a dict subclass,
+    but ``json`` only serializes the underlying items, so the frontend received
+    an empty ``{}`` and the optional slot was never materialised on Linux.
+    """
+
+    def __init__(self, max_count=1):
+        super().__init__()
+        for i in range(1, max_count + 1):
+            self[f"value_{i}"] = (any_type, {"lazy": True})
+
+    def __contains__(self, key):
+        return isinstance(key, str) and key.startswith("value_")
+
+    def __getitem__(self, key):
+        if key in self:
+            return (any_type, {"lazy": True})
+        raise KeyError(key)
+
+
+class flow_stage_list:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "stage_info": (_STAGE_INFO_TYPE,),
+            },
+            "optional": _StageBatchDynamicInputs(),
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+            },
+        }
+
+    RETURN_TYPES = (any_type, "LIST")
+    RETURN_NAMES = ("list", "array")
+    OUTPUT_IS_LIST = (True, False)
+    FUNCTION = "accumulate"
+    CATEGORY = "Apt_Preset/flow"
+    OUTPUT_NODE = True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("nan")
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
+    def check_lazy_status(self, stage_info, **kwargs):
+        _, stage_index, _ = _stage_validate_info(stage_info)
+        input_name = f"value_{stage_index + 1}"
+        if input_name in kwargs and kwargs[input_name] is None:
+            return [input_name]
+        return []
+
+    def accumulate(self, stage_info, unique_id=None, **kwargs):
+        run_id, stage_index, total = _stage_validate_info(stage_info)
+        input_name = f"value_{stage_index + 1}"
+        data = kwargs.get(input_name)
+        if data is None:
+            raise ValueError(f"flow_stage_list: {input_name} is not connected")
+
+        kind = _stage_detect_type(data, "auto")
+
+        batch_dir = os.path.join(_stage_batch_dir(run_id), _stage_safe_name(f"multi_{unique_id}"))
+        os.makedirs(batch_dir, exist_ok=True)
+        type_path = os.path.join(batch_dir, "multi_type.json")
+        if stage_index == 0:
+            _stage_write_json(type_path, {"type": kind})
+        else:
+            if not os.path.isfile(type_path):
+                raise ValueError("flow_stage_list: first stage type information is missing")
+            with open(type_path, "r", encoding="utf-8") as handle:
+                first_kind = json.load(handle).get("type")
+            if kind != first_kind:
+                raise TypeError(f"flow_stage_list: {input_name} must be {first_kind}, got {kind}")
+
+        _stage_batch_save(data, batch_dir, kind, stage_index, storage_kind="multi")
+        if stage_index != total - 1:
+            blocker = ExecutionBlocker(None)
+            return (blocker, blocker)
+
+        items = [_stage_batch_load(batch_dir, "multi", index) for index in range(total)]
+        if any(item is None for item in items):
+            missing = [str(index + 1) for index, item in enumerate(items) if item is None]
+            raise ValueError(f"flow_stage_list: missing stage data: {', '.join(missing)}")
+        return (items, items)
+
+
+class flow_stage_collect_single:
+    """Accumulate tensor batches and merge video/audio across flow_stage stages."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "stage_info": (_STAGE_INFO_TYPE,),
+            },
+            "optional": {
+                "image": ("IMAGE",),
+                "mask": ("MASK",),
+                "latent": ("LATENT",),
+                "video": ("VIDEO",),
+                "audio": ("AUDIO",),
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK", "LATENT", "VIDEO", "AUDIO")
+    RETURN_NAMES = ("image_batch", "mask_batch", "latent_batch", "merged_video", "merged_audio")
+    FUNCTION = "accumulate"
+    CATEGORY = "Apt_Preset/flow"
+    OUTPUT_NODE = True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("nan")
+
+    def accumulate(self, stage_info, image=None, mask=None, latent=None, video=None, audio=None, unique_id=None):
+        run_id, stage_index, total = _stage_validate_info(stage_info)
+        batch_dir = os.path.join(_stage_batch_dir(run_id), _stage_safe_name(f"single_{unique_id}"))
+        os.makedirs(batch_dir, exist_ok=True)
+
+        if image is not None:
+            _stage_batch_save(image, batch_dir, "image", stage_index)
+        if mask is not None:
+            _stage_batch_save(mask, batch_dir, "mask", stage_index)
+        if latent is not None:
+            _stage_batch_save(latent, batch_dir, "latent", stage_index)
+        if video is not None:
+            _stage_save_video_segment(video, batch_dir, stage_index)
+        if audio is not None:
+            _stage_batch_save(audio, batch_dir, "audio", stage_index)
+
+        if stage_index != total - 1:
+            return _stage_collect_blockers()
+
+        message = f"single-port stages {total}/{total} merged: {batch_dir}"
+        return {
+            "ui": {"text": [message]},
+            "result": _stage_collect_outputs(batch_dir, total),
+        }
+
+
+class flow_stage_collect_multi:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "stage_info": (_STAGE_INFO_TYPE,),
+            },
+            "optional": _StageBatchDynamicInputs(),
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK", "LATENT", "VIDEO", "AUDIO")
+    RETURN_NAMES = ("image_batch", "mask_batch", "latent_batch", "merged_video", "merged_audio")
+    FUNCTION = "accumulate"
+    CATEGORY = "Apt_Preset/flow"
+    OUTPUT_NODE = True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("nan")
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
+    def check_lazy_status(self, stage_info, **kwargs):
+        _, stage_index, _ = _stage_validate_info(stage_info)
+        input_name = f"value_{stage_index + 1}"
+        if input_name in kwargs and kwargs[input_name] is None:
+            return [input_name]
+        return []
+
+    def accumulate(self, stage_info, unique_id=None, **kwargs):
+        run_id, stage_index, total = _stage_validate_info(stage_info)
+        input_name = f"value_{stage_index + 1}"
+        data = kwargs.get(input_name)
+        if data is None:
+            raise ValueError(f"flow_stage_collect_multi: {input_name} is not connected")
+
+        kind = _stage_detect_type(data, "auto")
+        if kind not in ("image", "mask", "latent", "video", "audio"):
+            raise TypeError(f"flow_stage_collect_multi: {input_name} has unsupported type {kind}")
+
+        batch_dir = os.path.join(_stage_batch_dir(run_id), _stage_safe_name(f"multi_{unique_id}"))
+        os.makedirs(batch_dir, exist_ok=True)
+        type_path = os.path.join(batch_dir, "type.json")
+        if stage_index == 0:
+            _stage_write_json(type_path, {"type": kind})
+        else:
+            if not os.path.isfile(type_path):
+                raise ValueError("flow_stage_collect_multi: first stage type information is missing")
+            with open(type_path, "r", encoding="utf-8") as handle:
+                first_kind = json.load(handle).get("type")
+            if kind != first_kind:
+                raise TypeError(f"flow_stage_collect_multi: {input_name} must be {first_kind}, got {kind}")
+
+        if kind == "video":
+            _stage_save_video_segment(data, batch_dir, stage_index)
+        else:
+            _stage_batch_save(data, batch_dir, kind, stage_index)
+        if stage_index != total - 1:
+            return _stage_collect_blockers()
+
+        if kind == "video":
+            items = [
+                path if os.path.isfile(path) else None
+                for path in (_stage_video_segment_path(batch_dir, index) for index in range(total))
+            ]
+        else:
+            items = [_stage_batch_load(batch_dir, kind, index) for index in range(total)]
+        if any(item is None for item in items):
+            missing = [str(index + 1) for index, item in enumerate(items) if item is None]
+            raise ValueError(f"flow_stage_collect_multi: missing stage data: {', '.join(missing)}")
+
+        message = f"multi-port stages {total}/{total} merged: {batch_dir}"
+        return {
+            "ui": {"text": [message]},
+            "result": _stage_collect_outputs(batch_dir, total),
+        }
+
+
 FLOW_VALUE_STORE = {}
 
 
@@ -1331,7 +2439,6 @@ MAX_FLOW_NUM = 20
 
 
 from comfy_execution.graph_utils import GraphBuilder, is_link
-from comfy_execution.graph import ExecutionBlocker
 
 
 class flow_whileStart:
@@ -1351,7 +2458,7 @@ class flow_whileStart:
     RETURN_TYPES = ByPassTypeTuple(tuple(["FLOW_CL"] + [any_type] * MAX_FLOW_NUM))
     RETURN_NAMES = ByPassTypeTuple(tuple(["flow"] + ["value_%d" % i for i in range(MAX_FLOW_NUM)]))
     FUNCTION = "while_loop_open"
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
 
     def while_loop_open(self, condition, **kwargs):
         
@@ -1383,7 +2490,7 @@ class flow_whileEnd:
     RETURN_TYPES = ByPassTypeTuple(tuple([any_type] * MAX_FLOW_NUM))
     RETURN_NAMES = ByPassTypeTuple(tuple(["value_%d" % i for i in range(MAX_FLOW_NUM)]))
     FUNCTION = "while_loop_close"
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
 
     def explore_dependencies(self, node_id, dynprompt, upstream, parent_ids):
         
@@ -1748,7 +2855,7 @@ class flow_AutoShutdown:
     RETURN_TYPES = ()
     FUNCTION = "check_and_execute"
     OUTPUT_NODE = True
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
     DESCRIPTION = "当完成任务数达到目标值时执行指定操作（关机/睡眠/无操作）"
 
     def check_and_execute(self, current_task_count, target_task_count, action_delay_minutes, action_type):
@@ -1833,7 +2940,7 @@ class flow_ChangeDetector:
     RETURN_TYPES = ("BOOLEAN",)
     RETURN_NAMES = ("BOTH_STABLE",)
     FUNCTION = "detect_double_stable"
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
 
     def _get_object_hash(self, obj):
         try:

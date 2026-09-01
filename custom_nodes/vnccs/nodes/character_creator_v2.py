@@ -125,6 +125,7 @@ ILLUSTRIOUS_DEFAULTS = {
 
 ANIMA_DEFAULTS = {
     "generation_mode": "anima",
+    "resolution_preset": "normal",
     "diffusion_model_name": "",
     "clip_name": "qwen_3_06b_base.safetensors",
     "vae_name": "qwen_image_vae.safetensors",
@@ -148,6 +149,11 @@ def resolve_generation_seed(gen_settings):
 
 DEFAULT_PREVIEW_WIDTH = 640
 DEFAULT_PREVIEW_HEIGHT = 1536
+ANIMA_RESOLUTION_PRESETS = {
+    "normal": (DEFAULT_PREVIEW_WIDTH, DEFAULT_PREVIEW_HEIGHT),
+    "high": (856, 2048),
+    "maximum": (1024, 2456),
+}
 
 
 def safe_filename_list(category):
@@ -238,8 +244,7 @@ SKIN_COLOR_OPTIONS = [
 SKIN_COLOR_HINT_RE = re.compile(
     r"\b(skin|complexion|pale|fair|light[- ]skinned|tan|tanned|dark[- ]skinned|"
     r"brown[- ]skinned|black|black[- ]skinned|afro|african|african[- ]american|"
-    r"olive|blue[- ]skinned|green[- ]skinned|grey[- ]skinned|gray[- ]skinned)\b|"
-    r"(афро|африкан|темн[а-яё]+(?:\\s+кож[а-яё]+)?|смугл[а-яё]+)",
+    r"olive|blue[- ]skinned|green[- ]skinned|grey[- ]skinned|gray[- ]skinned)\b",
     re.IGNORECASE,
 )
 
@@ -251,23 +256,19 @@ RACE_OPTION_TAGS = {
 }
 HUMAN_HINT_RE = re.compile(
     r"\b(human|person|student|schoolboy|schoolgirl|man|woman|boy|girl|guy|"
-    r"afro|african|african[- ]american|black)\b|"
-    r"(человек|студент|студентка|парень|девушка|мужчина|женщина|афро|африкан)",
+    r"afro|african|african[- ]american|black)\b",
     re.IGNORECASE,
 )
 YOUNG_BODY_HINT_RE = re.compile(
-    r"\b(young|student|teen|teenage|schoolboy|schoolgirl|college)\b|"
-    r"(молод|юноша|юная|студент|студентка|подрост)",
+    r"\b(young|student|teen|teenage|schoolboy|schoolgirl|college)\b",
     re.IGNORECASE,
 )
 SLIM_BODY_HINT_RE = re.compile(
-    r"\b(slim|slender|thin|skinny|lean|petite)\b|"
-    r"(стройн|худ|тонк)",
+    r"\b(slim|slender|thin|skinny|lean|petite)\b",
     re.IGNORECASE,
 )
 ATHLETIC_BODY_HINT_RE = re.compile(
-    r"\b(athletic|fit|sporty|muscular)\b|"
-    r"(атлет|спорт|мускул|подтянут)",
+    r"\b(athletic|fit|sporty|muscular)\b",
     re.IGNORECASE,
 )
 
@@ -340,17 +341,17 @@ def _join_prompt_tokens(tokens):
 
 def _infer_skin_color_from_description(description):
     text = str(description or "").lower()
-    if re.search(r"\b(afro|african|african[- ]american|black|black[- ]skinned)\b|афро|африкан|темн|смугл", text):
+    if re.search(r"\b(afro|african|african[- ]american|black|black[- ]skinned)\b", text):
         return "dark skin"
-    if re.search(r"\b(brown[- ]skinned|brown skin)\b|коричнев", text):
+    if re.search(r"\b(brown[- ]skinned|brown skin)\b", text):
         return "brown skin"
-    if re.search(r"\b(tan|tanned)\b|загорел", text):
+    if re.search(r"\b(tan|tanned)\b", text):
         return "tan skin"
-    if re.search(r"\b(olive)\b|оливков", text):
+    if re.search(r"\bolive\b", text):
         return "olive skin"
-    if re.search(r"\b(pale)\b|бледн", text):
+    if re.search(r"\bpale\b", text):
         return "pale skin"
-    if re.search(r"\b(fair|light[- ]skinned|light skin)\b|светл", text):
+    if re.search(r"\b(fair|light[- ]skinned|light skin)\b", text):
         return "fair skin"
     return ""
 
@@ -429,6 +430,11 @@ def normalize_gen_settings(gen_settings):
     if isinstance(mode_profile, dict):
         merged.update(mode_profile)
     merged["generation_mode"] = generation_mode
+    if generation_mode == "anima":
+        resolution_preset = str(merged.get("resolution_preset", "normal") or "normal").lower()
+        merged["resolution_preset"] = (
+            resolution_preset if resolution_preset in ANIMA_RESOLUTION_PRESETS else "normal"
+        )
     return merged
 
 
@@ -591,7 +597,11 @@ def load_generation_assets(gen_settings):
 
 
 def get_generation_resolution(gen_settings):
-    return DEFAULT_PREVIEW_WIDTH, DEFAULT_PREVIEW_HEIGHT
+    if str(gen_settings.get("generation_mode", "illustrious")).lower() != "anima":
+        return DEFAULT_PREVIEW_WIDTH, DEFAULT_PREVIEW_HEIGHT
+
+    preset = str(gen_settings.get("resolution_preset", "normal") or "normal").lower()
+    return ANIMA_RESOLUTION_PRESETS.get(preset, ANIMA_RESOLUTION_PRESETS["normal"])
 
 
 def create_generation_latent(model, width, height, gen_settings, batch_size=1):

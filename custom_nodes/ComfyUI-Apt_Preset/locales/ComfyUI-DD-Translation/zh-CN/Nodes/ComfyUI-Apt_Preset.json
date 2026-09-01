@@ -683,7 +683,8 @@
             "positive": "正向提示词",
             "negative": "负向提示词",
             "latent": "潜空间",
-            "vae": "VAE模型"
+            "vae": "VAE模型",
+            "denoise_latent": "降噪潜空间"
         }
     },
     "basic_Ksampler_adv": {
@@ -3087,20 +3088,20 @@
             "output_0": "输出0"
         }
     },
-    "create_any_List": {
-        "title": "create_创建任意列表",
+    "create_list": {
+        "title": "create_执行列表",
         "inputs": {},
         "widgets": {},
         "outputs": {
-            "output_0": "输出0"
+            "list": "列表"
         }
     },
-    "create_any_batch": {
-        "title": "create_创建任意批次",
+    "create_array": {
+        "title": "create_数组",
         "inputs": {},
         "widgets": {},
         "outputs": {
-            "output_0": "输出0"
+            "array": "数组"
         }
     },
     "type_Image_List2Batch": {
@@ -3143,24 +3144,24 @@
             "output_0": "输出0"
         }
     },
-    "type_ListToBatch": {
-        "title": "type_列表转批次",
+    "type_ListToArray": {
+        "title": "type_列表转数组",
         "inputs": {},
         "widgets": {
-            "ANY": "任意"
+            "list": "列表"
         },
         "outputs": {
-            "LIST": "列表"
+            "array": "数组"
         }
     },
-    "type_BatchToList": {
-        "title": "type_批次转列表",
+    "type_ArrayToList": {
+        "title": "type_数组转列表",
         "inputs": {
-            "LIST": "列表"
+            "array": "数组"
         },
         "widgets": {},
         "outputs": {
-            "output_0": "输出0"
+            "list": "列表"
         }
     },
     "list_ListSlice": {
@@ -3197,25 +3198,25 @@
             "length": "长度"
         }
     },
-    "batch_BatchSlice": {
-        "title": "batch_批次切片",
+    "array_Slice": {
+        "title": "array_数组切片",
         "inputs": {
-            "LIST": "列表"
+            "array": "数组"
         },
         "widgets": {
             "start": "起始",
             "end": "结束"
         },
         "outputs": {
-            "Data": "数据"
+            "array": "数组"
         }
     },
-    "batch_MergeBatch": {
-        "title": "batch_合并批次",
+    "array_Merge": {
+        "title": "array_合并数组",
         "inputs": {},
         "widgets": {},
         "outputs": {
-            "list": "列表"
+            "array": "数组"
         }
     },
     "pack_Pack": {
