@@ -1,0 +1,14 @@
+kornia
+librosa
+imageio
+opencv-python
+torchcodec
+google-generativeai
+av
+stable-ts
+demucs
+transformers
+accelerate
+huggingface_hub
+voxcpm
+llama-cpp-python

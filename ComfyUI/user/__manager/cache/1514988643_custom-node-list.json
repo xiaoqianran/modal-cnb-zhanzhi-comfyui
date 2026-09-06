@@ -43922,6 +43922,18 @@
             "title": "H3 Prompt IDE"
         },
         {
+            "author": "ethanfel",
+            "description": "Meta SAM-Audio sound separation with text, time-span, and visual-mask prompts, ComfyUI model management, chunked processing, and optional Comfy Kitchen attention.",
+            "files": [
+                "https://github.com/ethanfel/ComfyUI-SAM-Audio"
+            ],
+            "id": "comfyui-meta-sam-audio",
+            "install_type": "git-clone",
+            "reference": "https://github.com/ethanfel/ComfyUI-SAM-Audio",
+            "title": "Meta SAM-Audio",
+            "version": "0.3.0"
+        },
+        {
             "author": "shin131002",
             "description": "A ComfyUI custom node for randomly selecting and applying LoRAs from multiple folders with support for trigger words, sample prompts, and strength randomization.",
             "files": [
@@ -61180,6 +61192,67 @@
             "install_type": "git-clone",
             "reference": "https://github.com/entropicnoise/MiniMax-H3-Combined-Image-And-Reference-to-Video",
             "title": "MiniMax H3 Combined Image And Reference to Video"
+        },
+        {
+            "author": "SgtSauv",
+            "description": "A native, high-performance signal-routing, workflow-organization, and virtual-memory architecture for ComfyUI",
+            "files": [
+                "https://github.com/SgtSauv/ComfyUI-SSG-Smart-Suite"
+            ],
+            "id": "ComfyUI-SSG-Smart-Suite",
+            "install_type": "git-clone",
+            "reference": "https://github.com/SgtSauv/ComfyUI-SSG-Smart-Suite",
+            "title": "SSG Smart Suite"
+        },
+        {
+            "author": "ReSerendipity",
+            "description": "ComfyUI custom node that loads and encodes prompts from TXT files with fixed/increment/decrement/random modes for batch image generation.",
+            "files": [
+                "https://github.com/ReSerendipity/ComfyUI-BatchPromptLoader"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/ReSerendipity/ComfyUI-BatchPromptLoader",
+            "title": "ComfyUI-BatchPromptLoader"
+        },
+        {
+            "author": "Jit-Roy",
+            "description": "Native ComfyUI integration for WeeLLM: Run multi-billion parameter diffusion models (FLUX, SD3, MiniMax) under 4GB VRAM using layer-streaming inference.",
+            "files": [
+                "https://github.com/Jit-Roy/ComfyUI-WeeLLM"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/Jit-Roy/ComfyUI-WeeLLM",
+            "title": "ComfyUI-WeeLLM"
+        },
+        {
+            "author": "RyanKramer",
+            "description": "PixelPanda AI image tools (cloud API): remove background, AI upscale 2x/4x/8x, enhance, remove text/watermarks, prompt edit. No extra models or VRAM.",
+            "files": [
+                "https://github.com/RyanKramer/ComfyUI-PixelPanda"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/RyanKramer/ComfyUI-PixelPanda",
+            "title": "ComfyUI-PixelPanda"
+        },
+        {
+            "author": "VRAM-Hoarder",
+            "description": "A ComfyUI custom node that replicates the function of the -Free model and node cache- toolbar button, usable INLINE in a workflow, so you can force a VRAM/RAM cleanup automatically after every generation instead of clicking a button manually.",
+            "files": [
+                "https://github.com/VRAM-Hoarder/ComfyUI-Free_model_and_node_cache"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/VRAM-Hoarder/ComfyUI-Free_model_and_node_cache",
+            "title": "ComfyUI Free Model and Node Cache"
+        },
+        {
+            "author": "ivellioscolin",
+            "description": "ComfyUI custom node for local account and LDAP based authentication",
+            "files": [
+                "https://github.com/ivellioscolin/comfyui-auth"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/ivellioscolin/comfyui-auth",
+            "title": "ComfyUI-Auth"
         },
         {
             "author": "ntdviet",

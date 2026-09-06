@@ -1,0 +1,468 @@
+.comfyignore
+.github/workflows/publish-comfy-registry.yml
+.gitignore
+CustomLTXNodes.py
+GeneralVideoNodes.py
+GeneralVideoNodes2.py
+HumoAutomation.py
+HumoAutomationExtra1.py
+HumoAutomationExtra2.py
+LICENSE
+LLM.py
+LTXLoraTrain.py
+LUTS/Bright_High_Contrast_Muted_Cool.cube
+LUTS/Bright_High_Contrast_Vivid_Green_Tint_Fuji_Provia.cube
+LUTS/Bright_Muted_Cool_Cinematic.cube
+LUTS/Bright_Muted_Cool_Magenta_Tint_Cool_Bright.cube
+LUTS/Bright_Vivid_Warm_Green_Tint_FGCineBright.cube
+LUTS/Bright_Vivid_Warm_Green_Tint_FGCineWarm.cube
+LUTS/Bright_Warm_Clean_FGCineDrama.cube
+LUTS/Cool_Grade.cube
+LUTS/Dark_Cool_Magenta_Tint_Cinematic_Filmic_Dark.cube
+LUTS/Dark_High_Contrast_Vivid_Cinematic.cube
+LUTS/Dark_High_Contrast_Vivid_Cinematic_2.cube
+LUTS/Dark_High_Contrast_Vivid_Cool.cube
+LUTS/Dark_High_Contrast_Vivid_Magenta_Tint.cube
+LUTS/Dark_High_Contrast_Vivid_Warm.cube
+LUTS/Dark_Muted_Cool_Cinematic.cube
+LUTS/Dark_Muted_Cool_Cinematic_2.cube
+LUTS/Dark_Soft_Vivid_Cinematic.cube
+LUTS/Dark_Soft_Vivid_Cinematic_2.cube
+LUTS/Dark_Soft_Vivid_Cool.cube
+LUTS/Dark_Soft_Vivid_Cool_2.cube
+LUTS/Dark_Soft_Vivid_Warm.cube
+LUTS/Dark_Soft_Vivid_Warm_2.cube
+LUTS/Dark_Vivid_Cinematic.cube
+LUTS/Dark_Vivid_Magenta_Tint_Cinematic.cube
+LUTS/High_Contrast_Cinematic.cube
+LUTS/High_Contrast_Cinematic_Cine_Grade.cube
+LUTS/High_Contrast_Cinematic_Ektachrome.cube
+LUTS/High_Contrast_Muted_Cool_Green_Tint.cube
+LUTS/High_Contrast_Vivid_Cinematic.cube
+LUTS/High_Contrast_Vivid_Warm_Cinematic.cube
+LUTS/High_Contrast_Vivid_Warm_Cinematic_2.cube
+LUTS/High_Contrast_Vivid_Warm_Cinematic_3.cube
+LUTS/High_Contrast_Vivid_Warm_Cinematic_Moody_Grade.cube
+LUTS/Muted_Cool_Cinematic.cube
+LUTS/Natural_Grade.cube
+LUTS/Vintage Color.cube
+LUTS/Vivid_Warm_Clean.cube
+LUTS/Vivid_Warm_Clean_Filmic_Bright.cube
+LUTS/Vivid_Warm_Clean_Vintage_Fade.cube
+LUTS/Vivid_Warm_Magenta_Tint_Clean.cube
+LUTS/examples/Bright_High_Contrast_Muted_Cool.jpg
+LUTS/examples/Bright_High_Contrast_Vivid_Green_Tint_Fuji_Provia.jpg
+LUTS/examples/Bright_Muted_Cool_Cinematic.jpg
+LUTS/examples/Bright_Muted_Cool_Magenta_Tint_Cool_Bright.jpg
+LUTS/examples/Bright_Vivid_Warm_Green_Tint_FGCineBright.jpg
+LUTS/examples/Bright_Vivid_Warm_Green_Tint_FGCineWarm.jpg
+LUTS/examples/Bright_Warm_Clean_FGCineDrama.jpg
+LUTS/examples/Cool_Grade.jpg
+LUTS/examples/Dark_Cool_Magenta_Tint_Cinematic_Filmic_Dark.jpg
+LUTS/examples/Dark_High_Contrast_Vivid_Cinematic.jpg
+LUTS/examples/Dark_High_Contrast_Vivid_Cinematic_2.jpg
+LUTS/examples/Dark_High_Contrast_Vivid_Cool.jpg
+LUTS/examples/Dark_High_Contrast_Vivid_Magenta_Tint.jpg
+LUTS/examples/Dark_High_Contrast_Vivid_Warm.jpg
+LUTS/examples/Dark_Muted_Cool_Cinematic.jpg
+LUTS/examples/Dark_Muted_Cool_Cinematic_2.jpg
+LUTS/examples/Dark_Soft_Vivid_Cinematic.jpg
+LUTS/examples/Dark_Soft_Vivid_Cinematic_2.jpg
+LUTS/examples/Dark_Soft_Vivid_Cool.jpg
+LUTS/examples/Dark_Soft_Vivid_Cool_2.jpg
+LUTS/examples/Dark_Soft_Vivid_Warm.jpg
+LUTS/examples/Dark_Soft_Vivid_Warm_2.jpg
+LUTS/examples/Dark_Vivid_Cinematic.jpg
+LUTS/examples/Dark_Vivid_Magenta_Tint_Cinematic.jpg
+LUTS/examples/High_Contrast_Cinematic.jpg
+LUTS/examples/High_Contrast_Cinematic_Cine_Grade.jpg
+LUTS/examples/High_Contrast_Cinematic_Ektachrome.jpg
+LUTS/examples/High_Contrast_Muted_Cool_Green_Tint.jpg
+LUTS/examples/High_Contrast_Vivid_Cinematic.jpg
+LUTS/examples/High_Contrast_Vivid_Warm_Cinematic.jpg
+LUTS/examples/High_Contrast_Vivid_Warm_Cinematic_2.jpg
+LUTS/examples/High_Contrast_Vivid_Warm_Cinematic_3.jpg
+LUTS/examples/High_Contrast_Vivid_Warm_Cinematic_Moody_Grade.jpg
+LUTS/examples/Muted_Cool_Cinematic.jpg
+LUTS/examples/Natural_Grade.jpg
+LUTS/examples/Vintage_Color.jpg
+LUTS/examples/Vivid_Warm_Clean.jpg
+LUTS/examples/Vivid_Warm_Clean_Filmic_Bright.jpg
+LUTS/examples/Vivid_Warm_Clean_Vintage_Fade.jpg
+LUTS/examples/Vivid_Warm_Magenta_Tint_Clean.jpg
+LUTS/readme.txt
+README.md
+VRGDG_AudioNodes.py
+VRGDG_BrowserImageRoutes.py
+VRGDG_FaceFix.py
+VRGDG_FlowBrowserNodes.py
+VRGDG_GemmaPromptSanitizer.py
+VRGDG_GeneralNodes.py
+VRGDG_GeneralNodes2.py
+VRGDG_IV_Adjustments.py
+VRGDG_ImageCompareNode.py
+VRGDG_ImagePasteBack.py
+VRGDG_LTXFirstLastGuide.py
+VRGDG_LTXICIngredientsGrid.py
+VRGDG_LTXLoopingSampler.py
+VRGDG_LUTVideoTools.py
+VRGDG_LoraDatasetCreatorNodes.py
+VRGDG_MiniMaxH3AudioDrive.py
+VRGDG_MiniMaxH3PromptInstructions.py
+VRGDG_MiniMaxH3ReferenceMedia.py
+VRGDG_MiniMaxH3Timing.py
+VRGDG_ModelPathSettings.py
+VRGDG_MusicVideoBuilderNodes.py
+VRGDG_MusicVideoPromptCreatorNodes.py
+VRGDG_PostProcessPreviewHelpers.py
+VRGDG_SilentAudioRoutes.py
+VRGDG_StandaloneFaceFixNodes.py
+VRGDG_StandaloneVideoEnhancerNodes.py
+VRGDG_StartImageStoryboard.py
+VRGDG_StoryboardBuilderNodes.py
+VRGDG_UpdateRoutes.py
+VRGDG_VideoBuilderNodeUI.py
+VRGDG_VideoCompareNode.py
+VRGDG_VideoEditorNodes.py
+VRGDG_VideoEnhanceNodes.py
+VRGDG_VoxCPM2Node.py
+VRGDG_WorkflowRunnerNodes.py
+VRGDGswtichNodes.py
+Workflows/FaceFix/VRGDG_FaceFix_Workflow.json
+Workflows/LTX-2_Workflows/CivitAIWorkflows/VRGDG_TextToVideov1.json
+Workflows/LTX-2_Workflows/CivitAIWorkflows/VRGDG_TextToVideov2.json
+Workflows/LTX-2_Workflows/CivitAIWorkflows/readme.txt
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/Beta Testing/LTX2.3_Music_Video_Creator_I2V_V5.2.json
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/Beta Testing/LTX2.3_Music_Video_Creator_I2V_V5.2_remake mode.json
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/Beta Testing/LTX2.3_Music_Video_Creator_Prompt_Creator_V5.1.json
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/Beta Testing/LTX2.3_Music_Video_Creator_T2V_V5.2.json
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/Beta Testing/LTX2.3_Music_Video_Creator_T2V_V5.2_BackgroundLLM.json
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/LTX2.3_Music_Video_Creator_I2V_V5.1.json
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/LTX2.3_Music_Video_Creator_Prompt_Creator_V5.json
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/LTX2.3_Music_Video_Creator_T2V_V5.1.json
+Workflows/LTX-2_Workflows/LTX 2.3 Music Video Creator V5.1/readme.txt
+Workflows/LTX-2_Workflows/Lora_Training/LTX 2.3 - Lora trainer.json
+Workflows/LTX-2_Workflows/Lora_Training/LTX_2.3_5_image-speedLora .json
+Workflows/LTX-2_Workflows/Lora_Training/Lora_DataSetCreationHelper.json
+Workflows/LTX-2_Workflows/Lora_Training/UpdatedWorkflows/LTX2.3_AudioLoraTrainer_V1.json
+Workflows/LTX-2_Workflows/Lora_Training/UpdatedWorkflows/LTX2.3_LoraTrainer_V2.json
+Workflows/LTX-2_Workflows/Lora_Training/UpdatedWorkflows/LTX2.3_SpeedLoraTrainer_V2.json
+Workflows/LTX-2_Workflows/Lora_Training/UpdatedWorkflows/LTX2.3_VideoAudioLoraTrainer_V1.json
+Workflows/LTX-2_Workflows/Lora_Training/UpdatedWorkflows/Lora DataSet creator V1.json
+Workflows/LTX-2_Workflows/Lora_Training/UpdatedWorkflows/Lora DataSet creator V2.json
+Workflows/LTX-2_Workflows/Lora_Training/UpdatedWorkflows/Z-ImageTurbo_SpeedLoraTrainer_V1.json
+Workflows/LTX-2_Workflows/Lora_Training/UpdatedWorkflows/readme.txt
+Workflows/LTX-2_Workflows/Lora_Training/readme.txt
+Workflows/LTX-2_Workflows/Video_Builder/images/2026-06-01 16_02_27-.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Audio Tab Timeline Audio.png
+Workflows/LTX-2_Workflows/Video_Builder/images/BrowserAI/image-browserAI-groups.png
+Workflows/LTX-2_Workflows/Video_Builder/images/BrowserAI/image-browserAI-manualMode.png
+Workflows/LTX-2_Workflows/Video_Builder/images/BrowserAI/image-browserAI-models.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Build Full Video Options.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Builder Agent Hints.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Builder Agent Window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/ComfyUI Builder Node.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Create Scenes From Lyrics window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Download Models Window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Final Video Ready Popup.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Flux Reference Images.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Full LTX 2.3 Video Builder window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Full V7 Video Builder Window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Full V8 Video Builder window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Gemma Runner Window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Gemma Runner with LM Studio model dropdown.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Image Tab Model Chooser.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Left Scene List.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Load Project Window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Lyric Mapping Step 1 window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Menu Dropdown.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Nano B LLM Prompting settings.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Nano B image settings.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Nano B model settings.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Prompt Creator Import Buttons.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Prompt Options Window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Prompt Options image and video groups.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Reference Builder Mapping.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Reference Builder Window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Reference Builder with character and location mappings.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Review Lyrics  Map Singers window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Scene Tab.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Settings window with custom model root and audio notifications.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Timeline Controls.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Timeline Scene Blocks.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Top bar buttons screenshot.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Video Mode Chooser.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Video Notes lane on the timeline.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Video Prompting.png
+Workflows/LTX-2_Workflows/Video_Builder/images/Welcome Window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/ZImage Prompting.png
+Workflows/LTX-2_Workflows/Video_Builder/images/readme.txt
+Workflows/LTX-2_Workflows/Video_Builder/images/shorts/guide/step1-place-node-on-canvas.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/shorts/guide/step2-create-new-project.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/shorts/guide/step3-load-audio-file.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/shorts/guide/step4-image-models.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/shorts/guide/step5-video-modes.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/shorts/guide/step6-transcribe-audio.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/shorts/guide/step7-reference-builder-line-mapping-and-review.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/shorts/guide/step8-storyboard-builder-and-render-all.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/storyboardbuilder/scene defaults video prep.png
+Workflows/LTX-2_Workflows/Video_Builder/images/storyboardbuilder/scenedefaultsimagepred.png
+Workflows/LTX-2_Workflows/Video_Builder/images/storyboardbuilder/story board builder main UI window.png
+Workflows/LTX-2_Workflows/Video_Builder/images/storyboardbuilder/storylayer.png
+Workflows/LTX-2_Workflows/Video_Builder/images/video/Menu Start new Project window display.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/Menu settings, all settings.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/Opening the Video Builder node and welcome window.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/adding segmnets and bulk segments.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/beat markers and snap to beats.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/delete a segment.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/delete a video.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/delete image.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/Menu Start new Project window display.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/Menu settings, all settings.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/Opening the Video Builder node and welcome window.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/adding segmnets and bulk segments.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/beat markers and snap to beats.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/delete a segment.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/delete a video.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/delete image.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/hide notes.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/menu load project.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/menu save project as window display.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/quicksave and save project as.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/select multi.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/timeline base and insert clips.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/timeline showing all note lanes .gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/unfreeze and freeze timeline and timeline edits.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/gifs/waveform settings.gif
+Workflows/LTX-2_Workflows/Video_Builder/images/video/hide notes.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/menu load project.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/menu save project as window display.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/quicksave and save project as.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/select multi.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/timeline base and insert clips.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/timeline showing all note lanes .mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/unfreeze and freeze timeline and timeline edits.mp4
+Workflows/LTX-2_Workflows/Video_Builder/images/video/waveform settings.mp4
+Workflows/LTX-2_Workflows/Video_Builder/readme.md
+Workflows/LTX-2_Workflows/old/NanoB_LTX-2_V1.json
+Workflows/LTX-2_Workflows/old/NanoBananaPro_LTX-2/Nano_Banana_LTX-2.3_MVC_V3.json
+Workflows/LTX-2_Workflows/old/NanoBananaPro_LTX-2/Nano_Banana_Pro_LTX-2_MVC_V2.json
+Workflows/LTX-2_Workflows/old/NanoBananaPro_LTX-2/PromptCreator_Nano_Banana_LTX-2.3_V3.json
+Workflows/LTX-2_Workflows/old/NanoBananaPro_LTX-2/PromptCreator_Nano_Banana_Pro_LTX-2_V2.1.json
+Workflows/LTX-2_Workflows/old/NanoBananaPro_LTX-2/old/PromptCreator_Nano_Banana_Pro_LTX-2_V2.json
+Workflows/LTX-2_Workflows/old/NanoBananaPro_LTX-2/readme.txt
+Workflows/LTX-2_Workflows/old/PromptCreator_NanoB_LTX-2_V1.json
+Workflows/LTX-2_Workflows/old/Z-image_LTX-2/PromptCreator_Z-image_LTX-2.3_V4.json
+Workflows/LTX-2_Workflows/old/Z-image_LTX-2/PromptCreator_Z-image_LTX-2_V3.json
+Workflows/LTX-2_Workflows/old/Z-image_LTX-2/Z-image_LTX-2.3_MVC_V4.json
+Workflows/LTX-2_Workflows/old/Z-image_LTX-2/Z-image_LTX-2_MVC_V2.json
+Workflows/LTX-2_Workflows/old/Z-image_LTX-2/old/PromptCreatorV1.5(Zimage_LTX_SRT_V2).json
+Workflows/LTX-2_Workflows/old/Z-image_LTX-2/old/PromptCreatorV1.5(Zimage_LTX_SRT_V2.1).json
+Workflows/LTX-2_Workflows/old/Z-image_LTX-2/old/zimage_LTX-2-SRT_Mode.json
+Workflows/LTX-2_Workflows/old/Z-image_LTX-2/readme.txt
+Workflows/LTX-2_Workflows/readme.txt
+Workflows/README.md
+Workflows/UsedForUIDoNotTouch/ClearMemory_API.json
+Workflows/UsedForUIDoNotTouch/Krea2_API.json
+Workflows/UsedForUIDoNotTouch/Krea2_API_2Pass.json
+Workflows/UsedForUIDoNotTouch/Krea2_API_2Pass_Lora_Train_Sample.json
+Workflows/UsedForUIDoNotTouch/Krea2_TextToImage_API.json
+Workflows/UsedForUIDoNotTouch/LTX 2.3_ingredients_LoRa_WF_API.json
+Workflows/UsedForUIDoNotTouch/LTX2.3_CameraMotionInput_API.json
+Workflows/UsedForUIDoNotTouch/LTX2.3_FLF_API.json
+Workflows/UsedForUIDoNotTouch/LTX2.3_FaceFixV1_API.json
+Workflows/UsedForUIDoNotTouch/LTX2.3_ID_lora_API.json
+Workflows/UsedForUIDoNotTouch/LTX2.3_Music_Video_Creator_Prompt_Creator_API.json
+Workflows/UsedForUIDoNotTouch/LTX2.3_Transcribe_2_API.json
+Workflows/UsedForUIDoNotTouch/LTX2.3_Transcribe_API.json
+Workflows/UsedForUIDoNotTouch/NB_API.json
+Workflows/UsedForUIDoNotTouch/SingleIngredients2Video_ForUI_API.json
+Workflows/UsedForUIDoNotTouch/SingleRef2VidForUI_API.json
+Workflows/UsedForUIDoNotTouch/Singlei2vForUI_API.json
+Workflows/UsedForUIDoNotTouch/Singlet2vForUI_API.json
+Workflows/UsedForUIDoNotTouch/VRGDG_TextToVideo_CustomAudio_API.json
+Workflows/UsedForUIDoNotTouch/fluxKleinMultiImage_API.json
+Workflows/UsedForUIDoNotTouch/fluxKleinSubjectLocation.json
+Workflows/UsedForUIDoNotTouch/image_ernie_image_turbo_API.json
+Workflows/UsedForUIDoNotTouch/ltx_ingredients2Video_test_API.json
+Workflows/UsedForUIDoNotTouch/minimax_audio_driven_builder_api.json
+Workflows/UsedForUIDoNotTouch/minimax_built_in_audio_builder_api.json
+Workflows/UsedForUIDoNotTouch/text2image_zimage.json
+Workflows/UsedForUIDoNotTouch/text2image_zimage_API.json
+Workflows/UsedForUIDoNotTouch/whipsterandbeatonly_API.json
+Workflows/UsedForUIDoNotTouch/z_upscaleEnhance.json
+Workflows/UsedForUIDoNotTouch/z_upscaleEnhance_API.json
+Workflows/VoxCPM2/VRGDG_VoxCPM_TTS.json
+Workflows/VoxCPM2/readme.txt
+Workflows/WanHumo_Workflows/FirstLastPromptCreatorV1.3.json
+Workflows/WanHumo_Workflows/LyricExtractionForManualWF.json
+Workflows/WanHumo_Workflows/WanHumoMVC_V8.1.json
+Workflows/WanHumo_Workflows/WanHumoMVC_V9.json
+Workflows/WanHumo_Workflows/Wan_HumoMVC_ManualMode_V1.1.json
+Workflows/WanHumo_Workflows/Z-Image_Wan2.2 FL & Humo_MVC_V2.1.json
+Workflows/WanHumo_Workflows/readme.txt
+Workflows/WanHumo_imageEdit/WanHumo_ImageEdit_Workflow_V1.json
+Workflows/WanHumo_imageEdit/readme.md
+Workflows/Z-ImageUpscale/AnyImageZImageUpscaleWithCN.json
+Workflows/Z-ImageUpscale/FluxKrea2Zimage.json
+Workflows/Z-ImageUpscale/Qwen_image_2_zimageUpscale.json
+Workflows/Z-ImageUpscale/SD3.5_ZimageUpscaler.json
+Workflows/Z-ImageUpscale/Wan2.22ziamge.json
+Workflows/Z-ImageUpscale/ZImageUSD.json
+Workflows/Z-ImageUpscale/chroma2zimage (1).json
+Workflows/Z-ImageUpscale/zimage-upscaleAny.json
+Workflows/betatesting/Gemma4_Testing.json
+Workflows/betatesting/readme.txt
+Workflows/oldworkflows/FirstLastPromptCreatorV1.5(LTX).json
+Workflows/oldworkflows/PromptCreator_NanoB_LTX-2_V1.json
+Workflows/oldworkflows/WanHumoMVC_V6.json
+Workflows/oldworkflows/WanHumoMVC_V7.1.json
+Workflows/oldworkflows/WanHumoMVC_V7.json
+Workflows/oldworkflows/Z-image_LTX-2 Music Video Creator V1.1.json
+Workflows/oldworkflows/readme.txt
+__init__.py
+assets/face_detection_yunet_2023mar.onnx
+assets/opencv_face_deploy.prototxt
+assets/opencv_face_res10_fp16.caffemodel
+docs/V7_VIDEO_BUILDER_GUIDE.pdf
+flow_automation/Flow Fully Automatic.bat
+flow_automation/Flow Image Edit Automatic.bat
+flow_automation/Inspect Flow Buttons.bat
+flow_automation/README.md
+flow_automation/chatgpt-images-poc.mjs
+flow_automation/flow-poc.mjs
+flow_automation/inputs/.gitkeep
+flow_automation/inspect-flow-buttons.mjs
+flow_automation/manual-bridge.mjs
+flow_automation/meta-ai-poc.mjs
+flow_automation/outputs/.gitkeep
+flow_automation/package-lock.json
+flow_automation/package.json
+images/.gitkeep
+images/2026-06-01 16_02_27-.png
+images/47ce1f70-239e-44c4-bd16-04ef27c2f9d0.png
+images/Audio Tab Timeline Audio.png
+images/Build Full Video Options.png
+images/Builder Agent Hints.png
+images/Builder Agent Window.png
+images/ComfyUI Builder Node.png
+images/Final Video Ready Popup.png
+images/Flux Reference Images.png
+images/Full V7 Video Builder Window.png
+images/Gemma Runner Window.png
+images/Image Tab Model Chooser.png
+images/Left Scene List.png
+images/Load Project Window.png
+images/Menu Dropdown.png
+images/Prompt Creator Import Buttons.png
+images/Prompt Options Window.png
+images/Reference Builder Window.png
+images/Scene Tab.png
+images/Timeline Controls.png
+images/Timeline Scene Blocks.png
+images/Video Mode Chooser.png
+images/Video Prompting.png
+images/Welcome Window.png
+images/ZImage Prompting.png
+images/vrgdg_placeholder_i2i.png
+images/wanhumomvc002.mp4
+lib/__init__.py
+lib/credentials.py
+lib/image.py
+lib/readme.txt
+nodes.py
+pyproject.toml
+requirements.txt
+scripts/Backport-Krea2ToMusubi.ps1
+scripts/far_face_repair_backend.py
+scripts/photoshop/Create_Light_Leak_Overlay_Pack.jsx
+srt_files/readme.txt
+tests/test_builder_delete_all_videos.py
+tests/test_builder_history_memory.py
+tests/test_builder_hybrid_audio.py
+tests/test_builder_llm_runner_token_limits.py
+tests/test_builder_ltx_to_minimax_conversion.py
+tests/test_builder_menu_scroll.py
+tests/test_builder_minimax_builtin_audio_trim.py
+tests/test_builder_minimax_cut_frequency.py
+tests/test_builder_minimax_render_prompt_passthrough.py
+tests/test_builder_minimax_start_frame_character_influence.py
+tests/test_builder_minimax_turbo.py
+tests/test_builder_scene_render_timeout.py
+tests/test_builder_silent_timeline_playback.py
+tests/test_builder_update_banner_notes.py
+tests/test_builder_wizard_button.py
+tests/test_flf_vision_observation.py
+tests/test_minimax_h3_audio_drive.py
+tests/test_standalone_video_enhancer.py
+tests/test_story_arc_sections.py
+tests/test_storyboard_gemma_network_timeout.py
+tests/test_storyboard_subject_picker.py
+tests/test_unsharp_strength.py
+tests/test_video_compare_slider.py
+update_notes.json
+video_preroll.py
+vrgdg_ltx_msr_reference_builder.py
+web/ChatGPT Image May 5, 2026, 08_07_18 PM-002.png
+web/ChatGPT Image May 5, 2026, 08_07_18 PM.png
+web/VRGDG_BoxIT.js
+web/VRGDG_BrowserImageBridge.js
+web/VRGDG_EasyMultiCyclingTextPicker_dynamic.js
+web/VRGDG_FaceFixUI.js
+web/VRGDG_FlowBrowserImageEdit_dynamic.js
+web/VRGDG_ImageCompare.js
+web/VRGDG_ImageSwitchMulti_dynamic.js
+web/VRGDG_Krea2AIToolkitInstaller.js
+web/VRGDG_Krea2LoraStudio.js
+web/VRGDG_Krea2MusubiInstaller.js
+web/VRGDG_LLM_Multi_dynamic.js
+web/VRGDG_LTXICIngredientsGrid_dynamic.js
+web/VRGDG_LTXLoraTrain_TensorBoard.js
+web/VRGDG_LoadAudioSplitUpload.js
+web/VRGDG_LoadAudioSplit_HUMO_Transcribe.js
+web/VRGDG_LoadAudioSplit_HUMO_TranscribeV2.js
+web/VRGDG_LoadAudioWithPath_dynamic.js
+web/VRGDG_LoadLatestCombinedJsonText_dynamic.js
+web/VRGDG_LoadTextAdvanced_dynamic.js
+web/VRGDG_LoadText_dynamic.js
+web/VRGDG_LocalLLM_dynamic.js
+web/VRGDG_LoraDatasetCreatorUI.js
+web/VRGDG_LoraSwitchMulti_dynamic.js
+web/VRGDG_MultiCyclingTextPicker_dynamic.js
+web/VRGDG_MultiReferenceConditioningFromPaths.js
+web/VRGDG_MultiReferenceConditioning_dynamic.js
+web/VRGDG_MultiStringConcat_dynamic.js
+web/VRGDG_MusicVideoBuilderLUTs.js
+web/VRGDG_MusicVideoBuilderUI.js
+web/VRGDG_MusicVideoPromptCreatorUI.js
+web/VRGDG_MusicVideoWizardUI.js
+web/VRGDG_MusubiTunerInstaller.js
+web/VRGDG_NoteBox.js
+web/VRGDG_OverlayTrack.js
+web/VRGDG_PopupTest.js
+web/VRGDG_PostProcessComparePreview.js
+web/VRGDG_PromptCreatorUI.js
+web/VRGDG_PromptCreatorUI_V2.js
+web/VRGDG_PromptSplitter.js
+web/VRGDG_Qwen35_dynamic.js
+web/VRGDG_SetGroupStateMulti_dynamic.js
+web/VRGDG_ShowText.js
+web/VRGDG_SpeedCharacterLoraTraining_dynamic.js
+web/VRGDG_StandaloneVideoEnhancer.js
+web/VRGDG_StartImageStoryboardUI.js
+web/VRGDG_StoryboardBuilderUI.js
+web/VRGDG_T2IPromptsFromConcepts.js
+web/VRGDG_T2VPromptsFromConcepts.js
+web/VRGDG_UIThemes.js
+web/VRGDG_UpdateLatestCombinedJsonPrompts_dynamic.js
+web/VRGDG_UpdateLatestCombinedJsonPrompts_zimage_dynamic.js
+web/VRGDG_VideoBuilderNodeUI.js
+web/VRGDG_VideoCompare.js
+web/VRGDG_VideoEditorUI.js
+web/VRGDG_VideoFolderGridPlot_dynamic.js
+web/VRGDG_WorkflowRunnerUI.js
+web/readme.txt
+web/vrgdg_loadaudiosplit_HUMO.js
+web/vrgdg_loadaudiosplit_dynamic.js
+web/vrgdg_loadvideos.js
+web/vrgdg_scene_builder.js

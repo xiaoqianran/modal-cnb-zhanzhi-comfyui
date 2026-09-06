@@ -223,7 +223,7 @@
     "Comfy.Sidebar.Style": "floating",
     "Comfy.Node.Opacity": 1,
     "Comfy.LinkRenderMode": 2,
-    "Comfy.Queue.History.Expanded": true,
+    "Comfy.Queue.History.Expanded": false,
     "EasyUse.ContextMenu.ModelsThumbnails": true,
     "\ud83c\udf10\u7ffb\u8bd1\u8bbe\u7f6e.\u524d\u7aefUI\u7ec4\u4ef6.Enable": true,
     "\ud83c\udf10\u7ffb\u8bd1\u8bbe\u7f6e.\u8bed\u8a00\u5f00\u5173.Enable": true,

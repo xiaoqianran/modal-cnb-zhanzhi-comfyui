@@ -144,6 +144,8 @@
     "MelBandRoFormer/MelBandRoformer_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/MelBandRoFormer_comfy/-/lfs/6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
   },
   "loras": {
+    "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/6a56f41ab4229c9dd845b9501bbd475ee57e112d846cf2e819d534a1ae928c5a",
+    "minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/08cfe946033af7d27719b964b6e0a0e50c32138daabbd6ce4137e23df6bf9980",
     "Minimax H3真实电影质感V0.1.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/51dda79218ea126cbb2e08f3a6d9cc595e2224f4977d7618061954043a8bafcf",
     "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/7098acf3ee75028fd9fcd948f50fcc8d995057fabb76f86bd3ca2c0ffc58e409",
     "wushu_action_v7_ref2va_aitoolkit_NO-ADALN_pruned-int8convrot_2000step.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/f070becda73c65a19a8204384db51bb8204d2303055852172c25aa699589326e",
