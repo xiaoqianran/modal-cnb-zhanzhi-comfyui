@@ -88,6 +88,7 @@
     "Wan/Wan21_Uni3C_controlnet_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/WanVideo_comfy/-/lfs/d7dd1bfe5f34dea607a749d72f206908e76a908b9999cb28c53c3eb167ddd709"
   },
   "diffusion_models": {
+    "DasiwaMinimaxH3_dasiwaHybridV2_int8.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/4cb8e1eaa9c3e5c664822760890bcbe6078455401cfa43205baf322e856d25f8",
     "minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/a629cfea8d89a071b140c6e1935dc9a23e72de6badc18975a2bb9e6d1423d76d",
     "minimax_h3_ref2va_int8_convrot.safetensors": "https://cnb.cool/ai-models/Comfy-Org/MiniMax-H3/-/lfs/9eef934046a0671bc8a5daf87100705e1478419c574cfde70c50fbe6885f76a9",
     "minimax_h3_fl2va_int8_convrot.safetensors": "https://cnb.cool/ai-models/Comfy-Org/MiniMax-H3/-/lfs/7ad4c73e6e378b822ffd1629f27f632d3787d95f5e468e3af958f98c58df96a5",
