@@ -10,6 +10,7 @@ import torch.nn as nn
 import folder_paths
 from .imagefunc import log, tensor2pil, pil2tensor, mask2image, image2mask, RGB2RGBA
 from .imagefunc import guided_filter_alpha, mask_edge_detail, histogram_remap, generate_VITMatte, generate_VITMatte_trimap
+from .imagefunc import DEVICE_LIST_OPTIONS
 
 
 class SegformerPipeline:
@@ -70,7 +71,7 @@ class Segformer_B2_Clothes:
     @classmethod
     def INPUT_TYPES(cls):
         method_list = ['VITMatte', 'VITMatte(local)', 'vitmatte-base-composition-1k', 'PyMatting', 'GuidedFilter', ]
-        device_list = ['cuda', 'cpu']
+        device_list = DEVICE_LIST_OPTIONS
         return {"required":
             {
                 "image": ("IMAGE",),
@@ -462,7 +463,7 @@ class SegformerUltraV2:
     @classmethod
     def INPUT_TYPES(cls):
         method_list = ['VITMatte', 'VITMatte(local)', 'vitmatte-base-composition-1k', 'PyMatting', 'GuidedFilter', ]
-        device_list = ['cuda', 'cpu']
+        device_list = DEVICE_LIST_OPTIONS
         return {"required":
             {
                 "image": ("IMAGE",),
@@ -801,7 +802,7 @@ class LS_LoadSegformerModel:
     @classmethod
     def INPUT_TYPES(cls):
         model_list = ['segformer_b3_clothes', 'segformer_b2_clothes', 'segformer_b3_fashion']
-        device_list = ['cuda', 'cpu']
+        device_list = DEVICE_LIST_OPTIONS
         return {"required":
                    {
                     "model_name": (model_list,),

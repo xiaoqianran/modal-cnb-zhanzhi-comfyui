@@ -1,0 +1,25 @@
+{
+  "upstream": "https://github.com/facok/comfyui-SelfLift",
+  "basis": "Local installed snapshot; upstream commit not recorded.",
+  "upstream_sha256": {
+    "__init__.py": "4c0f96b0f0006df5a559d09d44b8d521a32d7992383223310b5ba2a3f88e3e42",
+    "diagnostics.py": "a4a81b2ddc6a2f8b4cf6be040c184e0b0b848513ed21a332a7169215f5f55641",
+    "h3_tiling.py": "dd285f1af595c945d974de8e734b779bc4dad5bf125bc312895070bfa31a83bd",
+    "h3_tst.py": "20fd3def8a1d172abb2ee2563ef5f83af28d006300f43a92d1abef244651af13",
+    "h3_upscaler.py": "63d0683e04ed81dbfb2fcc6a61fa55cf742d6c04a87455fbf1f2353b1239322a",
+    "nodes.py": "61c222493b07ba7075878a047387dfe8224e04ff3d88c605dd916254c6d7f14e",
+    "selflift.py": "866ccdbe6dc37797cef6d36a8f823836d80e141891b38b0a457b4e9cc8f998ce"
+  },
+  "published_python_sha256": {
+    "avatar_masks.py": "658b1a3ec989cf04428581cb425262e433327d5480ad8ce1dcfaa8fb1cbf3a6c",
+    "avatar_sampling.py": "332af14067de704d4d0ee12cd61bc5e040d59068a5dcd9fb6c7ef84676a41735",
+    "diagnostics.py": "a4a81b2ddc6a2f8b4cf6be040c184e0b0b848513ed21a332a7169215f5f55641",
+    "h3_tiling.py": "dd285f1af595c945d974de8e734b779bc4dad5bf125bc312895070bfa31a83bd",
+    "h3_tst.py": "20fd3def8a1d172abb2ee2563ef5f83af28d006300f43a92d1abef244651af13",
+    "h3_upscaler.py": "63d0683e04ed81dbfb2fcc6a61fa55cf742d6c04a87455fbf1f2353b1239322a",
+    "nodes.py": "5a3da7667259f2e83a7e2c15c4c8fd283d7f69a5b875a7fc07bf4f44ecd6b4e6",
+    "selflift.py": "5949d89bd3fa2a9f8a64574cb13a0ae0339164270e9f8282c90373aa18ce1ebb",
+    "__init__.py": "4c0f96b0f0006df5a559d09d44b8d521a32d7992383223310b5ba2a3f88e3e42",
+    "tests/test_avatar.py": "9cc4eded3d302344430c2c29a129c8fd09d3599660e62d99cea493b647a03e98"
+  }
+}

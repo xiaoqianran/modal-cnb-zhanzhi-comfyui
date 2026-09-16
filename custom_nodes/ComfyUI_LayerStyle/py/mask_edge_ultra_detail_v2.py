@@ -2,6 +2,7 @@ import torch
 from PIL import Image
 from .imagefunc import log, tensor2pil, pil2tensor, image2mask, expand_mask, mask_fix
 from  .imagefunc import guided_filter_alpha, histogram_remap, mask_edge_detail ,RGB2RGBA, generate_VITMatte, generate_VITMatte_trimap
+from .imagefunc import DEVICE_LIST_OPTIONS
 
 
 
@@ -13,7 +14,7 @@ class MaskEdgeUltraDetailV2:
     def INPUT_TYPES(cls):
 
         method_list = ['VITMatte', 'VITMatte(local)', 'vitmatte-base-composition-1k', 'PyMatting', 'GuidedFilter', ]
-        device_list = ['cuda','cpu']
+        device_list = DEVICE_LIST_OPTIONS
         return {
             "required": {
                 "image": ("IMAGE",),

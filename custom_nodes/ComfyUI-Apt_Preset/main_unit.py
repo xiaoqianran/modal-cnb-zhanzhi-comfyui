@@ -135,7 +135,7 @@ except KeyError:
 def load_upscale_model(model_name):
     model_path = folder_paths.get_full_path("upscale_models", model_name)
     model = ModelLoader().load_from_file(model_path).eval()
-    return model    
+    return model
 
 
 
@@ -1128,7 +1128,7 @@ def upscale_with_model(upscale_model, image):
 
     upscale_model.cpu()
     s = torch.clamp(s.movedim(-3,-1), min=0, max=1.0)
-    return s        
+    return s
 
 
 def image_upscale(image, upscale_method, scale_by):

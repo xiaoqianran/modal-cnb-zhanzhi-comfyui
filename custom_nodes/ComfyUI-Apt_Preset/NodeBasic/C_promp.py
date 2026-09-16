@@ -1693,6 +1693,78 @@ class text_StrMatrix:
 
 
 
+class text_MinimaxH3:
+    CATEGORY = "Apt_Preset/prompt"
+    FUNCTION = "process"
+    RETURN_TYPES = ("ARRAY",)
+    RETURN_NAMES = ("array",)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {
+            "text": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False}),
+            "delimiter": ("STRING", {"default": "【Segment {n}】",
+                "tooltip": "分隔标识必须从行首开始；{n} 匹配数字。可在其后添加 【Duration 3.5s】 和该段正文。"}),
+            "duration_delimiter": ("STRING", {"default": "【Duration {t}s】",
+                "tooltip": "时长标识必须包含 {t}，支持自定义文字、全角或半角字符及任意空格。"}),
+        }}
+
+    @staticmethod
+    def _normalize_marker(value):
+        return re.sub(
+            r"\s+", "", unicodedata.normalize("NFKC", str(value)).translate(str.maketrans("【】", "[]"))
+        )
+
+    @classmethod
+    def _marker_pattern(cls, value, placeholder, capture=False):
+        marker = cls._normalize_marker(value)
+        if not marker or "\n" in str(value) or "\r" in str(value) or marker.count(placeholder) != 1:
+            raise ValueError(f"标识必须独占一行并包含一个 {placeholder}")
+        before, after = marker.split(placeholder)
+        number = r"([0-9]+(?:\.[0-9])?)" if capture else r"[0-9]+"
+        return f"{re.escape(before)}{number}{re.escape(after)}", re.escape(before)
+
+    @classmethod
+    def _marker_remainder(cls, line, normalized_prefix):
+        for offset in range(1, len(line) + 1):
+            normalized = cls._normalize_marker(line[:offset])
+            if normalized == normalized_prefix:
+                return line[offset:].lstrip()
+            if normalized and not normalized_prefix.startswith(normalized):
+                break
+        return ""
+
+    def process(self, text, delimiter="【Segment {n}】", duration_delimiter="【Duration {t}s】"):
+        marker_pattern, _marker_prefix = self._marker_pattern(delimiter, "{n}")
+        duration_pattern, duration_prefix = self._marker_pattern(duration_delimiter, "{t}", True)
+        pattern = re.compile(rf"(?:{marker_pattern})(?:{duration_pattern})?", re.IGNORECASE)
+        duration_start = re.compile(rf"(?:{marker_pattern}){duration_prefix}", re.IGNORECASE)
+        segments, lines = [], []
+        for line in str(text).replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+            normalized_line = self._normalize_marker(line)
+            header = pattern.match(normalized_line)
+            if header:
+                if header[1] is None and duration_start.match(normalized_line):
+                    raise ValueError(f"Duration 格式无效，最多只能有一位小数：{line.strip()}")
+                if header[1] is not None and not 2.0 <= float(header[1]) <= 15.0:
+                    raise ValueError(f"Duration 必须在 2.0s 到 15.0s 之间：{line.strip()}")
+                segment = "\n".join(lines).strip()
+                if segment:
+                    segments.append(segment)
+                remainder = self._marker_remainder(line, header.group(0))
+                lines = [remainder] if remainder else []
+            else:
+                if duration_start.match(normalized_line):
+                    raise ValueError(f"Duration 格式无效，最多只能有一位小数：{line.strip()}")
+                lines.append(line)
+        segment = "\n".join(lines).strip()
+        if segment:
+            segments.append(segment)
+        if not segments:
+            raise ValueError("批量文本为空，没有可导入的Segment ")
+        return (segments,)
+
+
 class text_interPrompt:
     CATEGORY = "Apt_Preset/prompt"
     FUNCTION = "process"
@@ -1731,14 +1803,6 @@ class text_interPrompt:
     def IS_CHANGED(cls, image, lighting_prompt="", camera_prompt="", color_prompt="", light2d_prompt="", position_prompt="", unique_id=None):
         return f"{lighting_prompt}_{camera_prompt}_{color_prompt}_{light2d_prompt}_{position_prompt}"
 text_mulAngle = text_interPrompt
-
-
-
-
-
-
-
-
 
 
 

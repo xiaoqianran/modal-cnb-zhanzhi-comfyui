@@ -18,22 +18,22 @@
         "name": "CLIP类型"
       },
       "clip1": {
-        "name": "CLIP模型1"
+        "name": "clip1"
       },
       "clip2": {
-        "name": "CLIP模型2"
+        "name": "clip2"
       },
       "guidance": {
         "name": "引导"
       },
       "clip3": {
-        "name": "CLIP模型3"
+        "name": "clip3"
       },
       "clip4": {
-        "name": "CLIP模型4"
+        "name": "clip4"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "lora": {
         "name": "LoRA模型"
@@ -107,7 +107,7 @@
         "name": "CLIP类型"
       },
       "clip1": {
-        "name": "CLIP模型1"
+        "name": "clip1"
       },
       "vae": {
         "name": "vae"
@@ -178,22 +178,22 @@
         "name": "CLIP类型"
       },
       "clip1": {
-        "name": "CLIP模型1"
+        "name": "clip1"
       },
       "clip2": {
-        "name": "CLIP模型2"
+        "name": "clip2"
       },
       "guidance": {
         "name": "引导"
       },
       "clip3": {
-        "name": "CLIP模型3"
+        "name": "clip3"
       },
       "clip4": {
-        "name": "CLIP模型4"
+        "name": "clip4"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "lora": {
         "name": "LoRA模型"
@@ -270,7 +270,7 @@
         "name": "模型"
       },
       "clip": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "positive": {
         "name": "正向条件"
@@ -279,16 +279,16 @@
         "name": "负向条件"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "latent_image": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       },
       "latent_mask": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       },
       "steps": {
         "name": "步数"
@@ -341,20 +341,78 @@
         "name": "负向条件"
       },
       "4": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "5": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "6": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "7": {
-        "name": "潜空间图像"
+        "name": "图像"
       },
       "8": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       }
+    }
+  },
+  "UC_load_model": {
+    "display_name": "UC_加载模型",
+    "inputs": {
+      "ckpt_name": { "name": "ckpt模型" },
+      "unet_name": { "name": "UNet模型" },
+      "unet_Weight_Dtype": { "name": "unet_Weight" },
+      "clip_type": { "name": "CLIP类型" },
+      "clip1": { "name": "clip1" },
+      "clip2": { "name": "clip2" },
+      "vae": { "name": "vae" },
+      "audio_vae": { "name": "音频VAE" },
+      "collapse_sampling_parameters": { "name": "采样参数设置" },
+      "steps": { "name": "步数" },
+      "cfg": { "name": "cfg" },
+      "sampler": { "name": "采样器" },
+      "scheduler": { "name": "调度器" },
+      "over_model": { "name": "覆盖模型" },
+      "over_clip": { "name": "覆盖CLIP" },
+      "lora_stack": { "name": "LoRA堆栈" }
+    },
+    "outputs": {
+      "0": { "name": "上下文" },
+      "1": { "name": "模型" },
+      "2": { "name": "clip" }
+    }
+  },
+  "UC_ksampler": {
+    "display_name": "UC_采样器",
+    "inputs": {
+      "sample_parameters": { "name": "采样参数来源" },
+      "latent_size": { "name": "latent尺寸来源" },
+      "ratio_selected": { "name": "比例预设" },
+      "batch_size": { "name": "批次数量" },
+      "width": { "name": "宽度" },
+      "height": { "name": "高度" }
+    }
+  },
+  "UC_Ksampler_refine": {
+    "display_name": "UC_高清修复采样",
+    "inputs": {
+      "context": { "name": "上下文" },
+      "model_name": { "name": "放大模型" },
+      "upscale_output_scale": { "name": "输出缩放系数" },
+      "seed": { "name": "随机种子" },
+      "denoise": { "name": "降噪" },
+      "tile_size": { "name": "分块预设" },
+      "sample_parameters": { "name": "采样参数来源" },
+      "image": { "name": "图像" },
+      "steps": { "name": "步数" },
+      "cfg": { "name": "CFG" },
+      "sampler": { "name": "采样器" },
+      "scheduler": { "name": "调度器" }
+    },
+    "outputs": {
+      "0": { "name": "上下文" },
+      "1": { "name": "图像" }
     }
   },
   "sum_Ksampler": {
@@ -382,7 +440,7 @@
         "name": "负向条件"
       },
       "latent_stack": {
-        "name": "潜空间堆栈"
+        "name": "latent堆栈"
       },
       "lowCpu": {
         "name": "低CPU模式"
@@ -410,7 +468,7 @@
     "display_name": "sum_创建管道",
     "inputs": {
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "width": {
         "name": "宽"
@@ -446,7 +504,7 @@
         "name": "模型"
       },
       "clip": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "over_vae": {
         "name": "覆盖VAE"
@@ -458,7 +516,7 @@
         "name": "覆盖负向条件"
       },
       "over_latent": {
-        "name": "覆盖潜空间"
+        "name": "覆盖latent"
       },
       "lora_stack": {
         "name": "LoRA堆栈"
@@ -481,13 +539,13 @@
         "name": "负向条件"
       },
       "4": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "5": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "6": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "7": {
         "name": "数据"
@@ -513,16 +571,16 @@
         "name": "CPU卸载"
       },
       "clip1": {
-        "name": "CLIP模型1"
+        "name": "clip1"
       },
       "clip2": {
-        "name": "CLIP模型2"
+        "name": "clip2"
       },
       "guidance": {
         "name": "引导"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "lora": {
         "name": "LoRA模型"
@@ -586,26 +644,38 @@
       }
     }
   },
-  "chx_input_data": {
-    "display_name": "chx_接入数据",
+  "UC_create_context": {
+    "display_name": "UC_创建上下文",
     "inputs": {
       "model": {
         "name": "模型"
       },
-      "positive": {
-        "name": "正向条件"
-      },
-      "negative": {
-        "name": "负向条件"
-      },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "clip": {
-        "name": "CLIP模型"
+        "name": "clip"
+      },
+      "audio_vae": {
+        "name": "音频VAE"
+      },
+      "collapse_sampling_parameters": {
+        "name": "采样参数设置"
+      },
+      "steps": {
+        "name": "步数"
+      },
+      "cfg": {
+        "name": "CFG"
+      },
+      "sampler": {
+        "name": "采样器"
+      },
+      "scheduler": {
+        "name": "调度器"
       }
     },
     "outputs": {
@@ -616,19 +686,7 @@
         "name": "模型"
       },
       "2": {
-        "name": "正向条件"
-      },
-      "3": {
-        "name": "负向条件"
-      },
-      "4": {
-        "name": "潜空间"
-      },
-      "5": {
-        "name": "VAE模型"
-      },
-      "6": {
-        "name": "CLIP模型"
+        "name": "clip"
       }
     }
   },
@@ -708,67 +766,10 @@
       }
     }
   },
-  "Data_bus_chx": {
-    "display_name": "Data_总线通道",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "data1": {
-        "name": "数据1"
-      },
-      "data2": {
-        "name": "数据2"
-      },
-      "data3": {
-        "name": "数据3"
-      },
-      "data4": {
-        "name": "数据4"
-      },
-      "data5": {
-        "name": "数据5"
-      },
-      "data6": {
-        "name": "数据6"
-      },
-      "data7": {
-        "name": "数据7"
-      },
-      "data8": {
-        "name": "数据8"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "数据1"
-      },
-      "2": {
-        "name": "数据2"
-      },
-      "3": {
-        "name": "数据3"
-      },
-      "4": {
-        "name": "数据4"
-      },
-      "5": {
-        "name": "数据5"
-      },
-      "6": {
-        "name": "数据6"
-      },
-      "7": {
-        "name": "数据7"
-      },
-      "8": {
-        "name": "数据8"
-      }
-    }
-  },
+
+
+
+
   "Data_basic": {
     "display_name": "Data_基础数据",
     "inputs": {
@@ -785,19 +786,19 @@
         "name": "负向条件"
       },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "clip": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "latent_image": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       },
       "latent_mask": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       }
     },
     "outputs": {
@@ -814,19 +815,19 @@
         "name": "负向条件"
       },
       "4": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "5": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "6": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "7": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       },
       "8": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       }
     }
   },
@@ -881,13 +882,13 @@
     "outputs": {}
   },
   "sum_latent": {
-    "display_name": "sum_潜空间",
+    "display_name": "sum_latent",
     "inputs": {
       "context": {
         "name": "上下文"
       },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "pixels": {
         "name": "像素"
@@ -919,7 +920,7 @@
         "name": "上下文"
       },
       "1": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "2": {
         "name": "遮罩"
@@ -954,7 +955,7 @@
         "name": "模型"
       },
       "clip": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "pos": {
         "name": "正向提示词"
@@ -1009,7 +1010,7 @@
         "name": "内绘"
       },
       "latent_stack": {
-        "name": "潜空间堆栈"
+        "name": "latent堆栈"
       }
     },
     "outputs": {
@@ -1026,193 +1027,21 @@
         "name": "负向条件"
       },
       "4": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "5": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "6": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "7": {
         "name": "图像"
       }
     }
   },
-  "sum_stack_Wan": {
-    "display_name": "sum_wan堆栈",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "model": {
-        "name": "模型"
-      },
-      "funControl": {
-        "name": "功能控制"
-      },
-      "funControl22": {
-        "name": "功能控制22"
-      },
-      "funInpaint": {
-        "name": "功能内绘"
-      },
-      "ImageToVideo": {
-        "name": "图像转视频"
-      },
-      "FirstLastFrame": {
-        "name": "首尾帧"
-      },
-      "Vace": {
-        "name": "VACE"
-      },
-      "AnimateVideo": {
-        "name": "动画视频"
-      },
-      "CameraImage": {
-        "name": "相机图像"
-      },
-      "Track": {
-        "name": "跟踪"
-      },
-      "SoundImage": {
-        "name": "声音图像"
-      },
-      "SoundImage_ex": {
-        "name": "声音图像扩展"
-      },
-      "HuMoImage": {
-        "name": "人模图像"
-      },
-      "Phantom": {
-        "name": "幻影"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "模型"
-      },
-      "2": {
-        "name": "正向条件"
-      },
-      "3": {
-        "name": "负向条件"
-      },
-      "4": {
-        "name": "潜空间"
-      },
-      "5": {
-        "name": "VACE修剪潜空间"
-      },
-      "6": {
-        "name": "修剪图像"
-      },
-      "7": {
-        "name": "视频帧偏移"
-      }
-    }
-  },
-  "sum_stack_AD": {
-    "display_name": "sum_AD堆栈",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "model": {
-        "name": "模型"
-      },
-      "chx_Merge": {
-        "name": "chx融合"
-      },
-      "lora_stack": {
-        "name": "LoRA堆"
-      },
-      "ipa_stack": {
-        "name": "IPA堆"
-      },
-      "pos_sch_stack": {
-        "name": "提示词调度"
-      },
-      "cn_stack": {
-        "name": "ControlNet堆"
-      },
-      "latent_stack": {
-        "name": "latent堆"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "模型"
-      },
-      "2": {
-        "name": "正向条件"
-      },
-      "3": {
-        "name": "负向条件"
-      },
-      "4": {
-        "name": "潜空间"
-      },
-      "5": {
-        "name": "图表"
-      }
-    }
-  },
-  "sum_stack_Kontext": {
-    "display_name": "sum_Kontext堆",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "model": {
-        "name": "模型"
-      },
-      "lora_stack": {
-        "name": "LoRA堆栈"
-      },
-      "redux_stack": {
-        "name": "Redux堆栈"
-      },
-      "kontext_MulCond": {
-        "name": "Kontext多条件"
-      },
-      "kontext_Mul_img": {
-        "name": "Kontext多图像"
-      },
-      "union_stack": {
-        "name": "联合堆栈"
-      },
-      "latent_stack": {
-        "name": "潜空间堆栈"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "模型"
-      },
-      "2": {
-        "name": "正向条件"
-      },
-      "3": {
-        "name": "潜空间"
-      },
-      "4": {
-        "name": "CLIP模型"
-      },
-      "5": {
-        "name": "VAE模型"
-      }
-    }
-  },
+
+
   "sum_stack_QwenEditPlus": {
     "display_name": "sum_QwenEditPlus堆",
     "inputs": {
@@ -1250,10 +1079,10 @@
         "name": "系统提示词"
       },
       "latent_image": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       },
       "latent_mask": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       },
       "image1_strength": {
         "name": "图像1强度"
@@ -1279,7 +1108,7 @@
         "name": "负条件"
       },
       "4": {
-        "name": "潜空间"
+        "name": "latent"
       }
     }
   },
@@ -1356,91 +1185,6 @@
       }
     }
   },
-  "sum_stack_QwenEdit": {
-    "display_name": "sum_QwenEdit高级",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "model": {
-        "name": "模型"
-      },
-      "lora_stack": {
-        "name": "LoRA堆叠"
-      },
-      "image1": {
-        "name": "图像1"
-      },
-      "image2": {
-        "name": "图像2"
-      },
-      "image3": {
-        "name": "图像3"
-      },
-      "cond_img1_mask": {
-        "name": "图1条件遮罩"
-      },
-      "cond_img2_mask": {
-        "name": "图2条件遮罩"
-      },
-      "cond_img3_mask": {
-        "name": "图3条件遮罩"
-      },
-      "union_controlnet": {
-        "name": "union控制CN"
-      },
-      "vl_size": {
-        "name": "VL尺寸"
-      },
-      "auto_resize": {
-        "name": "自动调整大小"
-      },
-      "prompt": {
-        "name": "提示词"
-      },
-      "system_prompt": {
-        "name": "系统提示词"
-      },
-      "latent_image": {
-        "name": "latent图像"
-      },
-      "latent_mask": {
-        "name": "latent遮罩"
-      },
-      "image1_strength": {
-        "name": "图1强度"
-      },
-      "image2_strength": {
-        "name": "图2强度"
-      },
-      "image3_strength": {
-        "name": "图3强度"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "合并条件"
-      },
-      "2": {
-        "name": "条件1"
-      },
-      "3": {
-        "name": "条件2"
-      },
-      "4": {
-        "name": "条件3"
-      },
-      "5": {
-        "name": "负条件"
-      },
-      "6": {
-        "name": "latent"
-      }
-    }
-  },
   "basic_Ksampler_simple": {
     "display_name": "basic_简单采样器",
     "inputs": {
@@ -1506,16 +1250,16 @@
         "name": "负向条件"
       },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "clip": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "latent_image": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       }
     },
     "outputs": {
@@ -1535,13 +1279,13 @@
         "name": "负向条件"
       },
       "5": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "6": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "7": {
-        "name": "CLIP模型"
+        "name": "clip"
       }
     }
   },
@@ -1552,7 +1296,7 @@
         "name": "上下文"
       },
       "latent_image": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       },
       "seed": {
         "name": "随机种子"
@@ -1579,7 +1323,7 @@
         "name": "输出平滑度"
       },
       "latent_mask": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       },
       "pos": {
         "name": "正向提示词"
@@ -1832,13 +1576,13 @@
         "name": "负向条件"
       },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "clip": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "image": {
         "name": "图像"
@@ -1861,13 +1605,13 @@
         "name": "负向条件"
       },
       "5": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "6": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "7": {
-        "name": "CLIP模型"
+        "name": "clip"
       }
     }
   },
@@ -1899,7 +1643,7 @@
         "name": "西格玛"
       },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "image": {
         "name": "图像"
@@ -1931,13 +1675,13 @@
         "name": "负向条件"
       },
       "5": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "6": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "7": {
-        "name": "降噪潜空间"
+        "name": "降噪latent"
       }
     }
   },
@@ -1969,7 +1713,7 @@
         "name": "图像输出"
       },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       }
     },
     "outputs": {
@@ -2095,95 +1839,6 @@
       }
     }
   },
-  "chx_Ksampler_dual_paint": {
-    "display_name": "chx_双区采样器",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "image": {
-        "name": "图像"
-      },
-      "mask": {
-        "name": "遮罩"
-      },
-      "smoothness": {
-        "name": "平滑度"
-      },
-      "mask_area_denoise": {
-        "name": "遮罩区域降噪"
-      },
-      "image_area_denoise": {
-        "name": "图像区域降噪"
-      },
-      "refine": {
-        "name": "精炼"
-      },
-      "refine_denoise": {
-        "name": "精炼降噪"
-      },
-      "seed": {
-        "name": "随机种子"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "图像"
-      }
-    }
-  },
-  "chx_Ksampler_mix": {
-    "display_name": "chx_混合采样器",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "add_noise": {
-        "name": "添加噪声"
-      },
-      "noise_seed": {
-        "name": "噪声种子"
-      },
-      "start_step": {
-        "name": "开始步数"
-      },
-      "mid_denoise": {
-        "name": "中间降噪"
-      },
-      "steps": {
-        "name": "步数"
-      },
-      "return_with_leftover_noise": {
-        "name": "返回剩余噪声"
-      },
-      "latent": {
-        "name": "潜空间"
-      },
-      "pos1": {
-        "name": "正向提示1"
-      },
-      "pos2": {
-        "name": "正向提示2"
-      },
-      "neg": {
-        "name": "负向提示"
-      },
-      "mix_method": {
-        "name": "混合方法"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文 "
-      },
-      "1": {
-        "name": "图像"
-      }
-    }
-  },
   "chx_ksampler_Deforum_sch": {
     "display_name": "chx_Deforum调度采样器",
     "inputs": {
@@ -2230,122 +1885,6 @@
     "outputs": {
       "0": {
         "name": "图像"
-      }
-    }
-  },
-  "basic_KSampler_variant_seed": {
-    "display_name": "basic_变体种子采样器",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "add_noise": {
-        "name": "添加噪声"
-      },
-      "noise_seed": {
-        "name": "噪声种子"
-      },
-      "start_at_step": {
-        "name": "开始步数"
-      },
-      "end_at_step": {
-        "name": "结束步数"
-      },
-      "noise_mode": {
-        "name": "噪声模式"
-      },
-      "return_with_leftover_noise": {
-        "name": "返回剩余噪声"
-      },
-      "batch_seed_mode": {
-        "name": "批次种子模式"
-      },
-      "variation_seed": {
-        "name": "变体种子"
-      },
-      "variation_strength": {
-        "name": "变体强度"
-      },
-      "image": {
-        "name": "图像"
-      },
-      "sample_stack": {
-        "name": "采样堆栈"
-      },
-      "variation_method": {
-        "name": "变体方法"
-      },
-      "noise_opt": {
-        "name": "噪声选项"
-      },
-      "internal_seed": {
-        "name": "内部种子"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "图像"
-      }
-    }
-  },
-  "pre_qwen_controlnet": {
-    "display_name": "pre_qwen模型补丁",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "image1": {
-        "name": "图像1"
-      },
-      "controlnet1": {
-        "name": "ControlNet1"
-      },
-      "strength1": {
-        "name": "强度1"
-      },
-      "image2": {
-        "name": "图像2"
-      },
-      "controlnet2": {
-        "name": "ControlNet2"
-      },
-      "strength2": {
-        "name": "强度2"
-      },
-      "image3": {
-        "name": "图像3"
-      },
-      "controlnet3": {
-        "name": "ControlNet3"
-      },
-      "strength3": {
-        "name": "强度3"
-      },
-      "latent_image": {
-        "name": "潜空间图像"
-      },
-      "latent_mask": {
-        "name": "潜空间遮罩"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "模型"
-      },
-      "2": {
-        "name": "正向条件"
-      },
-      "3": {
-        "name": "负向条件"
-      },
-      "4": {
-        "name": "潜空间"
       }
     }
   },
@@ -2428,151 +1967,13 @@
         "name": "遮罩平滑"
       },
       "latent_image": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       },
       "latent_mask": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       }
     },
     "outputs": {}
-  },
-  "pre_Kontext": {
-    "display_name": "pre_Kontext",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "image": {
-        "name": "图像"
-      },
-      "mask": {
-        "name": "遮罩"
-      },
-      "prompt_weight": {
-        "name": "提示词权重"
-      },
-      "smoothness": {
-        "name": "平滑度"
-      },
-      "auto_adjust_image": {
-        "name": "自动调整图像"
-      },
-      "pos": {
-        "name": "正向提示词"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "正向条件"
-      },
-      "2": {
-        "name": "潜空间"
-      }
-    }
-  },
-  "pre_Kontext_mul_mask": {
-    "display_name": "pre_Kontext多遮罩",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "image": {
-        "name": "图像"
-      },
-      "mask": {
-        "name": "遮罩"
-      },
-      "pos1": {
-        "name": "正向提示1"
-      },
-      "pos2": {
-        "name": "正向提示2"
-      },
-      "pos3": {
-        "name": "正向提示3"
-      },
-      "pos4": {
-        "name": "正向提示4"
-      },
-      "pos5": {
-        "name": "正向提示5"
-      },
-      "mask1": {
-        "name": "遮罩1"
-      },
-      "mask2": {
-        "name": "遮罩2"
-      },
-      "mask3": {
-        "name": "遮罩3"
-      },
-      "mask4": {
-        "name": "遮罩4"
-      },
-      "mask5": {
-        "name": "遮罩5"
-      },
-      "prompt_weight1": {
-        "name": "提示词权重1"
-      },
-      "prompt_weight2": {
-        "name": "提示词权重2"
-      },
-      "prompt_weight3": {
-        "name": "提示词权重3"
-      },
-      "prompt_weight4": {
-        "name": "提示词权重4"
-      },
-      "prompt_weight5": {
-        "name": "提示词权重5"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "正向条件"
-      }
-    }
-  },
-  "pre_Kontext_mul_Image": {
-    "display_name": "pre_Kontext多图像",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "reference_latents_method": {
-        "name": "参考潜空间方法"
-      },
-      "guidance": {
-        "name": "引导"
-      },
-      "image1": {
-        "name": "图像1"
-      },
-      "image2": {
-        "name": "图像2"
-      },
-      "image3": {
-        "name": "图像3"
-      },
-      "image4": {
-        "name": "图像4"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "正向条件"
-      }
-    }
   },
   "pre_controlnet": {
     "display_name": "pre_ControlNet",
@@ -2721,10 +2122,10 @@
         "name": "遮罩模式"
       },
       "latent_image": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       },
       "latent_mask": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       },
       "smoothness": {
         "name": "平滑度"
@@ -2750,7 +2151,7 @@
         "name": "负向条件"
       },
       "3": {
-        "name": "潜空间"
+        "name": "latent"
       }
     }
   },
@@ -2818,34 +2219,6 @@
       }
     }
   },
-  "pre_mul_ref_latent": {
-    "display_name": "pre_参考latent",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "ref_latent_img1": {
-        "name": "ref_latent_img1"
-      },
-      "ref_latent_img2": {
-        "name": "ref_latent_img2"
-      },
-      "ref_latent_img3": {
-        "name": "ref_latent_img3"
-      },
-      "ref_latent_img4": {
-        "name": "ref_latent_img4"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "正向条件"
-      }
-    }
-  },
   "pre_advanced_condi_merge": {
     "display_name": "pre_高级条件融合",
     "inputs": {
@@ -2886,91 +2259,8 @@
       }
     }
   },
-  "pre_ic_light_sd15": {
-    "display_name": "pre_IClightSD15",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "bg_unet": {
-        "name": "背景UNet"
-      },
-      "fo_unet": {
-        "name": "前景UNet"
-      },
-      "multiplier": {
-        "name": "倍数"
-      },
-      "fore_img": {
-        "name": "前景图像"
-      },
-      "bg_img": {
-        "name": "背景图像"
-      },
-      "light_img": {
-        "name": "光照图像"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "光照图像"
-      }
-    }
-  },
-  "pre_USO": {
-    "display_name": "pre_USO",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "image": {
-        "name": "图像"
-      },
-      "reference_latents_method": {
-        "name": "参考潜空间方法"
-      },
-      "guidance": {
-        "name": "引导"
-      },
-      "smoothness": {
-        "name": "平滑度"
-      },
-      "crop": {
-        "name": "裁剪"
-      },
-      "clip_vision": {
-        "name": "CLIP视觉"
-      },
-      "model_patch": {
-        "name": "模型补丁"
-      },
-      "mask": {
-        "name": "遮罩"
-      },
-      "ref_image": {
-        "name": "参考图像"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "模型"
-      },
-      "2": {
-        "name": "正向条件"
-      },
-      "3": {
-        "name": "潜空间"
-      }
-    }
-  },
   "pre_latent_light": {
-    "display_name": "pre_潜空间光照",
+    "display_name": "pre_latent光照",
     "inputs": {
       "context": {
         "name": "上下文"
@@ -2993,48 +2283,7 @@
         "name": "图像"
       },
       "2": {
-        "name": "潜空间"
-      }
-    }
-  },
-  "pre_guide": {
-    "display_name": "pre_引导",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "guidance": {
-        "name": "引导"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      }
-    }
-  },
-  "pre_sample_data": {
-    "display_name": "pre_采样数据",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "steps": {
-        "name": "步数"
-      },
-      "cfg": {
-        "name": "cfg"
-      },
-      "sampler": {
-        "name": "采样器"
-      },
-      "scheduler": {
-        "name": "调度器"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
+        "name": "latent"
       }
     }
   },
@@ -3387,119 +2636,6 @@
       }
     }
   },
-  "chx_YC_LG_Redux": {
-    "display_name": "chx_YC_LG_Redux",
-    "inputs": {
-      "context": {
-        "name": "上下文"
-      },
-      "style_model": {
-        "name": "风格模型"
-      },
-      "clip_vision": {
-        "name": "CLIP视觉"
-      },
-      "crop": {
-        "name": "裁剪"
-      },
-      "sharpen": {
-        "name": "锐化"
-      },
-      "patch_res": {
-        "name": "补丁分辨率"
-      },
-      "style_strength": {
-        "name": "风格强度"
-      },
-      "prompt_strength": {
-        "name": "提示词强度"
-      },
-      "blend_mode": {
-        "name": "混合模式"
-      },
-      "noise_level": {
-        "name": "噪声级别"
-      },
-      "image": {
-        "name": "图像"
-      },
-      "mask": {
-        "name": "遮罩"
-      },
-      "guidance": {
-        "name": "引导"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "上下文"
-      },
-      "1": {
-        "name": "正向条件"
-      }
-    }
-  },
-  "IPA_XL_PromptInjection": {
-    "display_name": "IPA_XL提示词注入",
-    "inputs": {
-      "model": {
-        "name": "模型"
-      },
-      "all": {
-        "name": "全部"
-      },
-      "input_4": {
-        "name": "输入_4"
-      },
-      "input_5": {
-        "name": "输入_5"
-      },
-      "input_7": {
-        "name": "输入_7"
-      },
-      "input_8": {
-        "name": "输入_8"
-      },
-      "middle_0": {
-        "name": "中间_0"
-      },
-      "output_0": {
-        "name": "输出_0"
-      },
-      "output_1": {
-        "name": "输出_1"
-      },
-      "output_2": {
-        "name": "输出_2"
-      },
-      "output_3": {
-        "name": "输出_3"
-      },
-      "output_4": {
-        "name": "输出_4"
-      },
-      "output_5": {
-        "name": "输出_5"
-      },
-      "weight": {
-        "name": "权重"
-      },
-      "start_at": {
-        "name": "开始于"
-      },
-      "end_at": {
-        "name": "结束于"
-      },
-      "noise": {
-        "name": "噪声"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "输出0"
-      }
-    }
-  },
   "IPA_clip_vision": {
     "display_name": "IPA_CLIP视觉",
     "inputs": {
@@ -3517,10 +2653,10 @@
     }
   },
   "Stack_latent": {
-    "display_name": "Stack_潜空间",
+    "display_name": "Stack_latent",
     "inputs": {
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       },
       "pixels": {
         "name": "像素"
@@ -3549,7 +2685,7 @@
     },
     "outputs": {
       "0": {
-        "name": "潜空间堆栈"
+        "name": "latent堆栈"
       }
     }
   },
@@ -3575,68 +2711,6 @@
     "outputs": {
       "0": {
         "name": "遮罩堆栈"
-      }
-    }
-  },
-  "Stack_Kontext_MulCondi": {
-    "display_name": "Stack_Kontext多条件",
-    "inputs": {
-      "image": {
-        "name": "图像"
-      },
-      "mask": {
-        "name": "遮罩"
-      },
-      "pos1": {
-        "name": "正向提示1"
-      },
-      "pos2": {
-        "name": "正向提示2"
-      },
-      "pos3": {
-        "name": "正向提示3"
-      },
-      "mask1": {
-        "name": "遮罩1"
-      },
-      "mask2": {
-        "name": "遮罩2"
-      },
-      "mask3": {
-        "name": "遮罩3"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "Kontext多条件"
-      }
-    }
-  },
-  "Stack_Kontext_MulImg": {
-    "display_name": "Stack_Kontext多图像",
-    "inputs": {
-      "reference_latents_method": {
-        "name": "参考潜空间方法"
-      },
-      "guidance": {
-        "name": "引导"
-      },
-      "pos": {
-        "name": "正向提示词"
-      },
-      "image1": {
-        "name": "图像1"
-      },
-      "image2": {
-        "name": "图像2"
-      },
-      "image3": {
-        "name": "图像3"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "Kontext多图像"
       }
     }
   },
@@ -3755,55 +2829,6 @@
       }
     }
   },
-  "Stack_Redux": {
-    "display_name": "Stack_Redux",
-    "inputs": {
-      "style_model": {
-        "name": "风格模型"
-      },
-      "clip_vision": {
-        "name": "CLIP视觉"
-      },
-      "crop": {
-        "name": "裁剪"
-      },
-      "sharpen": {
-        "name": "锐化"
-      },
-      "patch_res": {
-        "name": "补丁分辨率"
-      },
-      "style_strength": {
-        "name": "风格强度"
-      },
-      "prompt_strength": {
-        "name": "提示词强度"
-      },
-      "blend_mode": {
-        "name": "混合模式"
-      },
-      "noise_level": {
-        "name": "噪声级别"
-      },
-      "image": {
-        "name": "图像"
-      },
-      "mask": {
-        "name": "遮罩"
-      },
-      "guidance": {
-        "name": "引导"
-      },
-      "redux_stack": {
-        "name": "Redux堆栈"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "Redux堆栈"
-      }
-    }
-  },
   "Stack_condi": {
     "display_name": "Stack_条件",
     "inputs": {
@@ -3893,7 +2918,7 @@
         "name": "可选遮罩"
       },
       "latent_kf_override": {
-        "name": "潜空间关键帧覆盖"
+        "name": "latent关键帧覆盖"
       },
       "cn_stack": {
         "name": "ControlNet堆栈"
@@ -4005,10 +3030,10 @@
         "name": "遮罩模式"
       },
       "latent_image": {
-        "name": "潜空间图像"
+        "name": "latent图像"
       },
       "latent_mask": {
-        "name": "潜空间遮罩"
+        "name": "latent遮罩"
       },
       "smoothness": {
         "name": "平滑度"
@@ -4350,409 +3375,7 @@
       }
     }
   },
-  "Stack_WanFunControlToVideo": {
-    "display_name": "Stack_wan功能控制转视频",
-    "inputs": {
-      "clip_vision_name": {
-        "name": "CLIP视觉名称"
-      },
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "clip_img": {
-        "name": "CLIP图像"
-      },
-      "start_image": {
-        "name": "开始图像"
-      },
-      "control_video": {
-        "name": "控制视频"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "功能控制"
-      }
-    }
-  },
-  "Stack_Wan22FunControlToVideo": {
-    "display_name": "Stack_wan22功能控制转视频",
-    "inputs": {
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "ref_image": {
-        "name": "参考图像"
-      },
-      "control_video": {
-        "name": "控制视频"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "功能控制22"
-      }
-    }
-  },
-  "Stack_WanFunInpaintToVideo": {
-    "display_name": "Stack_wan功能重绘转视频",
-    "inputs": {
-      "clip_vision_name": {
-        "name": "CLIP视觉名称"
-      },
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "clip_img": {
-        "name": "CLIP图像"
-      },
-      "start_image": {
-        "name": "开始图像"
-      },
-      "end_image": {
-        "name": "结束图像"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "功能重绘"
-      }
-    }
-  },
-  "Stack_WanImageToVideo": {
-    "display_name": "Stack_wan图像转视频",
-    "inputs": {
-      "clip_vision_name": {
-        "name": "CLIP视觉名称"
-      },
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "clip_img": {
-        "name": "CLIP图像"
-      },
-      "start_image": {
-        "name": "开始图像"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "图像转视频"
-      }
-    }
-  },
-  "Stack_WanFirstLastFrameToVideo": {
-    "display_name": "Stack_wan首尾帧转视频",
-    "inputs": {
-      "clip_vision_name_start": {
-        "name": "CLIP视觉名称开始"
-      },
-      "clip_vision_name_end": {
-        "name": "CLIP视觉名称结束"
-      },
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "clip_img_start": {
-        "name": "CLIP图像开始"
-      },
-      "clip_img_end": {
-        "name": "CLIP图像结束"
-      },
-      "start_image": {
-        "name": "开始图像"
-      },
-      "end_image": {
-        "name": "结束图像"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "首尾帧"
-      }
-    }
-  },
-  "Stack_WanVaceToVideo": {
-    "display_name": "Stack_VACE转视频",
-    "inputs": {
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "strength": {
-        "name": "强度"
-      },
-      "control_video": {
-        "name": "控制视频"
-      },
-      "control_masks": {
-        "name": "控制遮罩"
-      },
-      "reference_image": {
-        "name": "参考图像"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "VACE"
-      }
-    }
-  },
-  "Stack_WanAnimateToVideo": {
-    "display_name": "Stack_wan动画转视频",
-    "inputs": {
-      "clip_vision_name": {
-        "name": "CLIP视觉名称"
-      },
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "continue_motion_max_frames": {
-        "name": "继续运动最大帧数"
-      },
-      "video_frame_offset": {
-        "name": "视频帧偏移"
-      },
-      "clip_img": {
-        "name": "CLIP图像"
-      },
-      "reference_image": {
-        "name": "参考图像"
-      },
-      "face_video": {
-        "name": "人脸视频"
-      },
-      "pose_video": {
-        "name": "姿态视频"
-      },
-      "continue_motion": {
-        "name": "继续运动"
-      },
-      "background_video": {
-        "name": "背景视频"
-      },
-      "character_mask": {
-        "name": "角色遮罩"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "动画视频"
-      }
-    }
-  },
-  "Stack_WanCameraImageToVideo": {
-    "display_name": "Stack_wan相机图像转视频",
-    "inputs": {
-      "clip_vision_name": {
-        "name": "CLIP视觉名称"
-      },
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "clip_img": {
-        "name": "CLIP图像"
-      },
-      "start_image": {
-        "name": "开始图像"
-      },
-      "camera_conditions": {
-        "name": "相机条件"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "相机图像"
-      }
-    }
-  },
-  "Stack_WanTrackToVideo": {
-    "display_name": "Stack_wan跟踪转视频",
-    "inputs": {
-      "clip_vision_name": {
-        "name": "CLIP视觉名称"
-      },
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "temperature": {
-        "name": "温度"
-      },
-      "topk": {
-        "name": "前K个"
-      },
-      "tracks": {
-        "name": "跟踪"
-      },
-      "clip_img": {
-        "name": "CLIP图像"
-      },
-      "start_image": {
-        "name": "开始图像"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "跟踪"
-      }
-    }
-  },
-  "Stack_WanSoundImageToVideo": {
-    "display_name": "Stack_wan声音图像转视频",
-    "inputs": {
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "ref_image": {
-        "name": "参考图像"
-      },
-      "control_video": {
-        "name": "控制视频"
-      },
-      "ref_motion": {
-        "name": "参考运动"
-      },
-      "audio_encoder_output": {
-        "name": "音频编码器输出"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "声音图像"
-      }
-    }
-  },
-  "Stack_WanSoundImageToVideoExtend": {
-    "display_name": "Stack_wan声音图像转视频扩展",
-    "inputs": {
-      "length": {
-        "name": "长度"
-      },
-      "video_latent": {
-        "name": "视频潜空间"
-      },
-      "ref_image": {
-        "name": "参考图像"
-      },
-      "control_video": {
-        "name": "控制视频"
-      },
-      "audio_encoder_output": {
-        "name": "音频编码器输出"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "声音图像扩展"
-      }
-    }
-  },
-  "Stack_WanHuMoImageToVideo": {
-    "display_name": "Stack_wan人模图像转视频",
-    "inputs": {
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "ref_image": {
-        "name": "参考图像"
-      },
-      "audio_encoder_output": {
-        "name": "音频编码器输出"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "人模图像"
-      }
-    }
-  },
-  "Stack_WanPhantomSubjectToVideo": {
-    "display_name": "Stack_wan幻影主体转视频",
-    "inputs": {
-      "width": {
-        "name": "宽"
-      },
-      "height": {
-        "name": "高"
-      },
-      "length": {
-        "name": "长度"
-      },
-      "images": {
-        "name": "图像"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "幻影"
-      }
-    }
-  },
+
   "Stack_GradientAndStroke": {
     "display_name": "Stack_渐变和描边",
     "inputs": {
@@ -4907,7 +3530,7 @@
         "name": "可选遮罩"
       },
       "latent_kf_override": {
-        "name": "潜空间关键帧覆盖"
+        "name": "latent关键帧覆盖"
       }
     },
     "outputs": {
@@ -5052,7 +3675,7 @@
     }
   },
   "AD_sch_latent": {
-    "display_name": "AD_调度潜空间",
+    "display_name": "AD_调度latent",
     "inputs": {
       "text": {
         "name": "文本"
@@ -5064,12 +3687,12 @@
         "name": "缓动类型"
       },
       "prev_latent_kf": {
-        "name": "前一潜空间关键帧"
+        "name": "前一latent关键帧"
       }
     },
     "outputs": {
       "0": {
-        "name": "潜空间关键帧"
+        "name": "latent关键帧"
       },
       "1": {
         "name": "图表"
@@ -5553,13 +4176,13 @@
         "name": "UNet模型"
       },
       "clip_name1": {
-        "name": "CLIP模型1"
+        "name": "clip1"
       },
       "clip_name2": {
-        "name": "CLIP模型2"
+        "name": "clip2"
       },
       "clip_name3": {
-        "name": "CLIP模型3"
+        "name": "clip3"
       },
       "clip_vision": {
         "name": "视觉CLIP"
@@ -5595,13 +4218,13 @@
         "name": "UNet模型"
       },
       "2": {
-        "name": "CLIP模型1"
+        "name": "clip1"
       },
       "3": {
-        "name": "CLIP模型2"
+        "name": "clip2"
       },
       "4": {
-        "name": "CLIP模型3"
+        "name": "clip3"
       },
       "5": {
         "name": "视觉CLIP"
@@ -5952,7 +4575,7 @@
         "name": "样本"
       },
       "trim_latent": {
-        "name": "裁剪潜空间"
+        "name": "裁剪latent"
       },
       "tile_size": {
         "name": "分块大小"
@@ -6939,7 +5562,7 @@
     }
   },
   "chx_latent_adjust": {
-    "display_name": "chx_潜空间调整",
+    "display_name": "chx_latent调整",
     "inputs": {
       "brightness": {
         "name": "亮度"
@@ -6966,7 +5589,7 @@
         "name": "上下文"
       },
       "latent": {
-        "name": "潜空间"
+        "name": "latent"
       }
     },
     "outputs": {
@@ -6974,7 +5597,7 @@
         "name": "上下文"
       },
       "1": {
-        "name": "潜空间"
+        "name": "latent"
       }
     }
   },
@@ -11523,10 +10146,10 @@
     "display_name": "Easy_QwenEdit2509",
     "inputs": {
       "clip": {
-        "name": "CLIP模型"
+        "name": "clip"
       },
       "vae": {
-        "name": "VAE模型"
+        "name": "vae"
       },
       "image1": {
         "name": "图像1"
@@ -11931,7 +10554,7 @@
         "name": "图像"
       },
       "2": {
-        "name": "潜空间"
+        "name": "latent"
       }
     }
   },
@@ -11995,7 +10618,7 @@
         "name": "图像"
       },
       "2": {
-        "name": "潜空间"
+        "name": "latent"
       }
     }
   },
@@ -12108,23 +10731,23 @@
     "inputs": {
       "context": {
         "name": "上下文"
+      },
+      "steps": {
+        "name": "步数"
+      },
+      "cfg": {
+        "name": "CFG"
+      },
+      "sampler": {
+        "name": "采样器"
+      },
+      "scheduler": {
+        "name": "调度器"
       }
     },
     "outputs": {
       "0": {
         "name": "上下文"
-      },
-      "1": {
-        "name": "步数"
-      },
-      "2": {
-        "name": "cfg"
-      },
-      "3": {
-        "name": "采样器"
-      },
-      "4": {
-        "name": "调度器"
       }
     }
   },
@@ -12357,7 +10980,7 @@
         "name": "正向"
       },
       "2": {
-        "name": "潜空间"
+        "name": "latent"
       }
     }
   },
@@ -13218,8 +11841,8 @@
     }
 },
 
-"AD_VideoSeg": {
-    "display_name": "AD_视频分割",
+"AD_VideoSeg_auto": {
+    "display_name": "AD_视频自动分割",
     "inputs": {
         "video_path": {
             "name": "视频路径"
@@ -13415,103 +12038,6 @@
       }
     }
   },
-"AD_AutoTileVAEDecode": {
-    "display_name": "AD_vae自动切片",
-    "inputs": {
-        "width": {
-            "name": "宽度"
-        },
-        "height": {
-            "name": "高度"
-        },
-        "total_frames": {
-            "name": "总帧数"
-        },
-        "vram_level": {
-            "name": "显存级别"
-        },
-        "temporal_compression": {
-            "name": "时间压缩率"
-        },
-        "vae": {
-            "name": "vae"
-        }
-    },
-    "outputs": {
-        "0": {
-            "name": "分块尺寸"
-        },
-        "1": {
-            "name": "重叠"
-        },
-        "2": {
-            "name": "时间尺寸"
-        },
-        "3": {
-            "name": "时间重叠"
-        },
-        "4": {
-            "name": "时间压缩率"
-        }
-    }
-},
-
-
-
-
-
-
-"AD_Latent_Diffusion_Keyframe": {
-    "display_name": "AD_扩散关键帧",
-    "inputs": {
-        "positive": {
-            "name": "正向条件"
-        },
-        "negative": {
-            "name": "负向条件"
-        },
-        "vae": {
-            "name": "vae"
-        },
-        "latent": {
-            "name": "latent"
-        },
-        "history": {
-            "name": "历史数据"
-        },
-        "history_strength": {
-            "name": "历史强度"
-        },
-        "history_fade_frames": {
-            "name": "历史淡出帧数"
-        },
-
-        "num_guides": {
-            "name": "引导数量"
-        }
-    },
-    "outputs": {
-        "0": {
-            "name": "正向条件"
-        },
-        "1": {
-            "name": "负向条件"
-        },
-        "2": {
-            "name": "Video_Latent"
-        },
-        "3": {
-            "name": "Video_vae"
-        },
-        "4": {
-            "name": "历史数据"
-        },
-        "5": {
-            "name": "趋势图"
-        }
-    }
-},
-
 
 
 
@@ -13660,20 +12186,17 @@
 "AD_media_trim_visual": {
     "display_name": "AD_媒体修剪",
     "inputs": {
-        "media_path": {
-            "name": "媒体路径"
+        "split_mode": {
+            "name": "分割模式"
         },
-        "start_sec": {
-            "name": "开始时间（秒）"
+        "time": {
+            "name": "时间（秒）"
         },
-        "end_sec": {
-            "name": "结束时间（秒）"
+        "number": {
+            "name": "数量"
         },
         "output_name": {
             "name": "输出名称"
-        },
-        "reencode": {
-            "name": "重新编码"
         },
         "video": {
             "name": "视频"
@@ -13684,12 +12207,15 @@
     },
     "outputs": {
         "0": {
-            "name": "音频list"
+            "name": "音视频list"
         },
         "1": {
             "name": "视频list"
         },
         "2": {
+            "name": "音频list"
+        },
+        "3": {
             "name": "图像list"
         }
     }
@@ -14052,10 +12578,10 @@
     }
   },
   "AD_Inject_Latent": {
-    "display_name": "AD_潜空间注入",
+    "display_name": "AD_latent注入",
     "inputs": {
       "av_latent": {
-        "name": "AV潜空间"
+        "name": "AVlatent"
       },
       "vae": {
         "name": "VAE"
@@ -14072,7 +12598,7 @@
     },
     "outputs": {
       "0": {
-        "name": "AV潜空间"
+        "name": "AVlatent"
       }
     }
   },
@@ -14084,33 +12610,13 @@
       },
       "total": {
         "name": "总阶段数"
-      },
-      "restart_completed": {
-        "name": "重启已完成"
-      },
-      "start": {
-        "name": "起始阶段"
-      },
-      "initial_data": {
-        "name": "初始数据"
       }
     },
     "outputs": {
     }
   },
-  "flow_stage_data": {
-    "display_name": "flow_阶段数据",
-    "inputs": {
-      "stage_info": {
-        "name": "阶段信息"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "数组"
-      }
-    }
-  },
+
+
   "flow_stage_list": {
     "display_name": "flow_阶段列表",
     "inputs": {
@@ -14142,7 +12648,7 @@
         "name": "遮罩批次"
       },
       "2": {
-        "name": "潜空间批次"
+        "name": "latent批次"
       },
       "3": {
         "name": "合并视频"
@@ -14167,7 +12673,7 @@
         "name": "遮罩批次"
       },
       "2": {
-        "name": "潜空间批次"
+        "name": "latent批次"
       },
       "3": {
         "name": "合并视频"
@@ -14180,30 +12686,49 @@
   "flow_stage_unpack": {
     "display_name": "flow_阶段解包",
     "inputs": {
+      "stage_info": {
+        "name": "阶段信息"
+      }
     },
     "outputs": {
-      "0": {
-        "name": "图像"
-      },
-      "1": {
-        "name": "掩码"
-      },
-      "2": {
-        "name": "潜空间"
-      }
+
     }
   },
   "flow_stage_end": {
     "display_name": "flow_阶段结束",
     "inputs": {
-      "data": {
-        "name": "数据"
+      "unload_models": {
+        "name": "卸载模型"
       },
-      "data_type": {
-        "name": "数据类型"
+      "free_memory": {
+        "name": "释放内存"
+      },
+      "free_memory_interval": {
+        "name": "释放内存_间隔阶段"
       }
+  
     }
   },
+
+"basicIn_Media_Params": {
+"display_name": "basicIn_媒体参数",
+"inputs": {
+"aspect_ratio": {
+"name": "画面比例"
+},
+"megapixels": {
+"name": "百万像素"
+},
+"multiple": {
+"name": "整除倍数"
+},
+"time_s": {
+"name": "时长 (秒)"
+}
+},
+"outputs": {
+}
+},
 
   "csv_write_data": {
     "display_name": "CSV_写入数据",

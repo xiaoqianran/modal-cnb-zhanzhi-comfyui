@@ -142,6 +142,33 @@ def _get_dynamic_values_from_prompt(prompt, source_node_data, source_node_id):
             dynamic_items.append((zh_key, value))
     return [item[1] for item in dynamic_items]
 
+
+def _get_named_values_from_prompt(prompt, source_node_data, source_node_id):
+    prompt_data = prompt if isinstance(prompt, dict) else {}
+    prompt_node = prompt_data.get(str(source_node_id), {})
+    prompt_inputs = prompt_node.get("inputs", {}) if isinstance(prompt_node, dict) else {}
+    node_type = str(source_node_data.get("type", ""))
+    linked_input_names = {
+        input_info.get("name")
+        for input_info in source_node_data.get("inputs", [])
+        if isinstance(input_info, dict) and input_info.get("name") and input_info.get("link")
+    }
+    values = {}
+    if isinstance(prompt_inputs, dict):
+        for key, value in prompt_inputs.items():
+            if key in linked_input_names:
+                continue
+            key = str(key)
+            values[key] = value
+            values.setdefault(_resolve_zh_input_name(node_type, key), value)
+    widget_values = source_node_data.get("widgets_values_named", {})
+    if isinstance(widget_values, dict):
+        for key, value in widget_values.items():
+            key = str(key)
+            values.setdefault(key, value)
+            values.setdefault(_resolve_zh_input_name(node_type, key), value)
+    return values
+
 class InputShareNode:
     @classmethod
     def INPUT_TYPES(s):
@@ -192,6 +219,18 @@ class InputShareNode:
         source_node_data = next((n for n in node_list if str(n.get("id")) == str(source_node_id)), None)
         if not source_node_data:
             return {"result": tuple([None] * _INPUT_SHARE_MAX_OUTPUTS)}
+
+        named_values = _get_named_values_from_prompt(prompt, source_node_data, source_node_id)
+        output_defs = cur_node.get("outputs", []) if isinstance(cur_node, dict) else []
+        if isinstance(output_defs, list) and output_defs:
+            values = []
+            for output_def in output_defs[:_INPUT_SHARE_MAX_OUTPUTS]:
+                if not isinstance(output_def, dict):
+                    values.append(None)
+                    continue
+                source_name = output_def.get("source_widget_name") or output_def.get("name")
+                values.append(named_values.get(str(source_name)))
+            return {"result": tuple(values + [None] * (_INPUT_SHARE_MAX_OUTPUTS - len(values)))}
 
         dynamic_values = _get_dynamic_values_from_prompt(prompt, source_node_data, source_node_id)
         widget_values = source_node_data.get("widgets_values", [])

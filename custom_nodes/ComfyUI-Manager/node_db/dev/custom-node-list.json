@@ -1,6 +1,16 @@
 {
     "custom_nodes": [
         {
+          "author": "trusapien",
+          "title": "ComfyUI-Trusapien",
+          "reference": "https://github.com/trusapien/ComfyUI-Trusapien",
+          "files": [
+            "https://github.com/trusapien/ComfyUI-Trusapien"
+          ],
+          "install_type": "git-clone",
+          "description": "Enterprise creative validation, attention heatmaps, and campaign impact scoring by Trusapien."
+        },
+        {
             "author": "mickmumpitz",
             "title": "ComfyUI-SplatKit [SECURITY ISSUE]",
             "id": "splatkit",
@@ -4477,16 +4487,6 @@
             "description": "This repository contains custom nodes designed for the ComfyUI framework, focusing on simplification improvements. These nodes aim to make tasks easier and simple"
         },
         {
-            "author": "SushantSingh-23-01",
-            "title": "comfyui_flowrider_nodes [UNSAFE]",
-            "reference": "https://github.com/SushantSingh-23-01/comfyui_flowrider_nodes",
-            "files": [
-                "https://github.com/SushantSingh-23-01/comfyui_flowrider_nodes"
-            ],
-            "install_type": "git-clone",
-            "description": "Collection of nodes performing random utility functions like: JPG Saver - Save images in jpg format. Resolution Selector - Selects from standard resolutions with aspect ratios.[w/This extension has a vulnerability that allows arbitrary access to local files from remote.]"
-        },
-        {
             "author": "YokoYokoTEC",
             "title": "comfyui-sequential-prompt-file [UNSAFE]",
             "reference": "https://github.com/YokoYokoTEC/comfyui-sequential-prompt-file",
@@ -4815,16 +4815,6 @@
             ],
             "install_type": "git-clone",
             "description": "Collect Vram ram and Time\nNOTE: The files in the repo are not organized."
-        },
-        {
-            "author": "z604159435g",
-            "title": "comfyui_random_prompt_plugin [WIP]",
-            "reference": "https://github.com/z604159435g/comfyui_random_prompt_plugin",
-            "files": [
-                "https://github.com/z604159435g/comfyui_random_prompt_plugin"
-            ],
-            "install_type": "git-clone",
-            "description": "A ComfyUI natural language prompt plugin specifically designed for generating realistic photos of Caucasian women. Completely restructured to produce smooth natural language paragraphs instead of CLIP-style formatting.\nNOTE: The files in the repo are not organized."
         },
         {
             "author": "edisonchan",
@@ -7649,16 +7639,6 @@
             ],
             "install_type": "git-clone",
             "description": "NODES: GagaGetFileList, GagaGetStringListSize, GagaSplitStringToList, GagaTest, GagaBatchStringReplace"
-        },
-        {
-            "author": "ftechmax",
-            "title": "ComfyUI-NovaKit-Pack",
-            "reference": "https://github.com/ftechmax/ComfyUI-NovaKit-Pack",
-            "files": [
-                "https://github.com/ftechmax/ComfyUI-NovaKit-Pack"
-            ],
-            "install_type": "git-clone",
-            "description": "NODES: Count Tokens"
         },
         {
             "author": "jtydhr88",

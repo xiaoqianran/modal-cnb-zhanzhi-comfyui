@@ -59,6 +59,22 @@ except ImportError as e:
 
 
 
+'''device selection'''
+
+
+# Shared device options for node UI dropdowns.
+# 'auto' follows ComfyUI's default device (CUDA/NPU/XPU/MPS/CPU depending on the runtime).
+DEVICE_LIST_OPTIONS = ['auto', 'cuda', 'cpu']
+
+
+def get_device(device_str: str = "auto"):
+    """Resolve a user-facing device option to a torch.device.
+    'auto' returns ComfyUI's default device (handles CUDA/NPU/XPU/MPS/CPU)."""
+    if device_str == "cpu":
+        return torch.device("cpu")
+    return comfy.model_management.get_torch_device()
+
+
 '''warpper'''
 
 # create a wrapper function that can apply a function to multiple images in a batch while passing all other arguments to the function
@@ -1486,7 +1502,7 @@ def create_mask_from_color_tensor(image:Image, color:str, tolerance:int=0) -> Im
 def load_RMBG_model():
     from .briarmbg import BriaRMBG
     current_directory = os.path.dirname(os.path.abspath(__file__))
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = comfy.model_management.get_torch_device()
     net = BriaRMBG()
     model_path = ""
     try:
@@ -1510,8 +1526,8 @@ def RMBG(image:Image) -> Image:
     im_tensor = torch.tensor(im_np, dtype=torch.float32).permute(2, 0, 1)
     im_tensor = torch.divide(torch.unsqueeze(im_tensor, 0), 255.0)
     im_tensor = TF.normalize(im_tensor, [0.5, 0.5, 0.5], [1.0, 1.0, 1.0])
-    if torch.cuda.is_available():
-        im_tensor = im_tensor.cuda()
+    device = rmbgmodel.get_device() if hasattr(rmbgmodel, 'get_device') else next(rmbgmodel.parameters()).device
+    im_tensor = im_tensor.to(device)
     result = rmbgmodel(im_tensor)
     result = torch.squeeze(F.interpolate(result[0][0], size=(h, w), mode='bilinear'), 0)
     ma = torch.max(result)
@@ -1601,11 +1617,11 @@ def generate_VITMatte(image:Image, trimap:Image, local_files_only:bool=False, de
     if device=="cpu":
         device = torch.device('cpu')
     else:
-        if torch.cuda.is_available():
+        if device == "cuda" and not torch.cuda.is_available():
+            log("vitmatte device is set to cuda, but not available, using ComfyUI default device instead.")
+        device = comfy.model_management.get_torch_device()
+        if device.type == "cpu" and torch.cuda.is_available():
             device = torch.device('cuda')
-        else:
-            log("vitmatte device is set to cuda, but not available, using cpu instead.")
-            device = torch.device('cpu')
     if method == "vitmatte-base-composition-1k":
         model_name = "hustvl/vitmatte-base-composition-1k"
         vit_matte_model = load_VITMatte_base_model(model_name=model_name, local_files_only=local_files_only)
@@ -1621,6 +1637,8 @@ def generate_VITMatte(image:Image, trimap:Image, local_files_only:bool=False, de
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
+    elif torch.accelerator.is_available():
+        torch.accelerator.empty_cache()
     mask = tensor2pil(predictions).convert('L')
     mask = mask.crop(
         (0, 0, image.width, image.height))  # remove padding that the prediction appends (works in 32px tiles)
@@ -2155,6 +2173,8 @@ def clear_memory():
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
+    elif torch.accelerator.is_available():
+        torch.accelerator.empty_cache()
 
 def tensor_info(tensor:object) -> str:
     value = ''
@@ -2206,7 +2226,7 @@ class UformGen2QwenChat:
         #                                     local_files_only=False,  # Set to False to allow downloading if not available locally
         #                                     local_dir_use_symlinks="auto") # or set to True/False based on your symlink preference
         self.model_path = files_for_uform_gen2_qwen
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = comfy.model_management.get_torch_device()
         self.model = AutoModel.from_pretrained(self.model_path, trust_remote_code=True).to(self.device)
         self.processor = AutoProcessor.from_pretrained(self.model_path, trust_remote_code=True)
 

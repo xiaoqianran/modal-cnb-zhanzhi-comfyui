@@ -1,11 +1,24 @@
+import contextlib
+import copy
+import collections.abc
+import inspect
 import logging
+import math
 
 import torch
 import torch.nn.functional as F
 
 import comfy.nested_tensor
+import comfy.model_management
+import comfy.quant_ops
+import comfy.samplers
 import comfy.utils
 import node_helpers
+import latent_preview
+from comfy.k_diffusion.sampling import to_d
+from comfy.ldm.minimax.model import PackedLayout
+from comfy.utils import model_trange
+from comfy.ldm.modules.attention import AttentionTensorContainer, optimized_attention
 
 try:
     import torchaudio
@@ -16,6 +29,7 @@ _LOG = logging.getLogger("h3_motion_context")
 
 MC_KEY = "motion_context_index"
 MC_AUDIO_KEY = "motion_context_audio_end_frame"
+MC_GENERATED_KEY = "motion_context_generated"
 
 FRAME_PER_TOKEN = (1, 4, 4, 4, 4)
 VIDEO_RUN_GRID = (124, 107, 90, 73, 56, 39, 22, 5, 1)
@@ -27,6 +41,760 @@ ENCODE_MODE = "video"
 ANCHOR_MODE = "head"
 AUDIO_MODE = "timeline"
 CROP = "disabled"
+
+
+def _ad_h3_make_packed_layout(text_len, latent_t, latent_h, latent_w, audio_t,
+                              keyframes=None, refs=None, frame_count=None):
+    """Build a tile-local H3 layout across ComfyUI PackedLayout versions."""
+    kwargs = {"keyframes": keyframes, "refs": refs}
+    try:
+        parameters = inspect.signature(PackedLayout.__init__).parameters
+        supports_extra = any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        if "frame_count" in parameters or supports_extra:
+            kwargs["frame_count"] = frame_count
+    except (TypeError, ValueError):
+        pass
+    return PackedLayout(text_len, latent_t, latent_h, latent_w, audio_t, **kwargs)
+
+
+def _ad_h3_extract_av(samples):
+    if getattr(samples, "is_nested", False):
+        streams = tuple(samples.unbind())
+        if not streams or not isinstance(streams[0], torch.Tensor):
+            raise TypeError("H3 tiled Euler: AV latent does not contain a video tensor")
+        return streams[0], streams[1] if len(streams) > 1 else None, "nested"
+    if isinstance(samples, torch.Tensor):
+        return samples, None, "tensor"
+    raise TypeError(
+        "H3 tiled Euler requires a video tensor or NestedTensor(video, audio), "
+        f"got {type(samples).__name__}"
+    )
+
+
+def _ad_h3_rebuild_av(video, audio, layout):
+    if layout == "nested" and audio is not None:
+        return comfy.nested_tensor.NestedTensor((video, audio))
+    return video
+
+
+def _ad_h3_aligned_tile_regions(total, tile_count, halo, alignment=2):
+    """Partition an axis into aligned cores and expand each core by a halo."""
+    total = max(1, int(total))
+    alignment = max(1, int(alignment))
+    max_tiles = max(1, total // alignment)
+    tile_count = max(1, min(int(tile_count), max_tiles))
+    halo = max(0, int(round(int(halo) / alignment)) * alignment)
+    if tile_count == 1:
+        return [(0, total, 0, total)]
+
+    boundaries = [0]
+    for index in range(1, tile_count):
+        raw = float(total) * index / tile_count
+        boundary = int(round(raw / alignment)) * alignment
+        minimum = boundaries[-1] + alignment
+        maximum = total - (tile_count - index) * alignment
+        boundaries.append(min(max(boundary, minimum), maximum))
+    boundaries.append(total)
+
+    regions = []
+    for index in range(tile_count):
+        core_start = boundaries[index]
+        core_end = boundaries[index + 1]
+        start = max(0, core_start - halo)
+        end = min(total, core_end + halo)
+        regions.append((start, end, core_start, core_end))
+    return regions
+
+
+def _ad_h3_core_halo_window(start, end, core_start, core_end, device):
+    """Keep the core at full weight and fade unreliable halo edges to zero."""
+    length = int(end) - int(start)
+    window = torch.ones(length, dtype=torch.float32, device=device)
+    left = max(0, int(core_start) - int(start))
+    right = max(0, int(end) - int(core_end))
+    if left > 0:
+        progress = torch.linspace(0, 1, left + 1, device=device, dtype=torch.float32)[:-1]
+        window[:left] = 0.5 - 0.5 * torch.cos(progress * math.pi)
+    if right > 0:
+        progress = torch.linspace(0, 1, right + 1, device=device, dtype=torch.float32)[1:]
+        window[-right:] = 0.5 + 0.5 * torch.cos(progress * math.pi)
+    return window
+
+
+def _ad_h3_crop_spatial(tensor, axis, start, end):
+    if tensor is None:
+        return None
+    if axis == "H":
+        return tensor[:, :, :, start:end, :].contiguous()
+    return tensor[:, :, :, :, start:end].contiguous()
+
+
+def _ad_h3_noise_masks(latent):
+    masks = latent.get("noise_mask")
+    if masks is None:
+        return None
+    if getattr(masks, "is_nested", False):
+        return tuple(masks.unbind())
+    if isinstance(masks, torch.Tensor):
+        return (masks,)
+    raise TypeError("H3 tiled Euler: unsupported noise_mask layout")
+
+
+def h3_sample_tiled_euler(noise, guider, sigmas, latent, tile_count=2,
+                          overlap_pixels=128):
+    """Run H3 video refinement with synchronized long-edge Euler tiles.
+
+    The long edge is partitioned into even, patch-aligned core regions. Each
+    core is expanded by overlap_pixels as a context halo whose prediction fades
+    to zero at internal tile edges. Every Euler step evaluates all tiles,
+    blends their video predictions, averages the full audio prediction, and
+    only then advances the shared AV latent. The returned LATENT is the
+    denoised/x0 output; input audio is intentionally preserved.
+    """
+    if not isinstance(latent, collections.abc.Mapping) or "samples" not in latent:
+        raise TypeError("H3 tiled Euler requires a LATENT mapping with samples")
+    video, audio, av_layout = _ad_h3_extract_av(latent["samples"])
+    if video.ndim != 5:
+        raise ValueError(
+            "H3 tiled Euler video latent must be [B,C,T,H,W], "
+            f"got shape={tuple(video.shape)}"
+        )
+
+    device = comfy.model_management.get_torch_device()
+    video = video.to(device=device)
+    audio = audio.to(device=device) if audio is not None else None
+    height, width = int(video.shape[-2]), int(video.shape[-1])
+    axis = "H" if height >= width else "W"
+    axis_total = height if axis == "H" else width
+    halo = max(0, int(round(int(overlap_pixels) / 16.0)))
+    regions = _ad_h3_aligned_tile_regions(
+        axis_total, tile_count, halo, alignment=2
+    )
+    if len(regions) <= 1 or any(
+        start == 0 and end == axis_total
+        for start, end, _core_start, _core_end in regions
+    ):
+        regions = [(0, axis_total, 0, axis_total)]
+        _LOG.info(
+            "H3 tiled Euler bypassed spatial splitting because the requested "
+            "tiles cover the full long edge"
+        )
+
+    weighted_regions = []
+    for start, end, core_start, core_end in regions:
+        window_1d = _ad_h3_core_halo_window(
+            start, end, core_start, core_end, device
+        )
+        window = (
+            window_1d.view(1, 1, 1, -1, 1)
+            if axis == "H" else window_1d.view(1, 1, 1, 1, -1)
+        )
+        weighted_regions.append((start, end, core_start, core_end, window))
+    regions = weighted_regions
+
+    weight_shape = (
+        (1, 1, 1, axis_total, 1)
+        if axis == "H" else (1, 1, 1, 1, axis_total)
+    )
+    weights = torch.zeros(weight_shape, dtype=torch.float32, device=device)
+    for start, end, _core_start, _core_end, window in regions:
+        if axis == "H":
+            weights[:, :, :, start:end, :] += window
+        else:
+            weights[:, :, :, :, start:end] += window
+    weights.clamp_(min=1e-8)
+
+    full_samples = _ad_h3_rebuild_av(video, audio, av_layout)
+    full_latent = dict(latent)
+    full_latent["samples"] = full_samples
+    full_noise = noise.generate_noise(full_latent)
+    full_shapes = [tuple(video.shape)]
+    if audio is not None:
+        full_shapes.append(tuple(audio.shape))
+    mask_streams = _ad_h3_noise_masks(full_latent)
+    full_mask = None
+    if mask_streams is not None:
+        full_mask = (
+            comfy.nested_tensor.NestedTensor(mask_streams)
+            if len(mask_streams) > 1 else mask_streams[0]
+        )
+
+    x0_output = {}
+    callback = latent_preview.prepare_callback(
+        guider.model_patcher, sigmas.shape[-1] - 1, x0_output
+    )
+    original_extra = {}
+    original_inpaint = {}
+
+    @torch.no_grad()
+    def synchronized_euler(model, x, step_sigmas, extra_args=None, callback=None,
+                           disable=None, s_churn=0.0, s_tmin=0.0,
+                           s_tmax=float("inf"), s_noise=1.0, **_unused):
+        extra_args = {} if extra_args is None else extra_args
+        s_in = x.new_ones([x.shape[0]])
+        prepared_model = model.inner_model.inner_model
+        saved_model_shapes = getattr(prepared_model, "latent_shapes", None)
+        saved_conds = {}
+        payload_conds = []
+        packed_mask = extra_args.get("denoise_mask")
+        current_masks = (
+            comfy.utils.unpack_latents(packed_mask, full_shapes)
+            if packed_mask is not None else None
+        )
+        source_latents = (
+            comfy.utils.unpack_latents(model.latent_image, full_shapes)
+            if getattr(model, "latent_image", None) is not None else None
+        )
+        source_noise = (
+            comfy.utils.unpack_latents(model.noise, full_shapes)
+            if getattr(model, "noise", None) is not None else None
+        )
+
+        for cond_group in getattr(model.inner_model, "conds", {}).values():
+            if cond_group is None:
+                continue
+            for cond in cond_group:
+                model_conds = cond.get("model_conds", {}) if isinstance(cond, dict) else {}
+                payload_cond = model_conds.get("minimax_payload")
+                payload = getattr(payload_cond, "cond", None)
+                if isinstance(payload, dict):
+                    payload_conds.append((payload_cond, payload))
+
+        def set_tile_shapes(tile_shapes):
+            prepared_model.latent_shapes = tile_shapes
+            for cond_group in getattr(model.inner_model, "conds", {}).values():
+                if cond_group is None:
+                    continue
+                for cond in cond_group:
+                    model_conds = cond.get("model_conds", {}) if isinstance(cond, dict) else {}
+                    shape_cond = model_conds.get("latent_shapes")
+                    if shape_cond is not None and hasattr(shape_cond, "cond"):
+                        saved_conds.setdefault(id(shape_cond), (shape_cond, shape_cond.cond))
+                        shape_cond.cond = tile_shapes
+
+        def crop_keyframe(value, start, end):
+            if not isinstance(value, torch.Tensor) or value.ndim != 5:
+                return value
+            cropped = _ad_h3_crop_spatial(value, axis, start, end)
+            pad_h = (-cropped.shape[-2]) % 2
+            pad_w = (-cropped.shape[-1]) % 2
+            if pad_h or pad_w:
+                cropped = F.pad(cropped, (0, pad_w, 0, pad_h, 0, 0), mode="replicate")
+            return cropped
+
+        def install_payloads(tile_shapes, start, end):
+            video_shape = tile_shapes[0]
+            tile_h = (int(video_shape[3]) + 1) // 2 * 2
+            tile_w = (int(video_shape[4]) + 1) // 2 * 2
+            audio_t = int(tile_shapes[1][-1]) if len(tile_shapes) > 1 else 0
+            restorations = []
+            for payload_cond, original_payload in payload_conds:
+                payload = dict(original_payload)
+                keyframes = []
+                for item in list(payload.get("keyframes") or []):
+                    copied = dict(item)
+                    copied["latent"] = crop_keyframe(item.get("latent"), start, end)
+                    keyframes.append(copied)
+                refs = list(payload.get("refs") or [])
+                old_layout = payload.get("layout")
+                text_tags = payload.get("text_token_tags")
+                text_len = 0
+                if old_layout is not None and getattr(old_layout, "segments", None):
+                    text_len = int(old_layout.segments[0][1])
+                elif text_tags is not None:
+                    text_len = int(text_tags.shape[-1])
+                if text_len <= 0:
+                    raise RuntimeError("H3 tiled Euler could not determine text token length")
+                payload["keyframes"] = keyframes or payload.get("keyframes")
+                payload["layout"] = _ad_h3_make_packed_layout(
+                    text_len, int(video_shape[2]), tile_h, tile_w, audio_t,
+                    keyframes=keyframes or None, refs=refs or None,
+                    frame_count=payload.get("frame_count"),
+                )
+                ref_latents = [
+                    ref.get("latent") for ref in refs
+                    if ref.get("latent") is not None
+                    and ref.get("kind") != "t8_keyframe_latent"
+                ]
+                ordered = []
+                keyframe_index = reference_index = 0
+                for _begin, _finish, kind in payload["layout"].segments:
+                    if kind == "cond" and keyframe_index < len(keyframes):
+                        ordered.append(keyframes[keyframe_index]["latent"])
+                        keyframe_index += 1
+                    elif kind == "ref_img" and reference_index < len(ref_latents):
+                        ordered.append(ref_latents[reference_index])
+                        reference_index += 1
+                payload["cond_video_latents"] = ordered
+                restorations.append((payload_cond, payload_cond.cond))
+                payload_cond.cond = payload
+            return restorations
+
+        try:
+            for step_index in model_trange(len(step_sigmas) - 1, disable=disable):
+                gamma = (
+                    min(s_churn / (len(step_sigmas) - 1), math.sqrt(2.0) - 1.0)
+                    if s_churn > 0 and s_tmin <= step_sigmas[step_index] <= s_tmax
+                    else 0.0
+                )
+                sigma_hat = step_sigmas[step_index] * (gamma + 1.0)
+                if gamma > 0:
+                    x = x + torch.randn_like(x) * s_noise * (
+                        sigma_hat ** 2 - step_sigmas[step_index] ** 2
+                    ) ** 0.5
+                streams = comfy.utils.unpack_latents(x, full_shapes)
+                video_x = streams[0]
+                audio_x = streams[1] if len(streams) > 1 else None
+                video_denoised = torch.zeros_like(video_x, dtype=torch.float32)
+                audio_denoised = (
+                    torch.zeros_like(audio_x, dtype=torch.float32)
+                    if audio_x is not None else None
+                )
+
+                for start, end, _core_start, _core_end, window in regions:
+                    video_tile = _ad_h3_crop_spatial(video_x, axis, start, end)
+                    tile_streams = [video_tile] + ([audio_x] if audio_x is not None else [])
+                    tile_x, tile_shapes = comfy.utils.pack_latents(tile_streams)
+                    tile_mask = None
+                    if current_masks is not None:
+                        parts = [_ad_h3_crop_spatial(current_masks[0], axis, start, end)]
+                        if len(current_masks) > 1:
+                            parts.append(current_masks[1])
+                        tile_mask, _ = comfy.utils.pack_latents(parts)
+                    tile_latent_image = None
+                    if source_latents is not None:
+                        parts = [_ad_h3_crop_spatial(source_latents[0], axis, start, end)]
+                        if len(source_latents) > 1:
+                            parts.append(source_latents[1])
+                        tile_latent_image, _ = comfy.utils.pack_latents(parts)
+                    tile_noise = None
+                    if source_noise is not None:
+                        parts = [_ad_h3_crop_spatial(source_noise[0], axis, start, end)]
+                        if len(source_noise) > 1:
+                            parts.append(source_noise[1])
+                        tile_noise, _ = comfy.utils.pack_latents(parts)
+
+                    set_tile_shapes(tile_shapes)
+                    restorations = install_payloads(tile_shapes, start, end)
+                    saved_latent_image = getattr(model, "latent_image", None)
+                    saved_noise = getattr(model, "noise", None)
+                    tile_args = dict(extra_args)
+                    tile_args["denoise_mask"] = tile_mask
+                    if tile_latent_image is not None:
+                        model.latent_image = tile_latent_image
+                    if tile_noise is not None:
+                        model.noise = tile_noise
+                    try:
+                        prediction = model(tile_x, sigma_hat * s_in, **tile_args)
+                    finally:
+                        model.latent_image = saved_latent_image
+                        model.noise = saved_noise
+                        for payload_cond, original in restorations:
+                            payload_cond.cond = original
+                    predictions = comfy.utils.unpack_latents(prediction, tile_shapes)
+                    if axis == "H":
+                        video_denoised[:, :, :, start:end, :] += predictions[0].float() * window
+                    else:
+                        video_denoised[:, :, :, :, start:end] += predictions[0].float() * window
+                    if audio_denoised is not None:
+                        audio_denoised += predictions[1].float()
+
+                video_denoised /= weights
+                merged = [video_denoised.to(dtype=video_x.dtype)]
+                if audio_denoised is not None:
+                    audio_denoised /= float(len(regions))
+                    merged.append(audio_denoised.to(dtype=audio_x.dtype))
+                denoised, _ = comfy.utils.pack_latents(merged)
+                prepared_model.latent_shapes = full_shapes
+                if callback is not None:
+                    callback({
+                        "x": x, "i": step_index, "sigma": step_sigmas[step_index],
+                        "sigma_hat": sigma_hat, "denoised": denoised,
+                    })
+                derivative = to_d(x, sigma_hat, denoised)
+                x = x + derivative * (step_sigmas[step_index + 1] - sigma_hat)
+            return x
+        finally:
+            prepared_model.latent_shapes = saved_model_shapes
+            for cond_object, original in saved_conds.values():
+                cond_object.cond = original
+
+    sampler = comfy.samplers.KSAMPLER(
+        synchronized_euler,
+        extra_options=original_extra,
+        inpaint_options=original_inpaint,
+    )
+    samples = guider.sample(
+        full_noise, full_samples, sampler, sigmas,
+        denoise_mask=full_mask,
+        callback=callback,
+        disable_pbar=not comfy.utils.PROGRESS_BAR_ENABLED,
+        seed=noise.seed,
+    )
+    sampled_video, _sampled_audio, _ = _ad_h3_extract_av(samples)
+    denoised_video = sampled_video
+    if x0_output.get("x0") is not None:
+        denoised_video, _denoised_audio, _ = _ad_h3_extract_av(x0_output["x0"])
+    intermediate = comfy.model_management.intermediate_device()
+    denoised_video = denoised_video.to(
+        device=intermediate, dtype=video.dtype
+    )
+    preserved_audio = audio.to(intermediate) if audio is not None else None
+    result = dict(latent)
+    result["samples"] = _ad_h3_rebuild_av(
+        denoised_video, preserved_audio, av_layout
+    )
+    del weights, regions
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    return result
+
+
+_AD_H3_SAMPLING_PROFILES = [
+    "None",
+    "auto",
+    "Speed_first | QKV 16384 | MLP 8192",
+    "balanced | QKV 8192 | MLP 4096",
+    "low_vram | QKV 4096 | MLP 2048",
+    "maximum_safety | QKV 1024 | MLP 1024",
+]
+
+_AD_H3_VAE_TILE_PROFILES = [
+    "default",
+    "balanced",
+    "low_vram",
+    "maximum_safety",
+]
+
+
+def _ad_h3_sampling_profile_input():
+    return (_AD_H3_SAMPLING_PROFILES, {
+        "default": "auto",
+        "tooltip": "模型内部QKV/MLP 分块：token分块+层内算子分块",
+    })
+
+
+def _ad_h3_sampling_policy(sampling_profile):
+    profile = str(sampling_profile or "None").strip()
+    if profile.lower() == "none":
+        return None
+    return {"sampling_profile": profile}
+
+
+def _ad_h3_vae_tile_input():
+    options = {
+        "default": "default",
+        "tooltip": (
+            "控制 MiniMax H3 VAE 空间分块。default 保持官方 256/64；"
+            "balanced 使用 224/64；low_vram 使用 192/64；"
+            "maximum_safety 使用 128/64。官方时间分块保持不变。"
+        ),
+    }
+    options["tooltip"] = "只解决VAE 编码、解码阶段的爆显存，不解决主要采样显存"
+    return (_AD_H3_VAE_TILE_PROFILES, options)
+
+
+@contextlib.contextmanager
+def _ad_h3_vae_tile_scope(vae, profile="default"):
+    name = str(profile or "default").strip().lower()
+    settings = {
+        "official": (256, 64),
+        "balanced": (224, 64),
+        "low_vram": (192, 64),
+        "maximum_safety": (128, 64),
+    }
+    if name == "default":
+        yield
+        return
+    if name not in settings:
+        raise ValueError(f"Unknown MiniMax H3 VAE_TILE profile: {profile}")
+
+    first_stage = getattr(vae, "first_stage_model", None)
+    required = ("tiling", "tile_size", "tile_overlap_min", "clip_length")
+    if first_stage is None or not all(hasattr(first_stage, key) for key in required):
+        raise RuntimeError(
+            "VAE_TILE can only be used with the native MiniMax H3 video VAE"
+        )
+
+    tile_size, overlap = settings[name]
+    previous = {key: getattr(first_stage, key) for key in required[:-1]}
+    first_stage.tiling = True
+    first_stage.tile_size = int(tile_size)
+    first_stage.tile_overlap_min = int(overlap)
+    _LOG.info(
+        "AD H3 VAE tile: profile=%s, spatial=%d, overlap=%d, temporal_clip=%d (official)",
+        name, tile_size, overlap, int(first_stage.clip_length),
+    )
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            setattr(first_stage, key, value)
+
+
+def _ad_h3_latent_tokens(latent):
+    if not isinstance(latent, collections.abc.Mapping):
+        return 0
+    samples = latent.get("samples")
+    streams = samples.unbind() if getattr(samples, "is_nested", False) else (samples,)
+    total = 0
+    for stream in streams:
+        if not isinstance(stream, torch.Tensor) or stream.ndim < 2:
+            continue
+        total += math.prod(stream.shape[:1] + stream.shape[2:])
+    return int(total)
+
+
+def _ad_h3_resolve_sampling_policy(policy, latent):
+    profile_value = str(policy.get("sampling_profile", "")).strip()
+    presets = {
+        "Speed_first": (16384, 8192),
+        "balanced": (8192, 4096),
+        "low_vram": (4096, 2048),
+        "maximum_safety": (1024, 1024),
+    }
+    tokens = _ad_h3_latent_tokens(latent)
+    for profile, chunks in presets.items():
+        if profile_value.startswith(profile):
+            return chunks[0], chunks[1], tokens
+
+    if tokens >= 200000:
+        qkv_chunk_tokens = 2048
+    elif tokens >= 90000:
+        qkv_chunk_tokens = 4096
+    else:
+        qkv_chunk_tokens = 8192
+    if tokens >= 90000:
+        mlp_chunk_tokens = 2048
+    elif tokens >= 40000:
+        mlp_chunk_tokens = 4096
+    else:
+        mlp_chunk_tokens = 8192
+    return qkv_chunk_tokens, mlp_chunk_tokens, tokens
+
+
+class _ADH3ProjectionMLPChunkPatch:
+    """Chunk H3 linear projections while preserving full global attention."""
+
+    def __init__(self, index, state, qkv_chunk_tokens, mlp_chunk_tokens):
+        self.index = int(index)
+        self.state = state
+        self.qkv_chunk_tokens = max(256, int(qkv_chunk_tokens))
+        self.mlp_chunk_tokens = max(256, int(mlp_chunk_tokens))
+
+    @staticmethod
+    def _extract_block(original_block):
+        closure = getattr(original_block, "__closure__", None) or ()
+        for cell in closure:
+            try:
+                candidate = cell.cell_contents
+            except Exception:
+                continue
+            required = ("adaln_proj", "norm1", "attn", "norm2", "mlp")
+            if all(hasattr(candidate, name) for name in required):
+                return candidate
+        return None
+
+    @staticmethod
+    def _mod_scale_shift(value, shift, scale, segments, offset=0):
+        end = offset + int(value.shape[0])
+        for start, stop, row in segments:
+            local_start = max(int(start), offset) - offset
+            local_stop = min(int(stop), end) - offset
+            if local_start < local_stop:
+                value[local_start:local_stop].mul_(
+                    1.0 + scale[row].to(value.dtype)
+                ).add_(shift[row].to(value.dtype))
+        return value
+
+    @staticmethod
+    def _mod_gate_residual(value, gate, other, segments, offset=0):
+        end = offset + int(value.shape[0])
+        for start, stop, row in segments:
+            local_start = max(int(start), offset) - offset
+            local_stop = min(int(stop), end) - offset
+            if local_start < local_stop:
+                value[local_start:local_stop].addcmul_(
+                    other[local_start:local_stop], gate[row].to(value.dtype)
+                )
+        return value
+
+    @staticmethod
+    def _chunked_linear(layer, value, chunk_tokens):
+        token_count = int(value.shape[0])
+        chunk_tokens = min(max(1, int(chunk_tokens)), token_count)
+        first_stop = min(chunk_tokens, token_count)
+        first = layer(value[:first_stop])
+        output = first.new_empty((token_count, *first.shape[1:]))
+        output[:first_stop].copy_(first)
+        del first
+        for start in range(first_stop, token_count, chunk_tokens):
+            stop = min(token_count, start + chunk_tokens)
+            part = layer(value[start:stop])
+            output[start:stop].copy_(part)
+            del part
+        return output
+
+    def _attention(self, attention, value, rope_freqs, transformer_options):
+        token_count = int(value.shape[0])
+        inner = int(attention.heads * attention.head_dim)
+        chunk_tokens = min(self.qkv_chunk_tokens, max(1, token_count))
+
+        if token_count <= chunk_tokens:
+            q, k, v = attention.qkv_proj(value).split(inner, dim=-1)
+            v = v.view(token_count, attention.heads, attention.head_dim).clone()
+        else:
+            first_stop = min(chunk_tokens, token_count)
+            first = attention.qkv_proj(value[:first_stop])
+            first_q, first_k, first_v = first.split(inner, dim=-1)
+            q = first_q.new_empty((token_count, inner))
+            k = first_k.new_empty((token_count, inner))
+            v = first_v.new_empty((token_count, attention.heads, attention.head_dim))
+            q[:first_stop].copy_(first_q)
+            k[:first_stop].copy_(first_k)
+            v[:first_stop].copy_(first_v.view(first_stop, attention.heads, attention.head_dim))
+            del first, first_q, first_k, first_v
+            for start in range(first_stop, token_count, chunk_tokens):
+                stop = min(token_count, start + chunk_tokens)
+                projected = attention.qkv_proj(value[start:stop])
+                q_part, k_part, v_part = projected.split(inner, dim=-1)
+                q[start:stop].copy_(q_part)
+                k[start:stop].copy_(k_part)
+                v[start:stop].copy_(v_part.view(stop - start, attention.heads, attention.head_dim))
+                del projected, q_part, k_part, v_part
+
+        if rope_freqs is not None:
+            q = q.view(1, token_count, attention.heads, attention.head_dim)
+            k = k.view(1, token_count, attention.heads, attention.head_dim)
+            qw = comfy.model_management.cast_to(attention.q_norm.weight, device=value.device)
+            kw = comfy.model_management.cast_to(attention.k_norm.weight, device=value.device)
+            rot = rope_freqs.shape[-3] * 2
+            if comfy.model_management.in_training:
+                q, k = comfy.quant_ops.ck.rms_rope_split_half(
+                    q, k, rope_freqs, qw, kw, epsilon=attention.q_norm.eps, rot_dim=rot
+                )
+            else:
+                comfy.quant_ops.ck.rms_rope_split_half_(
+                    q, k, rope_freqs, qw, kw, epsilon=attention.q_norm.eps, rot_dim=rot
+                )
+            q = q[0]
+            k = k[0]
+        else:
+            q = attention.q_norm(q.view(token_count, attention.heads, attention.head_dim))
+            k = attention.k_norm(k.view(token_count, attention.heads, attention.head_dim))
+
+        q = AttentionTensorContainer(q.transpose(0, 1).unsqueeze(0))
+        k = AttentionTensorContainer(k.transpose(0, 1).unsqueeze(0))
+        v = AttentionTensorContainer(v.transpose(0, 1).unsqueeze(0))
+        output = optimized_attention(
+            q, k, v, attention.heads, mask=None, skip_reshape=True,
+            transformer_options=transformer_options,
+        ).squeeze(0)
+        del q, k, v
+        return self._chunked_linear(attention.out_proj, output, chunk_tokens)
+
+    def __call__(self, args, extra_options):
+        original_block = extra_options["original_block"]
+        block = self._extract_block(original_block)
+        if block is None:
+            if not self.state.get("closure_fallback_logged"):
+                logging.getLogger("AD_H3_sampling_policy").warning(
+                    "AD H3 projection/MLP chunking could not locate the DiT block; using the stock block"
+                )
+                self.state["closure_fallback_logged"] = True
+            return original_block(args)
+
+        x = args["img"]
+        t_emb = args["t_emb"]
+        segments = args["mod_segments"]
+        rope_freqs = args["rope_freqs"]
+        transformer_options = args["transformer_options"]
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = block.adaln_proj(t_emb)
+
+        h = self._mod_scale_shift(block.norm1(x), shift_msa, scale_msa, segments)
+        token_count = int(h.shape[0])
+        qkv_chunk_tokens = min(self.qkv_chunk_tokens, max(1, token_count))
+        if token_count > qkv_chunk_tokens and not self.state.get("projection_announced"):
+            logging.getLogger("AD_H3_sampling_policy").info(
+                "AD H3 projection chunking enabled: tokens=%d, QKV/out=%d, attention=global",
+                token_count, qkv_chunk_tokens,
+            )
+            self.state["projection_announced"] = True
+        attention = self._attention(block.attn, h, rope_freqs, transformer_options)
+        x = self._mod_gate_residual(x, gate_msa, attention, segments)
+        del h, attention
+
+        token_count = int(x.shape[0])
+        chunk_tokens = min(self.mlp_chunk_tokens, max(1, token_count))
+        if token_count > chunk_tokens and not self.state.get("mlp_announced"):
+            logging.getLogger("AD_H3_sampling_policy").info(
+                "AD H3 MLP chunking enabled: tokens=%d, chunk=%d, attention=global",
+                token_count, chunk_tokens,
+            )
+            self.state["mlp_announced"] = True
+
+        for start in range(0, token_count, chunk_tokens):
+            stop = min(token_count, start + chunk_tokens)
+            x_chunk = x[start:stop]
+            h_chunk = self._mod_scale_shift(
+                block.norm2(x_chunk), shift_mlp, scale_mlp, segments, offset=start
+            )
+            mlp_chunk = block.mlp(h_chunk)
+            self._mod_gate_residual(
+                x_chunk, gate_mlp, mlp_chunk, segments, offset=start
+            )
+            del h_chunk, mlp_chunk
+        return {"img": x}
+
+
+def _ad_clone_model_options(model_options):
+    try:
+        import comfy.model_patcher
+        return comfy.model_patcher.create_model_options_clone(model_options)
+    except Exception:
+        cloned = dict(model_options)
+        transformer_options = dict(model_options.get("transformer_options", {}))
+        cloned["transformer_options"] = transformer_options
+        patches_replace = dict(transformer_options.get("patches_replace", {}))
+        transformer_options["patches_replace"] = patches_replace
+        patches_replace["dit"] = dict(patches_replace.get("dit", {}))
+        return cloned
+
+
+def _ad_h3_wrap_guider(guider, policy, latent):
+    qkv_chunk_tokens, mlp_chunk_tokens, tokens = _ad_h3_resolve_sampling_policy(policy, latent)
+    logging.getLogger("AD_H3_sampling_policy").info(
+        "AD H3 sampling policy: tokens=%d, QKV/out=%d, MLP=%d, "
+        "attention=global, implementation=apt-local",
+        tokens, qkv_chunk_tokens, mlp_chunk_tokens,
+    )
+
+    wrapped = copy.copy(guider)
+    wrapped.model_options = _ad_clone_model_options(
+        getattr(guider, "model_options", {}) or {}
+    )
+    transformer_options = wrapped.model_options.setdefault("transformer_options", {})
+    patches_replace = transformer_options.setdefault("patches_replace", {})
+    dit = patches_replace.setdefault("dit", {})
+    state = {
+        "qkv_chunk_tokens": int(qkv_chunk_tokens),
+        "mlp_chunk_tokens": int(mlp_chunk_tokens),
+        "patched_blocks": [],
+        "skipped_blocks": [],
+    }
+    for index in range(128):
+        key = ("double_block", index)
+        if key in dit:
+            state["skipped_blocks"].append(index)
+            continue
+        dit[key] = _ADH3ProjectionMLPChunkPatch(
+            index, state, qkv_chunk_tokens, mlp_chunk_tokens
+        )
+        state["patched_blocks"].append(index)
+    return wrapped
 
 
 class AptMiniMaxH3NativeAudioLock:
@@ -170,7 +938,34 @@ def _steps_for_frames(n):
     return k if covered == n else None
 
 
+def h3_export_video_tail(vae, latent, frames, end_frame):
+    """Reuse only an unmodified export tail ending on the sampled latent grid."""
+    if latent is not None:
+        video = _video_from_latent(latent)
+        total = int(video.shape[2])
+        steps = _steps_for_frames(int(frames.shape[0]))
+        if (steps is not None and steps <= total and (total - steps) % 5 == 0
+                and int(end_frame) == _pixel_frames(total)
+                and tuple(frames.shape[1:3]) == (int(video.shape[3]) * 16, int(video.shape[4]) * 16)):
+            _LOG.info("h3_motion_context: reusing %d export-tail latent steps without VAE re-encoding", steps)
+            return video[:1, :, total - steps:].clone()
+    return vae.encode(frames)
+
+
 def _video_tail_from_latent(latent, n):
+    exported_tail = latent.get("apt_h3_export_tail_latent")
+    exported_frames = int(latent.get("apt_h3_export_context_frames", 22))
+    if exported_tail is not None and n == exported_frames:
+        if exported_tail.ndim == 4:
+            exported_tail = exported_tail.unsqueeze(0)
+        steps = _steps_for_frames(n)
+        if exported_tail.ndim != 5 or int(exported_tail.shape[2]) != steps:
+            raise ValueError(
+                "h3_motion_context: stored export tail does not match the "
+                "%d-frame H3 latent grid" % n)
+        blocks = [exported_tail[:1, :, k:k + 1].clone() for k in range(steps)]
+        return blocks, _step_offsets(steps), n
+
     video = _video_from_latent(latent)
     total = int(video.shape[2])
     steps = _steps_for_frames(n)
@@ -202,6 +997,15 @@ def _video_tail_from_latent(latent, n):
 
 
 def _audio_tail_from_latent(latent, a_frames):
+    exported_tail = latent.get("apt_h3_export_tail_audio_latent")
+    if exported_tail is not None:
+        if exported_tail.ndim == 3:
+            exported_tail = exported_tail.unsqueeze(0)
+        if exported_tail.ndim != 4:
+            raise ValueError(
+                "h3_motion_context: stored export audio tail has an invalid shape")
+        return exported_tail[:1].clone(), int(exported_tail.shape[-1]), 0.0
+
     parts = _streams_from_latent(latent)
     if len(parts) < 2:
         raise ValueError(
@@ -376,7 +1180,7 @@ class AptMiniMaxH3MotionContext:
 
         keyframes = []
         for p, blk in zip(indices, blocks):
-            kf = {"latent": blk}
+            kf = {"latent": blk, MC_GENERATED_KEY: True}
             if _layout_native:
                 kf["resolved_frame_index"] = p
             else:
@@ -413,6 +1217,7 @@ class AptMiniMaxH3MotionContext:
                 "kind": "audio",
                 "ref_audio_t": ref_audio_t,
                 "audio_latent": audio_latent,
+                MC_GENERATED_KEY: True,
             }
             if audio_mode == "timeline":
                 if _layout_native:

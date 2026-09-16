@@ -643,12 +643,13 @@ app.registerExtension({
     name: "IO_LoadImgBatch.Extension",
     async setup() {
         api.addEventListener("IO_LoadImgBatch_set", (event) => {
-            const nodeId = parseInt(event.detail.node);
+            const detail = event.detail?.data || event.detail || {};
+            const nodeId = String(detail.node ?? "");
             const nodes = app.graph?._nodes || app.graph?.nodes || [];
-            const node = nodes.find((n) => n.id === nodeId);
+            const node = nodes.find((n) => String(n.id) === nodeId);
             if (!node) return;
 
-            const itemsRaw = event.detail.items;
+            const itemsRaw = detail.items;
             const items = Array.isArray(itemsRaw) ? itemsRaw : [];
             const wList = getImageListWidget(node);
             if (wList) {
@@ -664,7 +665,7 @@ app.registerExtension({
 
             const wIndex = getIndexWidget(node);
             if (wIndex) {
-                const idx = Number(event.detail.index);
+                const idx = Number(detail.index);
                 const v = Number.isFinite(idx) ? Math.floor(idx) : wIndex.value;
                 if (wIndex.value !== v) {
                     wIndex.value = v;
@@ -674,7 +675,7 @@ app.registerExtension({
 
             const wSize = getCardSizeWidget(node);
             if (wSize) {
-                const sz = Number(event.detail.card_size);
+                const sz = Number(detail.card_size);
                 const v = Number.isFinite(sz) ? Math.floor(sz) : wSize.value;
                 if (wSize.value !== v) {
                     wSize.value = v;

@@ -519,9 +519,9 @@ function createMediaBatchUI(node, cfg) {
 }
 
 function applyEventToNode(eventDetail, cfg) {
-    const nodeId = parseInt(eventDetail.node);
+    const nodeId = String(eventDetail.node ?? "");
     const nodes = app.graph?._nodes || app.graph?.nodes || [];
-    const node = nodes.find((n) => n.id === nodeId);
+    const node = nodes.find((n) => String(n.id) === nodeId);
     if (!node) return;
 
     const itemsRaw = eventDetail.items;
@@ -565,7 +565,7 @@ app.registerExtension({
     name: "IO_LoadMediaBatch.Extension",
     async setup() {
         Object.values(MEDIA_NODE_CONFIG).forEach((cfg) => {
-            api.addEventListener(cfg.eventName, (event) => applyEventToNode(event.detail || {}, cfg));
+            api.addEventListener(cfg.eventName, (event) => applyEventToNode(event.detail?.data || event.detail || {}, cfg));
         });
     },
     async beforeRegisterNodeDef(nodeType, nodeData) {

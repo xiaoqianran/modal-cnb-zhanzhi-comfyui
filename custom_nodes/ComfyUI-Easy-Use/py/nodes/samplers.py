@@ -8,7 +8,7 @@ import comfy_extras.nodes_custom_sampler as custom_samplers
 from tqdm import trange
 
 from server import PromptServer
-from nodes import RepeatLatentBatch, NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS, VAEEncodeForInpaint, InpaintModelConditioning
+from nodes import RepeatLatentBatch, NODE_CLASS_MAPPINGS as ALL_NODE_CLASS_MAPPINGS, VAEEncodeForInpaint, InpaintModelConditioning, VAEDecodeTiled
 from ..modules.layer_diffuse import LayerDiffuse
 from ..config import *
 
@@ -138,6 +138,14 @@ class samplerFull:
             to["model_patch"] = {}
         return to
 
+    def get_align_your_steps_sigmas(self, model, steps, denoise):
+        model_type = get_sd_version(model)
+        # Anima/Krea2 have no dedicated AYS table; keep the SDXL table they used before these families were recognized.
+        if model_type in ("anima", "krea2", "unknown"):
+            model_type = "sdxl"
+        sigmas, = alignYourStepsScheduler().get_sigmas(model_type.upper(), steps, denoise)
+        return sigmas
+
     def get_sampler_custom(self, model, positive, negative, loader_settings):
         _guider = None
         middle = loader_settings['middle'] if "middle" in loader_settings else negative
@@ -174,10 +182,7 @@ class samplerFull:
             elif scheduler == 'sdturbo':
                 sigmas, = self.get_custom_cls('SDTurboScheduler').execute(model, steps, denoise)
             elif scheduler == 'alignYourSteps':
-                model_type = get_sd_version(model)
-                if model_type == 'unknown':
-                    model_type = 'sdxl'
-                sigmas, = alignYourStepsScheduler().get_sigmas(model_type.upper(), steps, denoise)
+                sigmas = self.get_align_your_steps_sigmas(model, steps, denoise)
             elif scheduler == 'gits':
                 sigmas, = gitsScheduler().get_sigmas(coeff, steps, denoise)
             else:
@@ -340,10 +345,7 @@ class samplerFull:
                 _guider, _sampler, sigmas = self.get_sampler_custom(samp_model, samp_positive, samp_negative, samp_custom)
                 samp_samples, samp_blend_samples = sampler.custom_advanced_ksampler(_guider, _sampler, sigmas, samp_samples, add_noise, samp_seed, preview_latent=preview_latent)
             elif scheduler == 'align_your_steps':
-                model_type = get_sd_version(samp_model)
-                if model_type == 'unknown':
-                    model_type = 'sdxl'
-                sigmas, = alignYourStepsScheduler().get_sigmas(model_type.upper(), steps, denoise)
+                sigmas = self.get_align_your_steps_sigmas(samp_model, steps, denoise)
                 _sampler = comfy.samplers.sampler_object(sampler_name)
                 samp_samples = sampler.custom_ksampler(samp_model, samp_seed, steps, cfg, _sampler, sigmas, samp_positive, samp_negative, samp_samples, disable_noise=disable_noise, preview_latent=preview_latent, noise_device=noise_device)
             elif scheduler == 'gits':
@@ -362,7 +364,7 @@ class samplerFull:
                 spent_time = 'Diffusion:' + str((end_time - start_time) / 1000) + '″'
             else:
                 if tile_size is not None:
-                    samp_images = samp_vae.decode_tiled(latent, tile_x=tile_size // 8, tile_y=tile_size // 8, )
+                    samp_images, = VAEDecodeTiled().decode(samp_vae, {"samples": latent}, tile_size)
                 else:
                     samp_images = samp_vae.decode(latent).cpu()
                 if len(samp_images.shape) == 5:  # Combine batches
@@ -980,7 +982,7 @@ class samplerSDTurbo:
 
         # 解码图片
         if tile_size is not None:
-            samp_images = samp_vae.decode_tiled(latent, tile_x=tile_size // 8, tile_y=tile_size // 8, )
+            samp_images, = VAEDecodeTiled().decode(samp_vae, {"samples": latent}, tile_size)
         else:
             samp_images = samp_vae.decode(latent).cpu()
 

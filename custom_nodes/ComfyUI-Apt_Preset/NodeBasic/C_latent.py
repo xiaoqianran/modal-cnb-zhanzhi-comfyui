@@ -12,6 +12,7 @@ import folder_paths
 import comfy.utils
 import comfy.samplers
 import comfy.k_diffusion.sampling
+import comfy.model_management
 from comfy_extras.nodes_lt import LTXVConcatAVLatent, LTXVSeparateAVLatent
 from ..main_unit import *
 
@@ -665,7 +666,7 @@ def _minimax_h3_model_config(state_dict):
     return config
 
 
-def _load_minimax_h3_upscaler(model_name, device):
+def _load_minimax_h3_upscaler(model_name):
     model_path = folder_paths.get_full_path_or_raise(_MINIMAX_H3_UPSCALE_FOLDER, model_name)
     state_dict = comfy.utils.load_torch_file(model_path, safe_load=True)
     if isinstance(state_dict, dict) and "model" in state_dict:
@@ -682,7 +683,7 @@ def _load_minimax_h3_upscaler(model_name, device):
     }
     model = _MinimaxH3LatentResizer3D(**_minimax_h3_model_config(state_dict))
     model.load_state_dict(state_dict, strict=True)
-    return model.to(device=device, dtype=torch.bfloat16).eval().requires_grad_(False)
+    return model.to(dtype=torch.bfloat16).eval().requires_grad_(False)
 
 
 def _upscale_minimax_h3_video_latent(latent, model_name, scale):
@@ -692,28 +693,43 @@ def _upscale_minimax_h3_video_latent(latent, model_name, scale):
     source = latent["samples"]
     original_dtype = source.dtype
     was_4d = source.ndim == 4
-    samples = source.to(device="cuda", dtype=torch.bfloat16, copy=True)
-    if was_4d:
-        samples = samples.unsqueeze(2)
-
-    batch, channels, frames, height, width = samples.shape
+    source_shape = (source.shape[0], source.shape[1], 1, source.shape[2], source.shape[3]) if was_4d else source.shape
+    batch, channels, frames, height, width = source_shape
     pixel_width = width * 16 * scale
-    aligned_width = round(pixel_width / 32) * 32
-    aligned_height = aligned_width / (width / height)
-    output_width = max(1, round(aligned_width / 16))
-    output_height = max(1, round(aligned_height / 16))
+    pixel_height = height * 16 * scale
+    aligned_width = max(32, round(pixel_width / 32) * 32)
+    aligned_height = max(32, round(pixel_height / 32) * 32)
+    output_width = aligned_width // 16
+    output_height = aligned_height // 16
     if output_width == width and output_height == height:
         return latent
 
-    model = _load_minimax_h3_upscaler(model_name, samples.device)
-    mean = torch.tensor(_MINIMAX_H3_LATENTS_MEAN, dtype=samples.dtype, device=samples.device).view(1, -1, 1, 1, 1)
-    std = torch.tensor(_MINIMAX_H3_LATENTS_STD, dtype=samples.dtype, device=samples.device).view(1, -1, 1, 1, 1)
-    samples.sub_(mean).div_(std)
-    output = model(samples, scale=scale, target_size=(frames, output_height, output_width))
-    output.mul_(std).add_(mean)
-    if was_4d:
-        output = output.squeeze(2)
-    return {"samples": output.to(device="cpu", dtype=original_dtype)}
+    device = comfy.model_management.get_torch_device()
+    model = _load_minimax_h3_upscaler(model_name)
+    feature_elements = batch * model.conv_in.out_channels * frames * output_height * output_width
+    model_memory = sum(parameter.nelement() * parameter.element_size() for parameter in model.parameters())
+    memory_required = model_memory + feature_elements * model.conv_in.weight.element_size() * 8
+    comfy.model_management.free_memory(memory_required, device)
+    try:
+        model.to(device=device)
+        samples = source.to(device=device, dtype=torch.bfloat16, copy=True)
+        if was_4d:
+            samples = samples.unsqueeze(2)
+        mean = torch.tensor(_MINIMAX_H3_LATENTS_MEAN, dtype=samples.dtype, device=device).view(1, -1, 1, 1, 1)
+        std = torch.tensor(_MINIMAX_H3_LATENTS_STD, dtype=samples.dtype, device=device).view(1, -1, 1, 1, 1)
+        samples.sub_(mean).div_(std)
+        output = model(samples, scale=scale, target_size=(frames, output_height, output_width))
+        output.mul_(std).add_(mean)
+        if was_4d:
+            output = output.squeeze(2)
+        result = output.to(
+            device=comfy.model_management.intermediate_device(),
+            dtype=original_dtype,
+        )
+        del output, samples
+    finally:
+        model.to(device="cpu")
+    return {"samples": result}
 
 
 class latent_minimaxH3_scale:
@@ -744,11 +760,6 @@ class latent_minimaxH3_scale:
         video_latent, audio_latent = LTXVSeparateAVLatent.execute(latent).result
         scaled_video = _upscale_minimax_h3_video_latent(video_latent, model, scale)
         return LTXVConcatAVLatent.execute(scaled_video, audio_latent).result
-
-
-
-
-
 
 
 

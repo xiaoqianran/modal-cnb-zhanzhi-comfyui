@@ -34,6 +34,38 @@ function formatSec(sec) {
   return `${String(m).padStart(2, "0")}:${s}`;
 }
 
+function formatMediaRate(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number) || number <= 0) return "—";
+  return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatMediaInfo(data) {
+  const lines = [];
+  const video = data?.video;
+  if (video) {
+    const values = [
+      `宽 ${Number(video.width) || "—"}`,
+      `高 ${Number(video.height) || "—"}`,
+      `FPS ${formatMediaRate(video.fps)}`,
+      `Length ${Number(video.length) || "—"}`,
+    ];
+    if (video.codec) values.push(`编码 ${String(video.codec).toUpperCase()}`);
+    lines.push(`视频：${values.join(" · ")}`);
+  }
+  const audio = data?.audio;
+  if (audio) {
+    const values = [
+      `采样率 ${Number(audio.sample_rate) ? `${Number(audio.sample_rate)} Hz` : "—"}`,
+      `声道 ${Number(audio.channels) || "—"}${audio.channel_layout ? ` (${audio.channel_layout})` : ""}`,
+    ];
+    if (audio.codec) values.push(`编码 ${String(audio.codec).toUpperCase()}`);
+    if (Number(audio.bit_rate) > 0) values.push(`码率 ${Math.round(Number(audio.bit_rate) / 1000)} kbps`);
+    lines.push(`音频：${values.join(" · ")}`);
+  }
+  return lines.join("\n");
+}
+
 function looksLikeMediaPath(v) {
   if (typeof v !== "string") return false;
   const s = v.trim().toLowerCase();
@@ -69,11 +101,13 @@ function getUpstreamNodeByInput(node, inputName) {
   return app.graph.getNodeById?.(info.origin_id) || app.graph._nodes?.find((n) => n.id === info.origin_id) || null;
 }
 
-function resolvePathFromVideoPort(node) {
+function resolvePathFromMediaPorts(node) {
   const visited = new Set();
   const queue = [];
-  const first = getUpstreamNodeByInput(node, "video");
-  if (first) queue.push(first);
+  ["video", "audio"].forEach((inputName) => {
+    const upstream = getUpstreamNodeByInput(node, inputName);
+    if (upstream) queue.push(upstream);
+  });
 
   while (queue.length) {
     const cur = queue.shift();
@@ -95,16 +129,12 @@ function resolvePathFromVideoPort(node) {
 }
 
 function openTrimModal(node) {
-  const pathWidget = getWidget(node, "media_path");
-  const startWidget = getWidget(node, "start_sec");
-  const endWidget = getWidget(node, "end_sec");
   const markersWidget = getWidget(node, "markers_json");
-  const manualPath = String(pathWidget?.value || "").trim();
-  const portPath = resolvePathFromVideoPort(node);
-  const sourcePath = manualPath || portPath;
+  const modeWidget = getWidget(node, "split_mode");
+  const sourcePath = resolvePathFromMediaPorts(node);
 
   if (!sourcePath) {
-    alert("未找到可预览媒体：请连接可回溯到本地文件路径的 video 端口，或填写 media_path。");
+    alert("未找到可预览媒体：请连接可回溯到本地文件路径的 video 或 audio 端口。");
     return;
   }
 
@@ -118,28 +148,16 @@ function openTrimModal(node) {
       </div>
       <div class="apt-trim-body">
         <div class="apt-trim-status">加载媒体中...</div>
+        <div class="apt-trim-media-info" hidden></div>
         <div class="apt-trim-player-wrap"></div>
         <div class="apt-wave-wrap">
           <canvas class="apt-wave-canvas" width="860" height="140"></canvas>
         </div>
         <div class="apt-playhead-label">Playhead: 00:00.00</div>
         <div class="apt-trim-controls" style="display:none;">
-          <div class="apt-trim-row">
-            <span>开始</span>
-            <input class="apt-trim-start" type="range" min="0" max="1" step="0.01" value="0" />
-            <span class="apt-trim-start-label">00:00.00</span>
-          </div>
-          <div class="apt-trim-row">
-            <span>结束</span>
-            <input class="apt-trim-end" type="range" min="0" max="1" step="0.01" value="1" />
-            <span class="apt-trim-end-label">00:00.00</span>
-          </div>
           <div class="apt-trim-row apt-trim-actions">
-            <button class="apt-set-start">开始=当前位置</button>
-            <button class="apt-set-end">结束=当前位置</button>
             <button class="apt-add-marker">添加标记</button>
             <button class="apt-clear-markers">清空标记</button>
-            <button class="apt-preview-loop">循环预览</button>
             <button class="apt-apply">应用到节点</button>
           </div>
           <div class="apt-trim-row">
@@ -153,6 +171,7 @@ function openTrimModal(node) {
   document.body.appendChild(overlay);
 
   const closeModal = () => {
+    cancelAnimationFrame(animationFrame);
     const media = overlay.querySelector("video, audio");
     if (media) {
       media.pause();
@@ -167,22 +186,21 @@ function openTrimModal(node) {
   });
 
   const statusEl = overlay.querySelector(".apt-trim-status");
+  const mediaInfoEl = overlay.querySelector(".apt-trim-media-info");
   const playerWrap = overlay.querySelector(".apt-trim-player-wrap");
   const controlsEl = overlay.querySelector(".apt-trim-controls");
-  const startRange = overlay.querySelector(".apt-trim-start");
-  const endRange = overlay.querySelector(".apt-trim-end");
-  const startLabel = overlay.querySelector(".apt-trim-start-label");
-  const endLabel = overlay.querySelector(".apt-trim-end-label");
   const markerListEl = overlay.querySelector(".apt-marker-list");
   const waveCanvas = overlay.querySelector(".apt-wave-canvas");
   const waveCtx = waveCanvas.getContext("2d");
   const playheadLabel = overlay.querySelector(".apt-playhead-label");
 
   let duration = 0;
-  let previewLocked = false;
   let peaks = [];
   let markers = [];
   let mediaEl = null;
+  let draggedMarker = -1;
+  let suppressClick = false;
+  let animationFrame = 0;
 
   const parseMarkersWidget = () => {
     try {
@@ -197,13 +215,13 @@ function openTrimModal(node) {
   const normalizeMarkers = () => {
     const seen = new Set();
     markers = markers
-      .map((v) => Math.max(0, Math.min(duration, Number(v) || 0)))
+      .map((v) => Number(Math.max(0, Math.min(duration, Number(v) || 0)).toFixed(2)))
       .filter((v) => Number.isFinite(v))
       .filter((v) => {
-        const k = Math.round(v * 1000);
+        const k = Math.round(v * 100);
         if (seen.has(k)) return false;
         seen.add(k);
-        return v > 0.0001 && v < duration - 0.0001;
+        return v >= 0.01 && v <= duration - 0.01;
       })
       .sort((a, b) => a - b);
   };
@@ -229,11 +247,6 @@ function openTrimModal(node) {
         waveCtx.stroke();
       }
     }
-
-    const startX = (Number(startRange.value || 0) / Math.max(duration, 0.001)) * w;
-    const endX = (Number(endRange.value || 0) / Math.max(duration, 0.001)) * w;
-    waveCtx.fillStyle = "rgba(255, 196, 0, 0.18)";
-    waveCtx.fillRect(startX, 0, Math.max(1, endX - startX), h);
 
     waveCtx.strokeStyle = "#ff5f5f";
     waveCtx.lineWidth = 2;
@@ -268,8 +281,8 @@ function openTrimModal(node) {
     markers.forEach((m, idx) => {
       const chip = document.createElement("button");
       chip.className = "apt-marker-chip";
-      chip.textContent = `${idx + 1}: ${formatSec(m)}`;
-      chip.title = "点击删除该标记";
+      chip.textContent = `${idx + 1}: ${formatSec(m)}  ×`;
+      chip.title = "删除该标记";
       chip.addEventListener("click", () => {
         markers.splice(idx, 1);
         drawWave();
@@ -279,27 +292,33 @@ function openTrimModal(node) {
     });
   };
 
-  const renderLabels = () => {
-    const s = Number(startRange.value || 0);
-    const e = Number(endRange.value || 0);
-    startLabel.textContent = formatSec(s);
-    endLabel.textContent = formatSec(e);
+  const timeFromPointer = (ev) => {
+    const rect = waveCanvas.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / Math.max(1, rect.width)));
+    return Number((ratio * duration).toFixed(2));
   };
 
-  const clampRanges = () => {
-    let s = Number(startRange.value || 0);
-    let e = Number(endRange.value || 0);
-    if (s >= e) {
-      if (previewLocked === "start") {
-        e = Math.min(duration, s + 0.01);
-      } else {
-        s = Math.max(0, e - 0.01);
+  const markerFromPointer = (ev) => {
+    const rect = waveCanvas.getBoundingClientRect();
+    const tolerance = duration * 10 / Math.max(1, rect.width);
+    const time = timeFromPointer(ev);
+    let best = -1;
+    let distance = Infinity;
+    markers.forEach((marker, index) => {
+      const current = Math.abs(marker - time);
+      if (current <= tolerance && current < distance) {
+        best = index;
+        distance = current;
       }
-    }
-    startRange.value = String(s);
-    endRange.value = String(e);
-    renderLabels();
+    });
+    return best;
+  };
+
+  const animatePlayhead = () => {
     drawWave();
+    if (mediaEl && !mediaEl.paused && !mediaEl.ended) {
+      animationFrame = requestAnimationFrame(animatePlayhead);
+    }
   };
 
   (async () => {
@@ -308,7 +327,13 @@ function openTrimModal(node) {
       duration = Math.max(0.01, Number(data.duration || 0));
       peaks = Array.isArray(data.peaks) ? data.peaks : [];
       normalizeMarkers();
-      statusEl.textContent = `时长: ${formatSec(duration)}，拖动滑块选择切割区间`;
+      const updateMediaInfo = () => {
+        const text = formatMediaInfo(data);
+        mediaInfoEl.textContent = text;
+        mediaInfoEl.hidden = !text;
+      };
+      updateMediaInfo();
+      statusEl.textContent = `时长: ${formatSec(duration)}；拖动红色标记线，双击或右键删除`;
 
       mediaEl = document.createElement(data.media_type === "video" ? "video" : "audio");
       mediaEl.controls = true;
@@ -318,43 +343,29 @@ function openTrimModal(node) {
       }
       mediaEl.src = data.media_url;
       playerWrap.appendChild(mediaEl);
+      mediaEl.addEventListener("loadedmetadata", () => {
+        if (data.media_type === "video") {
+          data.video ||= {};
+          if (!Number(data.video.width)) data.video.width = Number(mediaEl.videoWidth) || 0;
+          if (!Number(data.video.height)) data.video.height = Number(mediaEl.videoHeight) || 0;
+          if (!Number(data.video.length) && Number(data.video.fps) > 0) {
+            data.video.length = Math.round(duration * Number(data.video.fps));
+          }
+        }
+        updateMediaInfo();
+      });
       mediaEl.addEventListener("timeupdate", () => drawWave());
       mediaEl.addEventListener("seeked", () => drawWave());
-
-      startRange.max = String(duration);
-      endRange.max = String(duration);
-
-      const initStart = Math.max(0, Number(startWidget?.value || 0));
-      const initEndRaw = Number(endWidget?.value || 0);
-      const initEnd = initEndRaw > initStart ? initEndRaw : duration;
-      startRange.value = String(Math.min(initStart, duration - 0.01));
-      endRange.value = String(Math.min(Math.max(initEnd, Number(startRange.value) + 0.01), duration));
-      renderLabels();
+      mediaEl.addEventListener("play", () => {
+        cancelAnimationFrame(animationFrame);
+        animatePlayhead();
+      });
+      mediaEl.addEventListener("pause", () => drawWave());
       controlsEl.style.display = "";
       drawWave();
       renderMarkerList();
-
-      startRange.addEventListener("input", () => {
-        previewLocked = "start";
-        clampRanges();
-      });
-      endRange.addEventListener("input", () => {
-        previewLocked = "end";
-        clampRanges();
-      });
-
-      overlay.querySelector(".apt-set-start")?.addEventListener("click", () => {
-        startRange.value = String(Math.max(0, Math.min(mediaEl.currentTime || 0, duration)));
-        previewLocked = "start";
-        clampRanges();
-      });
-      overlay.querySelector(".apt-set-end")?.addEventListener("click", () => {
-        endRange.value = String(Math.max(0, Math.min(mediaEl.currentTime || 0, duration)));
-        previewLocked = "end";
-        clampRanges();
-      });
       overlay.querySelector(".apt-add-marker")?.addEventListener("click", () => {
-        const t = Math.max(0, Math.min(mediaEl.currentTime || 0, duration));
+        const t = Number(Math.max(0, Math.min(mediaEl.currentTime || 0, duration)).toFixed(2));
         markers.push(t);
         normalizeMarkers();
         drawWave();
@@ -365,50 +376,117 @@ function openTrimModal(node) {
         drawWave();
         renderMarkerList();
       });
-      overlay.querySelector(".apt-preview-loop")?.addEventListener("click", async () => {
-        const s = Number(startRange.value || 0);
-        const e = Number(endRange.value || 0);
-        mediaEl.currentTime = s;
-        await mediaEl.play();
-        const loopFn = () => {
-          if (mediaEl.currentTime >= e) mediaEl.currentTime = s;
-        };
-        mediaEl.addEventListener("timeupdate", loopFn);
-        setTimeout(() => mediaEl.removeEventListener("timeupdate", loopFn), 12000);
-      });
       overlay.querySelector(".apt-apply")?.addEventListener("click", () => {
-        const s = Number(startRange.value || 0);
-        const e = Number(endRange.value || 0);
         normalizeMarkers();
-        setWidgetValue(startWidget, Number(s.toFixed(3)));
-        setWidgetValue(endWidget, Number(e.toFixed(3)));
-        setWidgetValue(markersWidget, JSON.stringify(markers.map((v) => Number(v.toFixed(3)))));
+        setWidgetValue(markersWidget, JSON.stringify(markers.map((v) => Number(v.toFixed(2)))));
+        setWidgetValue(modeWidget, "Open Trim UI");
         node.setDirtyCanvas(true, true);
         closeModal();
       });
 
       waveCanvas.addEventListener("click", (ev) => {
         if (!duration) return;
-        const rect = waveCanvas.getBoundingClientRect();
-        const x = ev.clientX - rect.left;
-        const t = Math.max(0, Math.min(duration, (x / rect.width) * duration));
-        markers.push(t);
+        if (suppressClick) {
+          suppressClick = false;
+          return;
+        }
+        mediaEl.currentTime = timeFromPointer(ev);
+        drawWave();
+      });
+      waveCanvas.addEventListener("pointerdown", (ev) => {
+        draggedMarker = markerFromPointer(ev);
+        if (draggedMarker < 0) return;
+        suppressClick = true;
+        waveCanvas.setPointerCapture?.(ev.pointerId);
+        waveCanvas.style.cursor = "ew-resize";
+        ev.preventDefault();
+      });
+      waveCanvas.addEventListener("pointermove", (ev) => {
+        if (draggedMarker < 0) {
+          waveCanvas.style.cursor = markerFromPointer(ev) >= 0 ? "ew-resize" : "pointer";
+          return;
+        }
+        markers[draggedMarker] = timeFromPointer(ev);
+        drawWave();
+        renderMarkerList();
+      });
+      const finishDrag = () => {
+        if (draggedMarker < 0) return;
+        draggedMarker = -1;
         normalizeMarkers();
         renderMarkerList();
         drawWave();
-      });
+      };
+      waveCanvas.addEventListener("pointerup", finishDrag);
+      waveCanvas.addEventListener("pointercancel", finishDrag);
+      const removeMarkerAtPointer = (ev) => {
+        const index = markerFromPointer(ev);
+        if (index < 0) return;
+        ev.preventDefault();
+        markers.splice(index, 1);
+        renderMarkerList();
+        drawWave();
+      };
+      waveCanvas.addEventListener("dblclick", removeMarkerAtPointer);
+      waveCanvas.addEventListener("contextmenu", removeMarkerAtPointer);
     } catch (err) {
       statusEl.textContent = `加载失败: ${err?.message || err}`;
     }
   })();
 }
 
+function setNodeWidgetVisible(widget, visible) {
+  if (!widget) return;
+  if (!widget.__aptTrimOriginal) {
+    widget.__aptTrimOriginal = {
+      type: widget.type,
+      computeSize: widget.computeSize,
+      hidden: widget.hidden,
+    };
+  }
+  if (visible) {
+    widget.type = widget.__aptTrimOriginal.type;
+    widget.hidden = widget.__aptTrimOriginal.hidden ?? false;
+    widget.computeSize = widget.__aptTrimOriginal.computeSize;
+  } else {
+    widget.type = "hidden";
+    widget.hidden = true;
+    widget.computeSize = () => [0, -4];
+  }
+  widget.options ||= {};
+  widget.options.hidden = !visible;
+  if (widget.inputEl) widget.inputEl.style.display = visible ? "" : "none";
+  if (widget.element) widget.element.style.display = visible ? "" : "none";
+}
+
+function updateModeWidgets(node) {
+  const mode = String(getWidget(node, "split_mode")?.value || "Open Trim UI");
+  setNodeWidgetVisible(getWidget(node, "time"), mode === "按时间分割");
+  setNodeWidgetVisible(getWidget(node, "number"), mode === "按数量分割");
+  setNodeWidgetVisible(getWidget(node, "markers_json"), false);
+  setNodeWidgetVisible(getWidget(node, "Open Trim UI"), mode === "Open Trim UI");
+  const size = node.computeSize?.();
+  if (size) node.setSize(size);
+  node.setDirtyCanvas?.(true, true);
+}
+
 function ensureTrimButton(node) {
   if (node.constructor?.nodeData?.name !== TARGET_NODE) return;
-  const exists = (node.widgets || []).find((w) => w.name === "Open Trim UI");
-  if (exists) return;
-  node.addWidget("button", "Open Trim UI", "open", () => openTrimModal(node));
-  if (node.computeSize) node.setSize(node.computeSize());
+  let button = getWidget(node, "Open Trim UI");
+  if (!button) {
+    button = node.addWidget("button", "Open Trim UI", "open", () => openTrimModal(node));
+  }
+  const modeWidget = getWidget(node, "split_mode");
+  if (modeWidget && !modeWidget.__aptTrimBound) {
+    modeWidget.__aptTrimBound = true;
+    const callback = modeWidget.callback;
+    modeWidget.callback = function () {
+      const result = callback?.apply(this, arguments);
+      updateModeWidgets(node);
+      return result;
+    };
+  }
+  updateModeWidgets(node);
 }
 
 app.registerExtension({
@@ -418,6 +496,12 @@ app.registerExtension({
     const onNodeCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
+      ensureTrimButton(this);
+      return r;
+    };
+    const onConfigure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function () {
+      const r = onConfigure ? onConfigure.apply(this, arguments) : undefined;
       ensureTrimButton(this);
       return r;
     };
@@ -435,10 +519,11 @@ style.textContent = `
 .apt-trim-title{font-size:16px;font-weight:600}
 .apt-trim-close{background:#333;color:#eee;border:1px solid #555;border-radius:6px;padding:4px 8px;cursor:pointer}
 .apt-trim-status{font-size:13px;color:#9ecbff;margin-bottom:8px}
+.apt-trim-media-info{display:block!important;flex:0 0 59px!important;align-self:stretch;height:59px!important;min-height:0!important;max-height:59px!important;box-sizing:border-box;margin:-2px 0 8px;padding:7px 9px;overflow:hidden;border:1px solid #3a3a3a;border-radius:6px;background:#181818;color:#cfd6df;font:12px/15px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}
 .apt-trim-player-wrap{display:flex;justify-content:center;align-items:center;margin:8px 0}
-.apt-trim-player-wrap video,.apt-trim-player-wrap audio{width:min(860px,88vw);background:#000;border-radius:8px}
-.apt-wave-wrap{margin:8px 0}
-.apt-wave-canvas{width:min(860px,88vw);height:140px;background:#111;border:1px solid #3a3a3a;border-radius:6px}
+.apt-trim-player-wrap video,.apt-trim-player-wrap audio{width:min(860px,88vw);box-sizing:border-box;background:#000;border-radius:8px}
+.apt-wave-wrap{display:flex;justify-content:center;align-items:center;margin:8px 0}
+.apt-wave-canvas{width:calc(min(860px,88vw) - 32px);height:140px;box-sizing:border-box;background:#111;border:1px solid #3a3a3a;border-radius:6px}
 .apt-playhead-label{font-size:12px;color:#8ef58e;margin-top:4px}
 .apt-trim-row{display:flex;align-items:center;gap:8px;margin:8px 0}
 .apt-trim-row span{min-width:52px}

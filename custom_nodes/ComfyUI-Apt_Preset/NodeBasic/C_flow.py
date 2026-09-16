@@ -9,6 +9,8 @@ import base64
 import io
 import json
 import hashlib
+import asyncio
+import re
 import math
 from datetime import datetime
 from typing import Tuple
@@ -24,6 +26,14 @@ import comfy.utils
 import comfy.nested_tensor
 from comfy_api.latest import InputImpl, Types
 from comfy_execution.graph_utils import ExecutionBlocker
+from comfy_extras.nodes_post_processing import ColorTransfer
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+except ImportError:
+    tk = None
+    filedialog = None
 
 
 
@@ -1000,6 +1010,7 @@ class flow_tensor_Unify:
 
 #region--------------IN/out-switch--------------------------
 
+
 class flow_BooleanSwitch:
     def __init__(self):
         self.stored_data = None
@@ -1009,7 +1020,7 @@ class flow_BooleanSwitch:
         return {
             "required": {
                 "switch": ("BOOLEAN", {"default": True, "label_on": "On", "label_off": "Off"}),
-                "store": ("BOOLEAN", {"default": True,}),
+                "store": ("BOOLEAN", {"default": True}),
             },
             "optional": {
                 "any_input": (any_type,),
@@ -1032,18 +1043,196 @@ class flow_BooleanSwitch:
         if switch:
             if any_input is not None:
                 return (any_input,)
-            elif store and self.stored_data is not None:
+            if store and self.stored_data is not None:
                 return (self.stored_data,)
-            else:
-                if ExecutionBlocker is not None:
-                    return (ExecutionBlocker(None),)
-                else:
-                    return ({},)
-        else:
-            if ExecutionBlocker is not None:
-                return (ExecutionBlocker(None),)
-            else:
-                return ({},)
+        if ExecutionBlocker is not None:
+            return (ExecutionBlocker(None),)
+        return ({},)
+
+
+def _workflow_save_select_directory(initial_directory):
+    initial_directory = str(initial_directory or "").strip()
+    if not os.path.isdir(initial_directory):
+        initial_directory = folder_paths.get_output_directory()
+    if tk is not None and filedialog is not None:
+        root = None
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            return filedialog.askdirectory(
+                parent=root,
+                title="选择工作流保存文件夹",
+                initialdir=initial_directory,
+                mustexist=True,
+            )
+        except Exception:
+            pass
+        finally:
+            if root is not None:
+                root.destroy()
+    if os.name != "nt":
+        raise RuntimeError("当前环境不支持本机文件夹选择窗口")
+    script = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "$dialog=New-Object System.Windows.Forms.FolderBrowserDialog; "
+        "$dialog.Description='选择工作流保存文件夹'; "
+        "$dialog.ShowNewFolderButton=$true; "
+        "if(Test-Path -LiteralPath $env:APT_WORKFLOW_INITIAL_DIR){"
+        "$dialog.SelectedPath=$env:APT_WORKFLOW_INITIAL_DIR}; "
+        "if($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK){"
+        "[Console]::Out.Write($dialog.SelectedPath)}"
+    )
+    environment = os.environ.copy()
+    environment["APT_WORKFLOW_INITIAL_DIR"] = initial_directory
+    completed = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-STA", "-Command", script],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=environment,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    return completed.stdout.strip()
+
+
+@PromptServer.instance.routes.post("/apt_preset/flow_workflow_save_gate/select_directory")
+async def flow_workflow_save_gate_select_directory(request):
+    try:
+        payload = await request.json()
+        initial_directory = payload.get("initial_directory", "") if isinstance(payload, dict) else ""
+        selected = await asyncio.to_thread(
+            _workflow_save_select_directory, initial_directory
+        )
+        return web.json_response({"ok": True, "directory": selected})
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=500)
+
+
+class flow_workflow_save_image_no_metadata(nodes.SaveImage):
+    def save_images(self, images, filename_prefix="ComfyUI", prompt=None, extra_pnginfo=None):
+        return super().save_images(images, filename_prefix, prompt=None, extra_pnginfo=None)
+
+
+def flow_workflow_save_gate_prepare_prompt(json_data):
+    prompt = json_data.get("prompt")
+    if not isinstance(prompt, dict):
+        return json_data
+
+    branch_nodes = {
+        str(node_id)
+        for node_id, node in prompt.items()
+        if node.get("class_type") == "flow_workflow_save_gate"
+        and node.get("inputs", {}).get("save_workflow") is False
+    }
+    if not branch_nodes:
+        return json_data
+
+    while True:
+        found = {
+            str(node_id)
+            for node_id, node in prompt.items()
+            if str(node_id) not in branch_nodes
+            and any(
+                isinstance(value, (list, tuple))
+                and len(value) == 2
+                and str(value[0]) in branch_nodes
+                for value in node.get("inputs", {}).values()
+            )
+        }
+        if not found:
+            break
+        branch_nodes.update(found)
+
+    for node_id in branch_nodes:
+        node = prompt.get(node_id)
+        if node is not None and node.get("class_type") == "SaveImage":
+            node["class_type"] = "flow_workflow_save_image_no_metadata"
+    return json_data
+
+
+PromptServer.instance.add_on_prompt_handler(flow_workflow_save_gate_prepare_prompt)
+
+
+class flow_workflow_save_gate:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "anydata": (any_type,),
+                "save_workflow": ("BOOLEAN", {
+                    "default": True,
+                    "label_on": "保存并放行",
+                    "label_off": "不带工作流",
+                    "tooltip": "开启时保存当前工作流并放行数据；关闭时移除下游图片的工作流元数据并放行数据。",
+                }),
+                "save_directory": ("STRING", {
+                    "default": folder_paths.get_output_directory(),
+                    "multiline": False,
+                    "tooltip": "工作流JSON保存文件夹，可用节点上的按钮选择。",
+                }),
+                "workflow_name": ("STRING", {
+                    "default": "workflow",
+                    "multiline": False,
+                    "tooltip": "工作流文件名前缀，保存文件名为 前缀_时间戳.json。",
+                }),
+            },
+            "hidden": {"extra_pnginfo": "EXTRA_PNGINFO"},
+        }
+
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("anydata",)
+    FUNCTION = "save_and_pass"
+    CATEGORY = "Apt_Preset/flow"
+    OUTPUT_NODE = True
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("nan")
+
+    def save_and_pass(self, anydata, save_workflow, save_directory, workflow_name="workflow", extra_pnginfo=None):
+        if not save_workflow:
+            return (anydata,)
+        workflow = (
+            extra_pnginfo.get("workflow")
+            if isinstance(extra_pnginfo, Mapping)
+            else None
+        )
+        if workflow is None:
+            raise ValueError("flow_workflow_save_gate: 当前队列没有前端工作流数据")
+        raw_directory = str(save_directory or "").strip().strip('"').strip("'")
+        if not raw_directory:
+            raise ValueError("flow_workflow_save_gate: 请先选择工作流保存文件夹")
+        target_directory = os.path.abspath(os.path.expanduser(raw_directory))
+        if not os.path.isdir(target_directory):
+            raise ValueError(
+                f"flow_workflow_save_gate: 保存文件夹不存在: {target_directory}"
+            )
+        filename_prefix = str(workflow_name or "").strip()
+        if filename_prefix.lower().endswith(".json"):
+            filename_prefix = filename_prefix[:-5].rstrip()
+        if not filename_prefix:
+            raise ValueError("flow_workflow_save_gate: 请输入工作流名称")
+        if re.search(r'[<>:"/\\|?*\x00-\x1f]', filename_prefix) or filename_prefix.endswith((" ", ".")):
+            raise ValueError("flow_workflow_save_gate: 工作流名称包含文件名非法字符")
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        output_path = os.path.join(target_directory, f"{filename_prefix}_{stamp}.json")
+        temp_path = output_path + ".tmp"
+        try:
+            with open(temp_path, "w", encoding="utf-8") as handle:
+                json.dump(workflow, handle, ensure_ascii=False, indent=2)
+            os.replace(temp_path, output_path)
+        finally:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+        return {
+            "ui": {"workflow_path": [output_path]},
+            "result": (anydata,),
+        }
 
 
 class flow_stage_index_switch:
@@ -1401,11 +1590,16 @@ def _stage_root_dir():
     return root
 
 
-def _stage_run_dir(run_id):
+def _stage_run_path(run_id):
     root = _stage_root_dir()
     path = os.path.abspath(os.path.join(root, _stage_safe_name(run_id)))
     if os.path.commonpath((root, path)) != root:
         raise ValueError("flow_stage: invalid run_id")
+    return path
+
+
+def _stage_run_dir(run_id):
+    path = _stage_run_path(run_id)
     os.makedirs(path, exist_ok=True)
     return path
 
@@ -1457,16 +1651,45 @@ def _stage_write_json(path, value):
     os.replace(temp_path, path)
 
 
-def _stage_json_value(value):
+def _stage_json_value(value, tensors=None):
     if value is None or isinstance(value, (str, bool, int, float)):
         return value
     if isinstance(value, np.generic):
         return value.item()
+    if isinstance(value, comfy.nested_tensor.NestedTensor):
+        if tensors is None:
+            raise TypeError("flow_stage: NestedTensor cannot be stored as JSON")
+        names = []
+        for tensor in value.unbind():
+            name = f"json_tensor_{len(tensors)}"
+            tensors[name] = _stage_cpu_tensor(tensor)
+            names.append(name)
+        return {"__flow_stage_nested_tensors__": names}
+    if isinstance(value, torch.Tensor):
+        if tensors is None:
+            raise TypeError("flow_stage: Tensor cannot be stored as JSON")
+        name = f"json_tensor_{len(tensors)}"
+        tensors[name] = _stage_cpu_tensor(value)
+        return {"__flow_stage_tensor__": name}
     if isinstance(value, (list, tuple)):
-        return [_stage_json_value(item) for item in value]
+        return [_stage_json_value(item, tensors) for item in value]
     if isinstance(value, Mapping):
-        return {str(key): _stage_json_value(item) for key, item in value.items()}
+        return {str(key): _stage_json_value(item, tensors) for key, item in value.items()}
     raise TypeError(f"flow_stage: {type(value).__name__} cannot be stored as JSON")
+
+
+def _stage_restore_json_value(value, tensors):
+    if isinstance(value, list):
+        return [_stage_restore_json_value(item, tensors) for item in value]
+    if isinstance(value, Mapping):
+        if set(value) == {"__flow_stage_tensor__"}:
+            return tensors[value["__flow_stage_tensor__"]]
+        if set(value) == {"__flow_stage_nested_tensors__"}:
+            return comfy.nested_tensor.NestedTensor(
+                [tensors[name] for name in value["__flow_stage_nested_tensors__"]]
+            )
+        return {key: _stage_restore_json_value(item, tensors) for key, item in value.items()}
+    return value
 
 
 def _stage_cpu_tensor(value):
@@ -1535,7 +1758,7 @@ def _stage_encode_payload(data, requested_type):
                 tensors[name] = _stage_cpu_tensor(value)
                 fields.append({"key": str(key), "tensor": name})
             else:
-                fields.append({"key": str(key), "value": _stage_json_value(value)})
+                fields.append({"key": str(key), "value": _stage_json_value(value, tensors)})
         descriptor["fields"] = fields
 
     elif payload_type in ("image", "mask", "tensor"):
@@ -1563,10 +1786,10 @@ def _stage_encode_payload(data, requested_type):
         descriptor["frame_rate"] = [frame_rate.numerator, frame_rate.denominator]
         descriptor["bit_depth"] = int(data.get_bit_depth()) if hasattr(data, "get_bit_depth") else 8
         if components.metadata is not None:
-            descriptor["metadata"] = _stage_json_value(components.metadata)
+            descriptor["metadata"] = _stage_json_value(components.metadata, tensors)
 
     elif payload_type == "json":
-        descriptor["value"] = _stage_json_value(data)
+        descriptor["value"] = _stage_json_value(data, tensors)
     else:
         raise ValueError(f"flow_stage: unsupported data type {payload_type}")
 
@@ -1595,7 +1818,11 @@ def _stage_decode_payload(path):
                     [tensors[name] for name in field["nested_tensors"]]
                 )
             else:
-                data[field["key"]] = tensors[field["tensor"]] if "tensor" in field else field.get("value")
+                data[field["key"]] = (
+                    tensors[field["tensor"]]
+                    if "tensor" in field
+                    else _stage_restore_json_value(field.get("value"), tensors)
+                )
         return data
     if payload_type in ("image", "mask", "tensor"):
         return tensors["data"]
@@ -1614,12 +1841,84 @@ def _stage_decode_payload(path):
             alpha=tensors.get("alpha"),
             audio=audio,
             frame_rate=Fraction(numerator, denominator),
-            metadata=descriptor.get("metadata"),
+            metadata=_stage_restore_json_value(descriptor.get("metadata"), tensors),
         )
         return InputImpl.VideoFromComponents(components, bit_depth=int(descriptor.get("bit_depth", 8)))
     if payload_type == "json":
-        return descriptor.get("value")
+        return _stage_restore_json_value(descriptor.get("value"), tensors)
     raise ValueError(f"flow_stage: unsupported checkpoint type {payload_type}")
+
+
+def _stage_checkpoint_filename(stage_index, channel):
+    suffix = "1" if channel == "data1" else "2"
+    return f"stage_{int(stage_index):05d}_checkpoint_{suffix}.safetensors"
+
+
+def _stage_load_checkpoint(run_dir, stage_index, channel):
+    path = os.path.join(run_dir, _stage_checkpoint_filename(stage_index, channel))
+    return _stage_decode_payload(path) if os.path.isfile(path) else None
+
+
+def _stage_checkpoint_paths(run_dir, stage_index):
+    return tuple(
+        os.path.join(run_dir, _stage_checkpoint_filename(stage_index, channel))
+        for channel in ("data1", "data2")
+    )
+
+
+def _stage_can_resume_first_stage(run_id, total):
+    if not run_id or run_id == "default":
+        return False
+    run_dir = _stage_run_path(run_id)
+    state = _stage_load_state(run_dir)
+    if state is None or int(state.get("total", -1)) != int(total):
+        return False
+    checkpoint_stage = int(state.get("checkpoint_stage", -1))
+    checkpoint_phase = state.get("checkpoint_phase")
+    checkpoint_1, checkpoint_2 = _stage_checkpoint_paths(run_dir, 0)
+    return checkpoint_stage == 0 and checkpoint_phase in ("refine_pending", "complete_pending") and (
+        os.path.isfile(checkpoint_1) or os.path.isfile(checkpoint_2)
+    )
+
+
+def _stage_prepare_checkpoints(run_dir, state, stage_index):
+    checkpoint_1, checkpoint_2 = _stage_checkpoint_paths(run_dir, stage_index)
+    has_checkpoint_1 = os.path.isfile(checkpoint_1)
+    has_checkpoint_2 = os.path.isfile(checkpoint_2)
+    checkpoint_matches = (
+        state is not None
+        and int(state.get("checkpoint_stage", -1)) == int(stage_index)
+    )
+    legacy_checkpoint_matches = (
+        state is not None
+        and "checkpoint_stage" not in state
+        and not state.get("complete", False)
+        and int(state.get("next_stage", -1)) == int(stage_index)
+    )
+
+    if has_checkpoint_1 and not has_checkpoint_2 and (
+        (checkpoint_matches and state.get("checkpoint_phase") == "refine_pending")
+        or legacy_checkpoint_matches
+    ):
+        if legacy_checkpoint_matches:
+            state["checkpoint_stage"] = stage_index
+            state["checkpoint_phase"] = "refine_pending"
+            _stage_write_json(_stage_state_path(run_dir), state)
+        return
+    if not has_checkpoint_1 and not has_checkpoint_2:
+        if checkpoint_matches:
+            state.pop("checkpoint_stage", None)
+            state.pop("checkpoint_phase", None)
+            _stage_write_json(_stage_state_path(run_dir), state)
+        return
+
+    for path in (checkpoint_1, checkpoint_2):
+        if os.path.isfile(path):
+            os.remove(path)
+    if checkpoint_matches:
+        state.pop("checkpoint_stage", None)
+        state.pop("checkpoint_phase", None)
+        _stage_write_json(_stage_state_path(run_dir), state)
 
 
 class flow_stage_begin:
@@ -1629,7 +1928,7 @@ class flow_stage_begin:
             "required": {
                 "run_id": ("STRING", {"default": "default"}),
                 "total": ("INT", {"default": 3, "min": 1, "max": 5000}),
-                "current_index": ("INT", {
+                "stage_index": ("INT", {
                     "default": 1,
                     "min": 1,
                     "max": 5000,
@@ -1637,7 +1936,8 @@ class flow_stage_begin:
                 }),
             },
             "optional": {
-                "initial_data": (any_type,),
+                "initial_data_1": (any_type,),
+                "initial_data_2": (any_type,),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -1648,19 +1948,60 @@ class flow_stage_begin:
     CATEGORY = "Apt_Preset/flow"
 
     @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        return float("nan")
+    def IS_CHANGED(cls, run_id, total, stage_index=1, unique_id=None, **kwargs):
+        node_key = str(unique_id or "")
+        effective_run_id = str(run_id or "").strip()
+        single_stage = int(total) == 1 and int(stage_index) == 1
+        if single_stage:
+            effective_run_id = "default"
+        elif int(stage_index) == 1 and not _stage_can_resume_first_stage(effective_run_id, total):
+            effective_run_id = ""
+        elif (not effective_run_id or effective_run_id == "default") and node_key:
+            effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "")
 
-    def begin(self, run_id, total, current_index=1,
-              initial_data=None, unique_id=None):
+        files = []
+        if effective_run_id and not single_stage:
+            run_dir = _stage_run_path(effective_run_id)
+            state_path = _stage_state_path(run_dir)
+            if os.path.isfile(state_path):
+                state_stat = os.stat(state_path)
+                files.append((os.path.basename(state_path), state_stat.st_mtime_ns, state_stat.st_size))
+                state = _stage_load_state(run_dir)
+                if state is not None:
+                    requested_stage = int(stage_index) - 1
+                    if requested_stage > 0:
+                        for suffix in ("", "_2"):
+                            payload_path = os.path.join(run_dir, f"stage_{requested_stage - 1:05d}{suffix}.safetensors")
+                            if os.path.isfile(payload_path):
+                                payload_stat = os.stat(payload_path)
+                                files.append((os.path.basename(payload_path), payload_stat.st_mtime_ns, payload_stat.st_size))
+            requested_stage = int(stage_index) - 1
+            for channel in ("data1", "data2"):
+                checkpoint_path = os.path.join(run_dir, _stage_checkpoint_filename(requested_stage, channel))
+                if os.path.isfile(checkpoint_path):
+                    checkpoint_stat = os.stat(checkpoint_path)
+                    files.append((os.path.basename(checkpoint_path), checkpoint_stat.st_mtime_ns, checkpoint_stat.st_size))
+
+        return json.dumps(
+            [effective_run_id, int(total), int(stage_index), files],
+            separators=(",", ":"),
+        )
+
+    def begin(self, run_id, total, stage_index=1,
+              initial_data_1=None, initial_data_2=None, unique_id=None):
         total = int(total)
-        requested_index = int(current_index)
+        requested_index = int(stage_index)
         if requested_index < 1 or requested_index > total:
-            raise ValueError(f"flow_stage_begin: current_index must be between 1 and {total}")
+            raise ValueError(f"flow_stage_begin: stage_index must be between 1 and {total}")
 
         node_key = str(unique_id or "")
         effective_run_id = str(run_id or "").strip()
-        if (not effective_run_id or effective_run_id == "default") and node_key:
+        single_stage = total == 1 and requested_index == 1
+        if single_stage:
+            effective_run_id = "default"
+        elif requested_index == 1 and not _stage_can_resume_first_stage(effective_run_id, total):
+            effective_run_id = ""
+        elif (not effective_run_id or effective_run_id == "default") and node_key:
             effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "")
 
         state = None
@@ -1670,38 +2011,52 @@ class flow_stage_begin:
             state = _stage_load_state(run_dir)
 
         stage_index = requested_index - 1
+        total_changed = False
         if stage_index == 0:
-            effective_run_id = _stage_new_run_id()
-            run_dir = _stage_run_dir(effective_run_id)
-            state = None
-            data = initial_data
+            if not single_stage and not effective_run_id:
+                effective_run_id = _stage_new_run_id()
+                run_dir = _stage_run_dir(effective_run_id)
+                state = None
+            data_1 = initial_data_1
+            data_2 = initial_data_2
         else:
             if not effective_run_id or state is None:
                 raise ValueError(
                     "flow_stage_begin: cannot resume from this stage because the previous run checkpoint is missing"
                 )
-            if int(state["total"]) != total:
-                raise ValueError("flow_stage_begin: total does not match the saved run")
+            saved_total = int(state["total"])
+            total_changed = total != saved_total
             if not state.get("complete", False) and int(state["next_stage"]) == stage_index:
                 filename = state.get("payload")
             else:
                 filename = f"stage_{stage_index - 1:05d}.safetensors"
             if filename is None:
-                if not state.get("control_only", False):
+                if not state.get("control_only_1", state.get("control_only", False)):
                     raise ValueError("flow_stage_begin: previous stage checkpoint is missing")
-                data = None
+                data_1 = None
             else:
                 if not filename or os.path.basename(filename) != filename:
                     raise ValueError("flow_stage_begin: invalid checkpoint filename")
                 payload_path = os.path.join(run_dir, filename)
                 if os.path.isfile(payload_path):
-                    data = _stage_decode_payload(payload_path)
-                elif state.get("control_only", False):
+                    data_1 = _stage_decode_payload(payload_path)
+                elif state.get("control_only_1", state.get("control_only", False)):
                     filename = None
-                    data = None
+                    data_1 = None
                 else:
                     raise FileNotFoundError(f"flow_stage_begin: checkpoint not found: {payload_path}")
-            if state.get("complete", False) or int(state["next_stage"]) != stage_index:
+            if not state.get("complete", False) and int(state["next_stage"]) == stage_index:
+                filename_2 = state.get("payload_2")
+            else:
+                filename_2 = f"stage_{stage_index - 1:05d}_2.safetensors"
+            if filename_2 is None:
+                data_2 = None
+            else:
+                if not filename_2 or os.path.basename(filename_2) != filename_2:
+                    raise ValueError("flow_stage_begin: invalid bridge 2 checkpoint filename")
+                payload_path_2 = os.path.join(run_dir, filename_2)
+                data_2 = _stage_decode_payload(payload_path_2) if os.path.isfile(payload_path_2) else None
+            if total_changed or state.get("complete", False) or int(state["next_stage"]) != stage_index:
                 state = {
                     "version": _STAGE_BRIDGE_VERSION,
                     "run_id": effective_run_id,
@@ -1709,18 +2064,25 @@ class flow_stage_begin:
                     "completed_stage": stage_index - 1,
                     "next_stage": stage_index,
                     "payload": filename,
+                    "payload_2": filename_2,
                     "payload_type": "auto" if filename is not None else None,
-                    "control_only": filename is None,
+                    "control_only": filename is None and filename_2 is None,
+                    "control_only_1": filename is None,
+                    "control_only_2": filename_2 is None,
                     "complete": False,
                     "restart_pending": True,
                 }
                 _stage_write_json(_stage_state_path(run_dir), state)
 
+        _stage_prepare_checkpoints(run_dir, state, stage_index)
+        checkpoint_data_1 = _stage_load_checkpoint(run_dir, stage_index, "data1")
+        checkpoint_data_2 = _stage_load_checkpoint(run_dir, stage_index, "data2")
+
         if node_key:
             _STAGE_ACTIVE_RUN_IDS[node_key] = effective_run_id
             _STAGE_BEGIN_NODE_IDS[effective_run_id] = node_key
         _stage_feedback(unique_id, "run_id", effective_run_id)
-        _stage_feedback(unique_id, "current_index", stage_index + 1)
+        _stage_feedback(unique_id, "stage_index", stage_index + 1)
 
         stage_info = {
             "version": _STAGE_BRIDGE_VERSION,
@@ -1729,7 +2091,13 @@ class flow_stage_begin:
             "total": total,
             "is_first": stage_index == 0,
             "is_last": stage_index == total - 1,
-            "stage_data": data,
+            "stage_data": data_1,
+            "stage_data_1": data_1,
+            "stage_data_2": data_2,
+            "checkpoint_data_1": checkpoint_data_1,
+            "checkpoint_data_2": checkpoint_data_2,
+            "checkpoint_saved_data1": checkpoint_data_1 is not None,
+            "checkpoint_saved_data2": checkpoint_data_2 is not None,
         }
         return stage_info, stage_index + 1
 
@@ -1747,30 +2115,10 @@ def _stage_validate_info(stage_info):
     return run_id, stage_index, total
 
 
-class flow_stage_data:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "stage_info": (_STAGE_INFO_TYPE,),
-            },
-        }
-
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("data",)
-    FUNCTION = "get_data"
-    CATEGORY = "Apt_Preset/flow"
-
-    @classmethod
-    def VALIDATE_INPUTS(cls, input_types):
-        return True
-
-    def get_data(self, stage_info):
-        _stage_validate_info(stage_info)
-        data = stage_info.get("stage_data")
-        if data is None:
-            return (ExecutionBlocker(None),)
-        return (data,)
+def _stage_clean_data(data):
+    if not isinstance(data, Mapping):
+        return data
+    return {key: value for key, value in data.items() if not str(key).startswith("apt_h3_")}
 
 
 class flow_stage_unpack:
@@ -1782,45 +2130,101 @@ class flow_stage_unpack:
             },
         }
 
-    RETURN_TYPES = ("IMAGE", "MASK", "LATENT", "VIDEO", "AUDIO", "STRING")
-    RETURN_NAMES = ("image", "mask", "latent", "video", "audio", "text")
+    RETURN_TYPES = (any_type, any_type, "INT", "INT", "BOOLEAN", "BOOLEAN")
+    RETURN_NAMES = (
+        "data_1", "data_2", "total", "stage_index", "is_first", "is_last",
+    )
     FUNCTION = "unpack"
     CATEGORY = "Apt_Preset/flow"
 
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
     def unpack(self, stage_info):
-        _stage_validate_info(stage_info)
-        data = stage_info.get("stage_data")
-        image = ExecutionBlocker(None)
-        mask = ExecutionBlocker(None)
-        latent = ExecutionBlocker(None)
-        video = ExecutionBlocker(None)
-        audio = ExecutionBlocker(None)
-        text = ExecutionBlocker(None)
-
-        if data is None:
-            return image, mask, latent, video, audio, text
-
-        payload_type = _stage_detect_type(data, "auto")
-        if payload_type == "image":
-            image = data
-        elif payload_type == "mask":
-            mask = data
-        elif payload_type == "latent":
-            latent = data.get("latent") if "samples" not in data else data
-        elif payload_type == "video":
-            video = data
-        elif payload_type == "audio":
-            audio = data
-        elif isinstance(data, str):
-            text = data
-
-        return image, mask, latent, video, audio, text
+        _, stage_index, total = _stage_validate_info(stage_info)
+        stage_data_1 = stage_info.get("stage_data_1", stage_info.get("stage_data"))
+        stage_data_2 = stage_info.get("stage_data_2")
+        data_1 = _stage_clean_data(stage_data_1)
+        data_2 = _stage_clean_data(stage_data_2)
+        return (
+            data_1 if data_1 is not None else ExecutionBlocker(None),
+            data_2 if data_2 is not None else ExecutionBlocker(None),
+            total,
+            stage_index + 1,
+            stage_index == 0,
+            stage_index == total - 1,
+        )
 
 
-def _stage_list_collect(run_dir, total):
+def _stage_save_checkpoint_data(stage_info, data, bridge):
+    run_id, stage_index, total = _stage_validate_info(stage_info)
+    if bridge not in ("data1", "data2"):
+        raise ValueError(f"flow_stage_end: invalid bridge: {bridge}")
+
+    run_dir = _stage_run_dir(run_id)
+    filename = _stage_checkpoint_filename(stage_index, bridge)
+    path = os.path.join(run_dir, filename)
+    saved_key = f"checkpoint_saved_{bridge}"
+    state = _stage_load_state(run_dir)
+    restart_single_stage = (
+        total == 1
+        and stage_index == 0
+        and state is not None
+        and state.get("complete", False)
+    )
+    if stage_info.get(saved_key, False) and os.path.isfile(path) and not restart_single_stage:
+        return
+
+    tensors, descriptor = _stage_encode_payload(data, "auto")
+    temp_path = path + ".tmp"
+    try:
+        comfy.utils.save_torch_file(
+            tensors,
+            temp_path,
+            metadata={"stage_payload": json.dumps(descriptor, ensure_ascii=False)},
+        )
+        os.replace(temp_path, path)
+    finally:
+        if os.path.isfile(temp_path):
+            os.remove(temp_path)
+
+    if state is None or restart_single_stage:
+        if stage_index != 0:
+            raise ValueError("flow_stage_end: previous stage state is missing")
+        state = {
+            "version": _STAGE_BRIDGE_VERSION,
+            "run_id": run_id,
+            "total": total,
+            "completed_stage": -1,
+            "next_stage": 0,
+            "payload": None,
+            "payload_2": None,
+            "payload_type": None,
+            "control_only": False,
+            "control_only_1": False,
+            "control_only_2": False,
+            "complete": False,
+            "restart_pending": True,
+        }
+    elif int(state.get("total", -1)) != total or int(state.get("next_stage", -1)) != stage_index:
+        raise ValueError("flow_stage_end: stage order does not match the saved state")
+
+    checkpoint_1, checkpoint_2 = _stage_checkpoint_paths(run_dir, stage_index)
+    state["checkpoint_stage"] = stage_index
+    state["checkpoint_phase"] = (
+        "complete_pending"
+        if os.path.isfile(checkpoint_1) and os.path.isfile(checkpoint_2)
+        else "refine_pending"
+    )
+    _stage_write_json(_stage_state_path(run_dir), state)
+    stage_info[saved_key] = True
+
+
+def _stage_list_collect(run_dir, total, suffix=""):
     items = []
     for i in range(total):
-        path = os.path.join(run_dir, f"stage_{i:05d}.safetensors")
+        path = os.path.join(run_dir, f"stage_{i:05d}{suffix}.safetensors")
         if os.path.isfile(path):
             items.append(_stage_decode_payload(path))
     return items
@@ -1832,19 +2236,20 @@ class flow_stage_end:
         return {
             "required": {
                 "stage_info": (_STAGE_INFO_TYPE,),
-                "data_type": (_STAGE_BRIDGE_TYPES, {"default": "auto"}),
                 "unload_models": ("BOOLEAN", {"default": False}),
                 "free_memory": ("BOOLEAN", {"default": True}),
                 "free_memory_interval": ("INT", {"default": 1, "min": 1, "max": 4096, "step": 1}),
             },
             "optional": {
-                "data": (any_type,),
+                "data_1": (any_type, {"lazy": True}),
+                "data_2": (any_type, {"lazy": True}),
             },
+            "hidden": {"unique_id": "UNIQUE_ID", "workflow_prompt": "PROMPT"},
         }
 
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("list_data",)
-    OUTPUT_IS_LIST = (True,)
+    RETURN_TYPES = (any_type, any_type)
+    RETURN_NAMES = ("list_data1", "list_data2")
+    OUTPUT_IS_LIST = (True, True)
     FUNCTION = "commit"
     CATEGORY = "Apt_Preset/flow"
     OUTPUT_NODE = True
@@ -1853,8 +2258,29 @@ class flow_stage_end:
     def IS_CHANGED(cls, **kwargs):
         return float("nan")
 
-    def commit(self, data=None, stage_info=None, data_type="auto", unload_models=False, free_memory=True, free_memory_interval=1):
+    def check_lazy_status(self, stage_info, **kwargs):
+        if "data_1" in kwargs and kwargs["data_1"] is None:
+            return ["data_1"]
+        if "data_2" in kwargs and kwargs["data_2"] is None:
+            if "data_1" in kwargs:
+                _stage_save_checkpoint_data(stage_info, kwargs["data_1"], "data1")
+            return ["data_2"]
+        if "data_2" in kwargs and kwargs["data_2"] is not None:
+            _stage_save_checkpoint_data(stage_info, kwargs["data_2"], "data2")
+        return []
+
+    def commit(self, data_1=None, data_2=None, stage_info=None, unload_models=False, free_memory=True,
+               free_memory_interval=1, unique_id=None, workflow_prompt=None):
         run_id, stage_index, total = _stage_validate_info(stage_info)
+
+        channel_1 = data_1.get("apt_h3_bridge_channel") if isinstance(data_1, Mapping) else None
+        channel_2 = data_2.get("apt_h3_bridge_channel") if isinstance(data_2, Mapping) else None
+        if channel_2 == "data2" and channel_1 != "data1":
+            raise ValueError(
+                "flow_stage_end: H3 data_1 is missing or invalid; connect "
+                "the first-pass generate context to Data_basic.context, then connect "
+                "Data_basic.latent to flow_stage_end.data_1"
+            )
 
         run_dir = _stage_run_dir(run_id)
         state = _stage_load_state(run_dir)
@@ -1872,24 +2298,37 @@ class flow_stage_end:
             if int(state["total"]) != total or int(state["next_stage"]) != stage_index:
                 raise ValueError("flow_stage_end: stage order does not match the saved state")
 
-        filename = None
-        payload_type = None
-        if data is not None:
-            tensors, descriptor = _stage_encode_payload(data, data_type)
-            filename = f"stage_{stage_index:05d}.safetensors"
-            payload_path = os.path.join(run_dir, filename)
-            temp_path = payload_path + ".tmp"
+        def write_bridge(data, suffix):
+            if data is None:
+                return None, None, None
+            tensors, descriptor = _stage_encode_payload(data, "auto")
+            filename = f"stage_{stage_index:05d}{suffix}.safetensors"
+            temp_path = os.path.join(run_dir, filename + ".tmp")
             try:
                 comfy.utils.save_torch_file(
                     tensors,
                     temp_path,
                     metadata={"stage_payload": json.dumps(descriptor, ensure_ascii=False)},
                 )
-                os.replace(temp_path, payload_path)
-            finally:
+            except Exception:
                 if os.path.isfile(temp_path):
                     os.remove(temp_path)
-            payload_type = descriptor["type"]
+                raise
+            return filename, descriptor["type"], temp_path
+
+        temp_path_1 = None
+        temp_path_2 = None
+        try:
+            filename, payload_type, temp_path_1 = write_bridge(data_1, "")
+            filename_2, payload_type_2, temp_path_2 = write_bridge(data_2, "_2")
+            if temp_path_1 is not None:
+                os.replace(temp_path_1, os.path.join(run_dir, filename))
+            if temp_path_2 is not None:
+                os.replace(temp_path_2, os.path.join(run_dir, filename_2))
+        finally:
+            for temp_path in (temp_path_1, temp_path_2):
+                if temp_path is not None and os.path.isfile(temp_path):
+                    os.remove(temp_path)
 
         complete = stage_index == total - 1
         next_state = {
@@ -1899,14 +2338,22 @@ class flow_stage_end:
             "completed_stage": stage_index,
             "next_stage": stage_index + 1,
             "payload": filename,
+            "payload_2": filename_2,
             "payload_type": payload_type,
-            "control_only": data is None,
+            "payload_type_2": payload_type_2,
+            "control_only": data_1 is None and data_2 is None,
+            "control_only_1": data_1 is None,
+            "control_only_2": data_2 is None,
             "complete": complete,
         }
         _stage_write_json(_stage_state_path(run_dir), next_state)
+        for channel in ("data1", "data2"):
+            checkpoint_path = os.path.join(run_dir, _stage_checkpoint_filename(stage_index, channel))
+            if os.path.isfile(checkpoint_path):
+                os.remove(checkpoint_path)
 
         begin_node_id = _STAGE_BEGIN_NODE_IDS.get(run_id)
-        _stage_feedback(begin_node_id, "current_index", 1 if complete else stage_index + 2)
+        _stage_feedback(begin_node_id, "stage_index", 1 if complete else stage_index + 2)
         if complete:
             _STAGE_BEGIN_NODE_IDS.pop(run_id, None)
 
@@ -1914,19 +2361,390 @@ class flow_stage_end:
         should_free_memory = free_memory and (stage_index + 1) % free_memory_interval == 0
         PromptServer.instance.prompt_queue.set_flag("free_memory", should_free_memory)
 
-        list_data = ExecutionBlocker(None)
+        list_data1 = ExecutionBlocker(None)
+        list_data2 = ExecutionBlocker(None)
+        connected_outputs = None
+        if isinstance(workflow_prompt, Mapping) and unique_id is not None:
+            node_id = str(unique_id)
+            connected_outputs = set()
+            for node in workflow_prompt.values():
+                if not isinstance(node, Mapping):
+                    continue
+                inputs = node.get("inputs")
+                if not isinstance(inputs, Mapping):
+                    continue
+                for value in inputs.values():
+                    if isinstance(value, (list, tuple)) and len(value) == 2 and str(value[0]) == node_id:
+                        output_slot = int(value[1])
+                        if output_slot in (0, 1):
+                            connected_outputs.add(output_slot)
         if complete:
-            list_data = _stage_list_collect(run_dir, total)
+            if connected_outputs is None or 0 in connected_outputs:
+                list_data1 = _stage_list_collect(run_dir, total)
+            if connected_outputs is None or 1 in connected_outputs:
+                list_data2 = _stage_list_collect(run_dir, total, "_2")
 
         if not complete:
             server = PromptServer.instance
             server.send_sync("add-queue", {}, server.client_id)
 
-        if filename is None:
+        if filename is None and filename_2 is None:
             message = f"stage {stage_index + 1}/{total} completed (control only)"
         else:
-            message = f"stage {stage_index + 1}/{total} saved: {payload_path}"
-        return {"ui": {"text": [message]}, "result": (list_data,)}
+            saved = ", ".join(name for name in (filename, filename_2) if name is not None)
+            message = f"stage {stage_index + 1}/{total} saved: {saved}"
+        return {"ui": {"text": [message]}, "result": (list_data1, list_data2)}
+
+
+def _stage_color_number(value, name, minimum, maximum, integer=False):
+    number = float(value)
+    if not math.isfinite(number) or not minimum <= number <= maximum or (integer and not number.is_integer()):
+        raise ValueError(f"AD_Video_color_grad: {name} must be between {minimum} and {maximum}")
+    return int(number) if integer else number
+
+
+def _stage_color_profile(frame, detailed=False):
+    stride = max(1, min(frame.shape[:2]) // 128)
+    pixels = frame[::stride, ::stride, :3].float().reshape(-1, 3)
+    quantiles = [0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99] if detailed else [0.05, 0.25, 0.5, 0.75, 0.95]
+    return torch.quantile(pixels, pixels.new_tensor(quantiles), dim=0)
+
+
+def _stage_color_match(rgb, target, detailed=False):
+    source = _stage_color_profile(rgb, detailed=detailed)
+    output = rgb.clone()
+    for channel in range(3):
+        if float(source[-1, channel] - source[0, channel]) < 1e-4:
+            continue
+        x = torch.cat((source.new_zeros(1), source[:, channel], source.new_ones(1))).contiguous()
+        y = torch.cat((target.new_zeros(1), target[:, channel], target.new_ones(1)))
+        pixels = rgb[..., channel].contiguous()
+        indices = (torch.searchsorted(x, pixels, right=True) - 1).clamp(0, len(x) - 2)
+        t = (pixels - x[indices]) / (x[indices + 1] - x[indices]).clamp_min(1e-6)
+        mapped = y[indices] + (y[indices + 1] - y[indices]) * t
+        output[..., channel] = pixels + (mapped - pixels).clamp(-0.2, 0.2)
+    return output
+
+
+def _stage_color_log_brightness(frame):
+    stride = max(1, min(frame.shape[:2]) // 96)
+    rgb = frame[::stride, ::stride, :3].float().clamp(0, 1)
+    linear = torch.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055).pow(2.4))
+    luminance = (linear * linear.new_tensor([0.2126, 0.7152, 0.0722])).sum(dim=-1)
+    levels = torch.quantile(luminance.flatten(), luminance.new_tensor([0.25, 0.5, 0.75]))
+    return float(levels.clamp_min(1e-5).log2().mean())
+
+
+def _stage_color_smooth_targets(levels, start, end):
+    """Interpolate tone statistics between nearby unselected frames."""
+    if start == 1 and end == len(levels):
+        raise ValueError("AD_Video_color_grad: leave normal frames outside the selection for brightness smoothing")
+    left = levels[max(0, start - 4):start - 1]
+    right = levels[end:end + 3]
+    anchors = []
+    if left:
+        anchors.append((start - (len(left) + 1) / 2, np.median(left, axis=0)))
+    if right:
+        anchors.append((end + (len(right) + 1) / 2, np.median(right, axis=0)))
+    targets = []
+    for frame in range(start, end + 1):
+        target = anchors[0][1]
+        if len(anchors) == 2:
+            (x0, y0), (x1, y1) = anchors
+            target = target + (y1 - y0) * (frame - x0) / (x1 - x0)
+        targets.append(target.tolist())
+    return targets
+
+
+def _stage_color_luma_profile(rgb):
+    stride = max(1, min(rgb.shape[:2]) // 128)
+    pixels = rgb[::stride, ::stride, :3].float()
+    luminance = pixels[..., 0] * 0.2126 + pixels[..., 1] * 0.7152 + pixels[..., 2] * 0.0722
+    return torch.quantile(luminance.flatten(), luminance.new_tensor([0.05, 0.25, 0.5, 0.75, 0.95]))
+
+
+def _stage_color_smooth_tone(rgb, target):
+    source = _stage_color_luma_profile(rgb)
+    target = source.new_tensor(target)
+    if float(source[-1] - source[0]) < 1e-4 or float((source - target).abs().max()) < 0.005:
+        return rgb
+    luminance = rgb[..., 0] * 0.2126 + rgb[..., 1] * 0.7152 + rgb[..., 2] * 0.0722
+    white = luminance.amax().clamp_min(1.0).reshape(1)
+    source = torch.cat((source.new_zeros(1), source, white))
+    target = torch.cat((target.new_zeros(1), target, target.new_ones(1)))
+    indices = (torch.searchsorted(source, luminance.contiguous(), right=True) - 1).clamp(0, len(source) - 2)
+    t = (luminance - source[indices]) / (source[indices + 1] - source[indices]).clamp_min(1e-6)
+    mapped = target[indices] + (target[indices + 1] - target[indices]) * t
+    return rgb + (mapped - luminance).clamp(-0.15, 0.15).unsqueeze(-1)
+
+
+def _stage_color_adjust(rgb, exposure, saturation, temperature):
+    if exposure or temperature:
+        linear = torch.where(rgb <= 0.04045, rgb / 12.92, ((rgb.clamp_min(0.0) + 0.055) / 1.055).pow(2.4))
+        gains = rgb.new_tensor([2.0 ** (exposure + temperature * 0.2), 2.0 ** exposure,
+                                2.0 ** (exposure - temperature * 0.2)])
+        linear = linear * gains
+        rgb = torch.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear.clamp_min(0.0).pow(1.0 / 2.4) - 0.055)
+    if saturation != 1.0:
+        luminance = rgb[..., 0:1] * 0.2126 + rgb[..., 1:2] * 0.7152 + rgb[..., 2:3] * 0.0722
+        rgb = luminance + (rgb - luminance) * saturation
+    return rgb
+
+
+def _stage_color_render_frame(rgb, mode, strength, exposure, saturation, temperature,
+                              frame, start, end, count, fps, correction=None, tone=None, color_tone=None):
+    if not start <= frame <= end or not strength:
+        return rgb
+    weight = min(strength, 1.0) * _stage_color_selection_fade(frame, start, end, count, fps)
+    if mode == "brightness_smooth":
+        adjusted = _stage_color_adjust(rgb, correction, 1.0, 0.0)
+        adjusted = _stage_color_smooth_tone(adjusted, tone)
+        if strength > 1.0:
+            adjusted = adjusted.clamp(0.0, 1.0)
+            matched = _stage_color_match(adjusted, rgb.new_tensor(color_tone), detailed=True)
+            matched = _stage_color_smooth_tone(matched, tone)
+            adjusted = adjusted + (matched - adjusted) * ((strength - 1.0) / 2.0)
+    else:
+        adjusted = _stage_color_adjust(rgb, exposure, saturation, temperature)
+    return (rgb + (adjusted - rgb) * weight).clamp(0.0, 1.0)
+
+
+def _stage_color_selection_fade(frame, start, end, count, fps):
+    fade = min(max(1, round(float(fps) * 0.2)), max(0, (end - start - 1) // 2))
+    t = min(1.0, (frame - start + 1) / (fade + 1) if start > 1 else 1.0,
+            (end - frame + 1) / (fade + 1) if end < count else 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _stage_color_transfer(images, reference, method, source_stats, strength):
+    return ColorTransfer.execute(
+        image_target=images,
+        image_ref=reference,
+        method=method,
+        source_stats={"source_stats": source_stats, "target_index": 0},
+        strength=strength,
+    ).result[0]
+
+
+def _stage_color_read_preview_frames(path, frame_numbers):
+    requested = set(frame_numbers)
+    frames = {}
+    with av.open(path) as video:
+        stream = video.streams.video[0]
+        rate = stream.average_rate
+        first, last = min(requested), max(requested)
+        timestamp = Fraction(first - 1, 1) / rate
+        video.seek(int(timestamp / stream.time_base), stream=stream, backward=True)
+        for decoded in video.decode(stream):
+            index = round(decoded.pts * decoded.time_base * rate) + 1
+            if index in requested:
+                frames[index] = torch.from_numpy(decoded.to_ndarray(format="rgb24")).float() / 255
+            if index >= last:
+                break
+    if frames.keys() != requested:
+        raise ValueError("Preview frame is unavailable; reload the video")
+    return frames
+
+
+def _stage_color_preview(images, frame_rate, source=False):
+    height, width = images.shape[1:3]
+    scale = min(1.0, 640 / max(height, width))
+    size = (max(2, round(height * scale / 2) * 2), max(2, round(width * scale / 2) * 2))
+    directory, name, counter, subfolder, _ = folder_paths.get_save_image_path(
+        "video_grade_source" if source else "video_grade", folder_paths.get_temp_directory(), width, height)
+    filename = f"{name}_{counter:05d}_.mp4"
+    path = os.path.join(directory, filename)
+    statistics = {"fps": float(frame_rate), "count": len(images), "levels": [], "tones": [], "detail_colors": []}
+    with av.open(path, mode="w", format="mp4", options={"movflags": "+faststart"}) as output:
+        stream = output.add_stream("libx264", rate=frame_rate)
+        stream.width, stream.height = size[1], size[0]
+        stream.pix_fmt = "yuv420p"
+        stream.options = {"crf": "22", "preset": "ultrafast", "g": str(max(1, round(float(frame_rate))))}
+        for frame in images:
+            if source:
+                statistics["levels"].append(_stage_color_log_brightness(frame))
+                statistics["tones"].append(_stage_color_luma_profile(frame).tolist())
+                colors = _stage_color_profile(frame, detailed=True).tolist()
+                statistics["detail_colors"].append(colors)
+            small = torch.nn.functional.interpolate(frame[..., :3].movedim(-1, 0).unsqueeze(0).float(), size=size, mode="area")
+            pixels = (small[0].movedim(0, -1).clamp(0, 1) * 255).round().to(device="cpu", dtype=torch.uint8).numpy()
+            for packet in stream.encode(av.VideoFrame.from_ndarray(pixels, format="rgb24")):
+                output.mux(packet)
+        for packet in stream.encode(None):
+            output.mux(packet)
+    if source:
+        with open(path + ".json", "w", encoding="utf-8") as file:
+            json.dump(statistics, file)
+    return {"filename": filename, "subfolder": subfolder, "type": "temp"}
+
+
+def _stage_color_preview_frame(data):
+    filename = data["source"]
+    if not isinstance(filename, str) or not re.fullmatch(r"video_grade_source_[0-9]+_\.mp4", filename):
+        raise ValueError("Invalid video preview source")
+    directory = os.path.realpath(folder_paths.get_temp_directory())
+    path = os.path.join(directory, filename)
+    for candidate in (path, path + ".json"):
+        if os.path.commonpath((directory, os.path.realpath(candidate))) != directory:
+            raise ValueError("Invalid video preview source")
+    with open(path + ".json", encoding="utf-8") as file:
+        stats = json.load(file)
+    count, fps = stats["count"], stats["fps"]
+    frame = _stage_color_number(data["frame"], "frame", 1, count, True)
+    start = _stage_color_number(data["start"], "start", 1, count, True)
+    end = _stage_color_number(data["end"], "end", start, count, True)
+    reference = _stage_color_number(data["reference"], "reference", 1, count, True)
+    mode = data["mode"]
+    if mode not in ("manual", "brightness_smooth", "reference_match"):
+        raise ValueError("Invalid grading mode")
+    strength = _stage_color_number(data["strength"], "strength", 0, 3 if mode == "brightness_smooth" else 1)
+    exposure = _stage_color_number(data["exposure"], "exposure", -4, 4)
+    saturation = _stage_color_number(data["saturation"], "saturation", 0, 2)
+    temperature = _stage_color_number(data["temperature"], "temperature", -1, 1)
+    method = data.get("method", "reinhard_lab")
+    source_stats = data.get("source_stats", "per_frame")
+    if mode == "reference_match" and (method not in ("reinhard_lab", "mkl_lab", "histogram") or source_stats not in ("per_frame", "uniform", "target_frame")):
+        raise ValueError("Invalid ColorTransfer option")
+    requested_frames = [frame]
+    if strength and mode == "reference_match" and start <= frame <= end:
+        requested_frames.append(reference)
+        if source_stats == "target_frame":
+            requested_frames.append(start)
+        elif source_stats == "uniform":
+            requested_frames.extend(range(start, end + 1))
+    preview_frames = _stage_color_read_preview_frames(path, requested_frames)
+    rgb = preview_frames[frame]
+    correction, tone, color_tone = None, None, None
+    if strength and start <= frame <= end:
+        if mode == "brightness_smooth":
+            targets = _stage_color_smooth_targets(stats["levels"], start, end)
+            correction = max(-1.0, min(1.0, targets[frame - start] - stats["levels"][frame - 1]))
+            tone = _stage_color_smooth_targets(stats["tones"], start, end)[frame - start]
+            if strength > 1.0:
+                if "detail_colors" not in stats:
+                    raise ValueError("Reload the video to enable stronger smoothing")
+                color_tone = _stage_color_smooth_targets(stats["detail_colors"], start, end)[frame - start]
+    if strength and mode == "reference_match" and start <= frame <= end:
+        if source_stats == "uniform":
+            targets = torch.stack([preview_frames[index] for index in range(start, end + 1)])
+            preview_index = frame - start
+        elif source_stats == "target_frame" and frame != start:
+            targets = torch.stack((preview_frames[start], rgb))
+            preview_index = 1
+        else:
+            targets = rgb.unsqueeze(0)
+            preview_index = 0
+        matched = _stage_color_transfer(
+            targets, preview_frames[reference].unsqueeze(0), method, source_stats, strength)[preview_index]
+        fade = _stage_color_selection_fade(frame, start, end, count, fps)
+        graded = torch.lerp(rgb, matched.to(rgb), fade).clamp(0.0, 1.0)
+    else:
+        graded = _stage_color_render_frame(rgb, mode, strength, exposure, saturation, temperature,
+                                           frame, start, end, count, fps, correction, tone, color_tone)
+    pixels = (graded.clamp(0, 1) * 255).round().byte().numpy()
+    buffer = io.BytesIO()
+    Image.fromarray(pixels).save(buffer, format="PNG", compress_level=1)
+    return buffer.getvalue()
+
+
+@PromptServer.instance.routes.post("/apt_preset/video_grade/frame")
+async def apt_preset_video_grade_frame(request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Invalid frame request")
+        result = await asyncio.to_thread(_stage_color_preview_frame, data)
+    except (ValueError, TypeError, KeyError) as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+    except FileNotFoundError:
+        return web.json_response({"error": "Preview expired; reload the video"}, status=404)
+    return web.Response(body=result, content_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+class AD_Video_color_grad:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {
+            "video": ("VIDEO",),
+            "mode": (["manual", "brightness_smooth", "reference_match"], {"default": "manual"}),
+            "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 3.0, "step": 0.05}),
+            "exposure": ("FLOAT", {"default": 0.0, "min": -4.0, "max": 4.0, "step": 0.05}),
+            "saturation": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
+            "temperature": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.05}),
+            "selection": ("STRING", {"default": "{}"}),
+        }, "optional": {
+            "method": (["reinhard_lab", "mkl_lab", "histogram"], {"default": "reinhard_lab"}),
+            "source_stats": (["per_frame", "uniform", "target_frame"], {"default": "per_frame"}),
+        }}
+
+    RETURN_TYPES = ("VIDEO",)
+    RETURN_NAMES = ("video",)
+    FUNCTION = "grade"
+    CATEGORY = "Apt_Preset/AD"
+    OUTPUT_NODE = True
+    DESCRIPTION = "视频调色：在轨道上拖选范围，调整亮度、色彩或自动平滑。保留完整视频和音频，不需要 latent / VAE。"
+
+    def grade(self, video, mode="manual", strength=1.0, exposure=0.0, saturation=1.0, temperature=0.0, selection="{}",
+              method="reinhard_lab", source_stats="per_frame"):
+        if mode not in ("manual", "brightness_smooth", "reference_match"):
+            raise ValueError("AD_Video_color_grad: invalid mode")
+        strength = _stage_color_number(strength, "strength", 0, 3 if mode == "brightness_smooth" else 1)
+        exposure = _stage_color_number(exposure, "exposure", -4, 4)
+        saturation = _stage_color_number(saturation, "saturation", 0, 2)
+        temperature = _stage_color_number(temperature, "temperature", -1, 1)
+        if mode == "reference_match" and (method not in ("reinhard_lab", "mkl_lab", "histogram") or source_stats not in ("per_frame", "uniform", "target_frame")):
+            raise ValueError("AD_Video_color_grad: invalid ColorTransfer option")
+        selected = json.loads(selection)
+        if not isinstance(selected, dict) or set(selected) - {"start", "end", "reference"}:
+            raise ValueError("AD_Video_color_grad: invalid timeline selection")
+        components = video.get_components()
+        images = components.images
+        count = int(images.shape[0])
+        if count == 0:
+            raise ValueError("AD_Video_color_grad: video has no frames")
+        start = _stage_color_number(selected.get("start", 1), "start", 1, count, True)
+        end = _stage_color_number(selected.get("end", count), "end", start, count, True)
+        reference = _stage_color_number(selected.get("reference", max(1, start - 1)), "reference", 1, count, True)
+        curve, tones, color_tones = None, None, None
+        if strength and mode == "brightness_smooth":
+            # Only the selection and its immediate neighbours contribute to the curve.
+            first, last = max(0, start - 4), min(count, end + 3)
+            levels = [_stage_color_log_brightness(frame) for frame in images[first:last]]
+            targets = _stage_color_smooth_targets(levels, start - first, end - first)
+            curve = [max(-1.0, min(1.0, target - levels[index - first]))
+                     for index, target in zip(range(start - 1, end), targets)]
+            profiles = [_stage_color_luma_profile(frame).tolist() for frame in images[first:last]]
+            tones = _stage_color_smooth_targets(profiles, start - first, end - first)
+            if strength > 1.0:
+                colors = [_stage_color_profile(frame, detailed=True).tolist() for frame in images[first:last]]
+                color_tones = _stage_color_smooth_targets(colors, start - first, end - first)
+        changed = strength and (mode != "manual" or exposure != 0 or saturation != 1 or temperature != 0)
+        output = images.clone() if changed else images
+        if changed:
+            if mode == "reference_match":
+                matched = _stage_color_transfer(
+                    images[start - 1:end, ..., :3], images[reference - 1:reference, ..., :3], method, source_stats, strength)
+                for offset, index in enumerate(range(start - 1, end)):
+                    fade = _stage_color_selection_fade(index + 1, start, end, count, components.frame_rate)
+                    output[index, ..., :3] = torch.lerp(
+                        images[index, ..., :3].float(), matched[offset].to(images.device).float(), fade).to(images.dtype)
+            else:
+                for index in range(start - 1, end):
+                    rgb = images[index, ..., :3].float()
+                    graded = _stage_color_render_frame(rgb, mode, strength, exposure, saturation, temperature,
+                        index + 1, start, end, count, components.frame_rate,
+                        curve[index - start + 1] if curve is not None else None,
+                        tones[index - start + 1] if tones is not None else None,
+                        color_tones[index - start + 1] if color_tones is not None else None)
+                    output[index, ..., :3] = graded.to(images.dtype)
+        result = InputImpl.VideoFromComponents(
+            Types.VideoComponents(images=output, audio=components.audio, frame_rate=components.frame_rate),
+            bit_depth=video.get_bit_depth())
+        source = _stage_color_preview(images, components.frame_rate, source=True)
+        preview = _stage_color_preview(output, components.frame_rate) if changed else source
+        return {"ui": {"grade_preview": [{"video": preview, "source": source, "total_frames": count,
+                    "fps": float(components.frame_rate), "start": start, "end": end, "reference": reference}]},
+                "result": (result,)}
 
 
 def _stage_batch_dir(run_id):

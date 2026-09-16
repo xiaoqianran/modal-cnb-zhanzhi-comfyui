@@ -5,7 +5,7 @@ import re
 from transformers import pipeline
 import folder_paths
 
-from .imagefunc import log, tensor2pil
+from .imagefunc import log, tensor2pil, DEVICE_LIST_OPTIONS, get_device
 
 vqa_model_path = os.path.join(folder_paths.models_dir, 'VQA')
 
@@ -34,7 +34,7 @@ class LS_LoadVQAModel:
     def INPUT_TYPES(s):
         model_list = list(vqa_model_repos.keys())
         precision_list = ["fp16", "fp32"]
-        device_list = ['cuda','cpu']
+        device_list = DEVICE_LIST_OPTIONS
         return {
             "required": {
                 "model": (model_list,),
@@ -49,6 +49,7 @@ class LS_LoadVQAModel:
     CATEGORY = '😺dzNodes/LayerUtility'
 
     def load_vqa_model(self, model, precision, device):
+        device = str(get_device(device))
 
         if (model == self.model_name and precision == self.precision and device == self.device
                 and self.model is not None and self.processor is not None):

@@ -429,6 +429,7 @@ app.registerExtension({
     async setup() {
         const SHARE_COLOR = "#2196F3";
         const shareLinks = new Map();
+        let lastVisibilitySync = 0;
 
         function isShareNode(node) {
             return !!node?.properties?.is_input_share;
@@ -469,14 +470,47 @@ app.registerExtension({
             shareLinks.set(sourceId, left);
         }
 
+        function isVisibleWidget(widget, sourceNode) {
+            if (
+                !widget?.name
+                || widget.serialize === false
+                || widget.options?.serialize === false
+                || widget.hidden === true
+                || widget.options?.hidden === true
+                || widget._state?.hidden === true
+                || widget.type === "hidden"
+                || widget.type === "converted-widget"
+                || widget.element?.hidden === true
+                || widget.element?.style?.display === "none"
+                || widget.element?.style?.visibility === "hidden"
+            ) {
+                return false;
+            }
+            if (typeof widget.computeSize === "function") {
+                try {
+                    const width = Math.max(80, Number(sourceNode?.size?.[0]) || 220);
+                    const size = widget.computeSize.call(widget, width);
+                    if (Array.isArray(size) && Number(size[1]) <= 0) {
+                        return false;
+                    }
+                } catch (_) {}
+            }
+            return true;
+        }
+
         function getWidgetOutputs(sourceNode) {
             const widgets = sourceNode?.widgets || [];
             return widgets
-                .filter((widget) => !!widget?.name)
+                .filter((widget) => isVisibleWidget(widget, sourceNode))
                 .map((widget) => ({
                     name: (typeof widget.label === "string" && widget.label.trim().length > 0) ? widget.label : widget.name,
-                    type: "*"
+                    type: "*",
+                    source_widget_name: widget.name
                 }));
+        }
+
+        function getWidgetOutputSignature(outputs) {
+            return outputs.map((output) => `${output.source_widget_name || ""}|${output.name || ""}`).join("\n");
         }
 
         function normalizeShareNodeShape(shareNode, sourceNode = null) {
@@ -505,12 +539,22 @@ app.registerExtension({
                 oldOutputs.map((output) => [`${output?.name ?? ""}|${output?.type ?? ""}`, Array.isArray(output?.links) ? [...output.links] : []])
             );
             const outputBase = linkedSourceNode ? getWidgetOutputs(linkedSourceNode) : oldOutputs;
+            shareNode.__inputShareOutputSignature = getWidgetOutputSignature(outputBase);
             shareNode.outputs = outputBase.map((output) => {
                 const key = `${output?.name ?? ""}|${output?.type ?? ""}`;
                 return {
                     ...output,
                     links: oldLinkMap.get(key) || []
                 };
+            });
+            shareNode.outputs.forEach((output, outputIndex) => {
+                for (const linkId of output.links || []) {
+                    const graphLinks = shareNode.graph?.links;
+                    const link = graphLinks instanceof Map ? graphLinks.get(linkId) : graphLinks?.[linkId];
+                    if (link) {
+                        link.origin_slot = outputIndex;
+                    }
+                }
             });
             shareNode.inputs = [];
             normalizeShareNodeShape(shareNode, linkedSourceNode);
@@ -653,6 +697,7 @@ app.registerExtension({
         const originalGraphToPrompt = app.graphToPrompt?.bind(app);
         if (originalGraphToPrompt) {
             app.graphToPrompt = async function(...args) {
+                rebuildShareLinks();
                 const promptData = await originalGraphToPrompt(...args);
                 injectPromptInputs(promptData?.output);
                 return promptData;
@@ -734,6 +779,22 @@ app.registerExtension({
 
         const originalDraw = LGraphCanvas.prototype.draw;
         LGraphCanvas.prototype.draw = function() {
+            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            if (now - lastVisibilitySync >= 250) {
+                lastVisibilitySync = now;
+                shareLinks.forEach((shareNodes, sourceId) => {
+                    const sourceNode = this.graph.getNodeById(sourceId);
+                    if (!sourceNode) {
+                        return;
+                    }
+                    const signature = getWidgetOutputSignature(getWidgetOutputs(sourceNode));
+                    for (const shareNode of shareNodes) {
+                        if (shareNode && shareNode.__inputShareOutputSignature !== signature) {
+                            updateShareNode(shareNode, sourceNode);
+                        }
+                    }
+                });
+            }
             originalDraw.call(this);
             const ctx = this.ctx;
             if (!ctx) return;

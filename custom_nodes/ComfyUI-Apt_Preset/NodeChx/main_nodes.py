@@ -291,23 +291,37 @@ class Data_sampleData:
     @classmethod
     def INPUT_TYPES(s):
         return {
-            
-            "optional": {  "context": ("RUN_CONTEXT",),   },
+            "required": {
+                "context": ("RUN_CONTEXT",),
+                "steps": ("INT", {
+                    "default": 0, "min": 0, "max": 10000,
+                    "tooltip": "0 means keep the steps from context.",
+                }),
+                "cfg": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 100.0, "step": 0.1,
+                    "tooltip": "0 means keep the cfg from context.",
+                }),
+                "sampler": (["None", *comfy.samplers.KSampler.SAMPLERS], {"default": "None"}),
+                "scheduler": (["None", *comfy.samplers.KSampler.SCHEDULERS], {"default": "None"}),
+            },
         }
 
-    RETURN_TYPES = ("RUN_CONTEXT","INT","FLOAT", comfy.samplers.KSampler.SAMPLERS, comfy.samplers.KSampler.SCHEDULERS)
-    RETURN_NAMES = ("context","steps","cfg","sampler","scheduler" )
+    RETURN_TYPES = ("RUN_CONTEXT",)
+    RETURN_NAMES = ("context",)
     FUNCTION = "sample"
-    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
+    CATEGORY = "Apt_Preset/chx_load"
 
-    def sample(self, context, ):
-        
-        steps=context.get("steps",None)
-        cfg=context.get("cfg",None) 
-        sampler=context.get("sampler",None) 
-        scheduler=context.get("scheduler",None) 
-        
-        return (context,steps,cfg,sampler,scheduler )
+    def sample(self, context, steps, cfg, sampler, scheduler):
+        updates = {}
+        if int(steps) != 0:
+            updates["steps"] = int(steps)
+        if float(cfg) != 0.0:
+            updates["cfg"] = float(cfg)
+        if sampler != "None":
+            updates["sampler"] = sampler
+        if scheduler != "None":
+            updates["scheduler"] = scheduler
+        return (new_context(context, **updates),)
 
 
 
@@ -427,58 +441,6 @@ class Data_presetData:
         )
 
 
-class Data_bus_chx:   
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            
-            "optional": {
-                "context": ("RUN_CONTEXT",),   
-                "data1": ( ANY_TYPE, ),
-                "data2": ( ANY_TYPE, ),
-                "data3": ( ANY_TYPE, ),
-                "data4": ( ANY_TYPE, ),
-                "data5": ( ANY_TYPE, ),
-                "data6": ( ANY_TYPE, ),
-                "data7": ( ANY_TYPE, ),
-                "data8": ( ANY_TYPE, ),
-            },
-        }
-
-
-    RETURN_TYPES = ("RUN_CONTEXT",ANY_TYPE,ANY_TYPE,ANY_TYPE,ANY_TYPE,ANY_TYPE,ANY_TYPE,ANY_TYPE,ANY_TYPE,)
-    RETURN_NAMES = ("context", "data1","data2","data3","data4","data5","data6","data7","data8",)
-    FUNCTION = "sample"
-    CATEGORY = "Apt_Preset/chx_load"
-
-    def sample(self, context=None, data1=None, data2=None, data3=None, data4=None, data5=None, data6=None, data7=None, data8=None):
-        # 先检查 context 是否为 None
-        if context is None:
-            # 如果 context 为 None，可以创建一个新的上下文或者根据需求处理
-            # 这里假设 new_context 可以在没有输入的情况下创建一个默认的上下文
-            context = {}  # 或者使用其他方式初始化一个新的 context
-
-        if data1 is None:
-            data1 = context.get("data1")
-        if data2 is None:
-            data2 = context.get("data2")
-        if data3 is None:
-            data3 = context.get("data3")
-        if data4 is None:
-            data4 = context.get("data4")
-        if data5 is None:
-            data5 = context.get("data5")
-        if data6 is None:
-            data6 = context.get("data6")
-        if data7 is None:
-            data7 = context.get("data7")
-        if data8 is None:
-            data8 = context.get("data8")
-
-        context = new_context(context, data1=data1, data2=data2, data3=data3, data4=data4, data5=data5, data6=data6, data7=data7, data8=data8)
-
-        return (context, data1,data2,data3,data4,data5,data6,data7,data8,)
-
 #endregion
 
 
@@ -555,8 +517,8 @@ class sum_load_adv:
     def INPUT_TYPES(cls):
 
         available_ckpt = folder_paths.get_filename_list("checkpoints")
-        available_unets = list(set(folder_paths.get_filename_list("unet") + folder_paths.get_filename_list("unet_gguf")))
-        available_clips = list(set(folder_paths.get_filename_list("text_encoders") + folder_paths.get_filename_list("clip_gguf")))
+        available_unets = sorted(set(folder_paths.get_filename_list("unet") + folder_paths.get_filename_list("unet_gguf")))
+        available_clips = sorted(set(folder_paths.get_filename_list("text_encoders") + folder_paths.get_filename_list("clip_gguf")))
         available_vaes = folder_paths.get_filename_list("vae")
         available_loras = folder_paths.get_filename_list("loras")
 
@@ -825,8 +787,8 @@ class sum_load_simple(sum_load_adv):
     def INPUT_TYPES(cls):
         # 动态获取模型列表
         available_ckpt = folder_paths.get_filename_list("checkpoints")
-        available_unets = list(set(folder_paths.get_filename_list("unet") + folder_paths.get_filename_list("unet_gguf")))
-        available_clips = list(set(folder_paths.get_filename_list("text_encoders") + folder_paths.get_filename_list("clip_gguf")))
+        available_unets = sorted(set(folder_paths.get_filename_list("unet") + folder_paths.get_filename_list("unet_gguf")))
+        available_clips = sorted(set(folder_paths.get_filename_list("text_encoders") + folder_paths.get_filename_list("clip_gguf")))
         available_vaes = folder_paths.get_filename_list("vae")
         available_loras = folder_paths.get_filename_list("loras")
 
@@ -917,18 +879,18 @@ class sum_load_MiniMaxH3:
 
     @classmethod
     def INPUT_TYPES(cls):
-        available_unets = list(set(folder_paths.get_filename_list("unet") + folder_paths.get_filename_list("unet_gguf")))
-        available_clips = list(set(folder_paths.get_filename_list("text_encoders") + folder_paths.get_filename_list("clip_gguf")))
+        available_unets = sorted(set(folder_paths.get_filename_list("unet") + folder_paths.get_filename_list("unet_gguf")))
+        available_clips = sorted(set(folder_paths.get_filename_list("text_encoders") + folder_paths.get_filename_list("clip_gguf")))
         available_vaes = folder_paths.get_filename_list("vae")
 
         return {
             "optional":{
-                "unet_name": (["None"] + available_unets,),
-                "unet_Weight_Dtype": (["None", "default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"],),
-                "clip_type": (["None"] + CLIP_TYPE,),
-                "clip1": (["None"] + available_clips,),
-                "vae": (["None"] + available_vaes,),
-                "audio_vae": (["None"] + available_vaes,),
+                "unet_name": (available_unets,),
+                "unet_Weight_Dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"],),
+                "clip_type": (CLIP_TYPE,),
+                "clip1": (available_clips,),
+                "vae": (available_vaes,),
+                "audio_vae": (available_vaes,),
                 "steps": ("INT", {"default": 20, "min": 1, "max": 999999}),
                 "cfg": ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step": 0.5, "round": 0.01}),
                 "sampler": (comfy.samplers.KSampler.SAMPLERS, ),
@@ -1374,8 +1336,8 @@ class sum_editor:
                 "vae": ("VAE",),"latent": ("LATENT",),
                 "latent_image": ("IMAGE",),
                 "latent_mask": ("MASK",),
-                "steps": ("INT", {"default":0, "min":0, "max":10000,"tooltip":"  0  == None"}),
-                "cfg": ("FLOAT", {"default":0.0, "min":0.0, "max":100.0, "tooltip":"  0  == None"}),
+                "steps": ("INT", {"default":0, "min":0, "max":10000,"tooltip":"0 = None"}),
+                "cfg": ("FLOAT", {"default":0.0, "min":0.0, "max":100.0, "tooltip":"0 = None"}),
                 "sampler": (['None'] + comfy.samplers.KSampler.SAMPLERS, {"default":"None"}),
                 "scheduler": (['None'] + comfy.samplers.KSampler.SCHEDULERS, {"default":"None"}),
                 "pos": ("STRING", {"default":"", "multiline":True}),
@@ -1389,7 +1351,7 @@ class sum_editor:
             }
         }
     RETURN_TYPES = ("RUN_CONTEXT", "MODEL", "CONDITIONING", "CONDITIONING", "LATENT", "VAE","CLIP", "IMAGE", "MASK",)
-    RETURN_NAMES = ("context", "model","positive", "negative", "latent", "vae","clip", "latent_image", "latent_mask",)
+    RETURN_NAMES = ("context", "model","positive", "negative", "latent", "vae","clip", "image", "latent_mask",)
     FUNCTION = "text"
     CATEGORY = "Apt_Preset/chx_load"
     NAME = "sum_editor"
@@ -1478,7 +1440,6 @@ class sum_editor:
 
 
 
-
 class sum_create_chx:
     @classmethod
     def INPUT_TYPES(cls):
@@ -1554,52 +1515,6 @@ class sum_create_chx:
             "pos": pos,"neg": neg,"width": width,"height": height,"batch": batch,"data": data
         }
         return (context, model, positive, negative, latent, vae, clip, data)
-
-
-
-class chx_input_data:   
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-            "model": ("MODEL",),                
-            "latent": ("LATENT",),
-            "vae": ("VAE",),
-            "clip": ("CLIP",), 
-            },
-
-            "optional": {
-
-            },
-        }
-
-    RETURN_TYPES = ("RUN_CONTEXT","MODEL", "LATENT","VAE","CLIP",)
-    RETURN_NAMES = ("context", "model","latent","vae","clip",)
-    FUNCTION = "sample"
-    CATEGORY = "Apt_Preset/chx_load"
-
-    def sample(self, model,latent,vae,clip,):
-
-
-        context = {
-            "model": model,
-            "positive": None,
-            "negative": None,
-            "latent": latent,  
-            "vae": vae,
-            "clip": clip,
-            "steps": 20,
-            "cfg": 8,
-            "sampler": "euler",
-            "scheduler": "normal",
-            "width": 512,
-            "height": 512,
-            "batch": 1,
-        }
-        return (context, model, latent, vae, clip,)
-
-
-
 
 
 
@@ -2859,7 +2774,7 @@ class chx_YC_LG_Redux:
     RETURN_NAMES = ("context", "positive",)
     
     FUNCTION = "apply_stylemodel"
-    CATEGORY = "Apt_Preset/chx_tool/chx_IPA"
+    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
 
     def crop_to_mask_area(self, image, mask):
         if len(image.shape) == 4:

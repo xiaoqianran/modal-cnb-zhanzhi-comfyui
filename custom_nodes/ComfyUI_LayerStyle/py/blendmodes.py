@@ -7,9 +7,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from colorsys import rgb_to_hsv
+import comfy.model_management
 from blend_modes import difference, normal, screen, soft_light, lighten_only, dodge, \
-                        addition, darken_only, multiply, hard_light, \
-                        grain_extract, grain_merge, divide, overlay
+                         addition, darken_only, multiply, hard_light, \
+                         grain_extract, grain_merge, divide, overlay
 
 def dissolve(backdrop, source, opacity):
     # Normalize the RGB and alpha values to 0-1
@@ -56,7 +57,7 @@ def rgb_to_hsv_via_torch(rgb_numpy: np.ndarray, device=None) -> torch.Tensor:
              The hue (H) will be in the range [0, 1], while S and V will be in the range [0, 1].
     """
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = comfy.model_management.get_torch_device()
     
     rgb = torch.from_numpy(rgb_numpy).float().permute(2, 0, 1).to(device)
     r, g, b = rgb[0], rgb[1], rgb[2]
@@ -99,7 +100,7 @@ def hsv_to_rgb_via_torch(hsv_numpy: np.ndarray, device=None) -> torch.Tensor:
              The RGB values will be in the range [0, 1].
     """
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = comfy.model_management.get_torch_device()
     
     hsv = torch.from_numpy(hsv_numpy).float().permute(2, 0, 1).to(device)
     h, s, v = hsv[0], hsv[1], hsv[2]

@@ -2,6 +2,7 @@ import torch
 from PIL import Image
 from .imagefunc import log, tensor2pil, pil2tensor, image2mask, mask2image, RMBG, RGB2RGBA, mask_edge_detail
 from .imagefunc import guided_filter_alpha, histogram_remap, generate_VITMatte, generate_VITMatte_trimap
+from .imagefunc import DEVICE_LIST_OPTIONS
 
 
 
@@ -13,7 +14,7 @@ class RmBgUltraV2:
     def INPUT_TYPES(cls):
 
         method_list = ['VITMatte', 'VITMatte(local)', 'vitmatte-base-composition-1k', 'PyMatting', 'GuidedFilter', ]
-        device_list = ['cuda','cpu']
+        device_list = DEVICE_LIST_OPTIONS
         return {
             "required": {
                 "image": ("IMAGE",),

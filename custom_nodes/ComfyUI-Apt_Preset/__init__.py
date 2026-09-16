@@ -10,6 +10,7 @@ import sys; print(sys.executable)
 
 
 from .NodeChx.main_nodes import *
+from .NodeChx.basic_unit_contex import UC_Ksampler_refine, UC_create_context, UC_ksampler, UC_load_model
 from .NodeChx.main_stack import *
 from .NodeChx.IPAdapterPlus import *
 from .NodeChx.video_node import *
@@ -27,7 +28,10 @@ from .NodeBasic.C_model import *
 from .NodeBasic.C_mask import *
 from .NodeBasic.C_latent import *
 from .NodeBasic.C_viewIO import *
+from .NodeBasic.C_viewReferenceSize import view_Reference_Size
+from .NodeBasic.View_video_compare import View_image_compare, View_video_compare
 from .NodeBasic.C_AD import *
+from .NodeBasic.AD_scail2_control import AD_scail2_generate, AD_scail2_generate_refine
 from .NodeBasic.C_image import *
 from .NodeBasic.C_promp import *
 from .NodeBasic.C_imgEffect import *
@@ -69,23 +73,28 @@ NODE_CLASS_MAPPINGS= {
 
 
 #-------------------------------------------------------N
+
+"UC_load_model": UC_load_model,
+"UC_ksampler": UC_ksampler,
+"UC_Ksampler_refine": UC_Ksampler_refine,
+"UC_create_context": UC_create_context, 
+#-------------------------------------------------------S
+
 "Apt_clear_cache": Apt_clear_cache,
 "sum_load_adv": sum_load_adv,   
 "sum_load_simple": sum_load_simple,
+
 "sum_load_MiniMaxH3": sum_load_MiniMaxH3,
 "sum_editor": sum_editor,                      
 "sum_Ksampler": sum_Ksampler,  
-
 "sum_create_chx": sum_create_chx,  
 
-
 #-------------------------------------------------------S
-"chx_input_data": chx_input_data, 
+
 "Data_Highway":Data_Highway,#Web
-"Data_bus_chx":Data_bus_chx,
 "Data_basic": Data_basic,                     
 "Data_select": Data_select,
-"Data_chx_Merge":Data_chx_Merge,
+#"Data_chx_Merge":Data_chx_Merge,
 "Data_preset_save": Data_preset_save,
 
 "sum_TextEncode": sum_TextEncode,
@@ -104,6 +113,7 @@ NODE_CLASS_MAPPINGS= {
 
 "basic_Ksampler_simple": basic_Ksampler_simple,  
 "basic_Ksampler_full": basic_Ksampler_full, 
+
     
 "sampler_DynamicTileSplit": DynamicTileSplit, 
 "sampler_DynamicTileMerge": DynamicTileMerge,
@@ -161,10 +171,6 @@ NODE_CLASS_MAPPINGS= {
 "chx_IPA_adv":chx_IPA_adv,
 "chx_IPA_region_combine": chx_IPA_region_combine,
 "chx_IPA_apply_combine": chx_IPA_apply_combine,
-
-"chx_YC_LG_Redux": chx_YC_LG_Redux,
-
-
 
 "IPA_clip_vision": IPA_clip_vision,
 
@@ -229,13 +235,13 @@ NODE_CLASS_MAPPINGS= {
 "AD_sch_value": AD_sch_value,
 "AD_sch_prompt_basic": AD_sch_prompt_basic,
 "AD_sch_mask_weigh":AD_sch_mask_weigh,
-"AD_VideoSeg": AD_VideoSeg,
+"AD_VideoSeg_auto_auto": AD_VideoSeg_auto,
 "AD_media_trim_visual": AD_media_trim_visual,
 "AD_sch_image_merge":AD_sch_image_merge,  #    CATEGORY = "Apt_Preset/AD/😺backup"
 "AD_pingpong_vedio":AD_pingpong_vedio,
 "AD_MaskExpandBatch": AD_MaskExpandBatch, 
 "AD_ImageExpandBatch": AD_ImageExpandBatch,
-"AD_AutoTileVAEDecode": AD_AutoTileVAEDecode,
+
 "AD_frame_replace": AD_frame_replace,
 
 
@@ -249,16 +255,23 @@ NODE_CLASS_MAPPINGS= {
 
 "AD_MiniMax_guide": AD_MiniMax_guide,
 "AD_MinMax_Ref2_generate": AD_MinMax_Ref2_generate,
+"AD_MinMax_Ref2": AD_MinMax_Ref2,
+"AD_MinMax_Ref2_sample": AD_MinMax_Ref2_sample,
+"AD_MinMax_Ref2_generate_refine": AD_MinMax_Ref2_generate_refine,
+
+"AD_Media_editor": AD_Media_editor,
+"AD_scail2_generate": AD_scail2_generate,
+"AD_scail2_generate_refine": AD_scail2_generate_refine,
+
 "AD_MinMax_FL2_generate": AD_MinMax_FL2_generate,
-"AD_MinMax_Ref2_mul": AD_MinMax_Ref2_mul,
-"AD_MinMax_FL2_mul": AD_MinMax_FL2_mul,
+
 
 
 
 "AD_sam_Crop": AD_sam_Crop,
 "AD_sam_stitch": AD_sam_stitch,
 "AD_Inject_Latent": AD_Inject_Latent,
-
+"AD_Video_color_grad":AD_Video_color_grad,
 
 
 
@@ -285,6 +298,7 @@ NODE_CLASS_MAPPINGS= {
 
 
 "view_Data": view_Data,  #wed---
+"View_bridge_tentor": View_bridge_tentor,
 "view_bridge_image": view_bridge_image,  #wed---
 "view_bridge_Text":view_bridge_Text, #wed---
 "view_Mask_And_Img": view_Mask_And_Img, #wed---
@@ -297,7 +311,10 @@ NODE_CLASS_MAPPINGS= {
 "view_GetLength": view_GetLength, #wed----utils
 "view_mask": view_mask,
 "view_mulView": view_mulView,
+"View_video_compare": View_video_compare,
+"View_image_compare": View_image_compare,
 "view_node_Script": view_node_Script, 
+"view_Reference_Size": view_Reference_Size,
 
 #-------------输入输出 IO_Port-------------------
 "basicIn_clip": basicIn_clip,
@@ -311,7 +328,12 @@ NODE_CLASS_MAPPINGS= {
 "basicIn_Sampler": basicIn_Sampler,
 "basicIn_Seed": basicIn_Seed,
 "basicIn_Boolean": basicIn_Boolean,
-"basicIn_INOUT": basicIn_INOUT,
+"basicIn_img_INOUT": basicIn_img_INOUT,
+
+#"basicIn_media_unpack": basicIn_media_unpack,
+"basicIn_OptionalPass": basicIn_OptionalPass,
+"basicIn_media": basicIn_media,
+"basicIn_Media_Params": basicIn_Media_Params,
 
 
 "IO_LoadImgBatch": IO_LoadImgBatch,
@@ -319,24 +341,21 @@ NODE_CLASS_MAPPINGS= {
 "IO_LoadVideoBatch": IO_LoadVideoBatch,
 "IO_LoadAudioBatch": IO_LoadAudioBatch,
 
-"IO_ShotCreate": IO_ShotCreate,
-"IO_LoadShotBatch": IO_LoadShotBatch,
-
+#"IO_ShotCreate": IO_ShotCreate,
+#"IO_LoadShotBatch": IO_LoadShotBatch,
 "IO_PathProcessor": IO_PathProcessor,
-"IO_loadLatent": IO_loadLatent,
-"IO_SaveLatent": IO_SaveLatent,
 "IO_load_anyimage": IO_load_anyimage,
 "IO_store_image": IO_store_image,
 "IO_EasyMark": IO_EasyMark,
 "IO_image_select": IO_image_select,
 "IO_save_image": IO_save_image, 
-"IO_ImageSaveOverwrite": IO_ImageSaveOverwrite,
 "IO_input_any": IO_input_any,
 "IO_RegexPreset": IO_RegexPreset,
-"IO_node_Script": IO_node_Script,
-"IO_video_encode": IO_video_encode,
+"IO_loadLatent": IO_loadLatent,
+"IO_SaveLatent": IO_SaveLatent,
 
-
+#"IO_video_encode": IO_video_encode,
+#"IO_ImageSaveOverwrite": IO_ImageSaveOverwrite,
 
 #-------------data-------------------
 
@@ -585,6 +604,7 @@ NODE_CLASS_MAPPINGS= {
 "text_saveText": text_saveText,
 "text_StrMatrix":text_StrMatrix,
 
+"text_MinimaxH3":text_MinimaxH3,
 "text_interPrompt":text_interPrompt,
 
 
@@ -622,6 +642,8 @@ NODE_CLASS_MAPPINGS= {
 "flow_switch_input":flow_switch_input,
 "flow_switch_output":flow_switch_output,
 "flow_BooleanSwitch":flow_BooleanSwitch,
+"flow_workflow_save_gate":flow_workflow_save_gate,
+"flow_workflow_save_image_no_metadata":flow_workflow_save_image_no_metadata,
 
 
 "flow_bridge_image":flow_bridge_image,
@@ -636,7 +658,10 @@ NODE_CLASS_MAPPINGS= {
 "flow_stage_collect_multi":flow_stage_collect_multi,
 "flow_stage_list":flow_stage_list,
 "flow_stage_unpack":flow_stage_unpack,
-#"flow_stage_data":flow_stage_data,
+"flow_stage_bridge_decode_range":flow_stage_bridge_decode_range,
+
+
+
 
 
 "flow_forStart": flow_forStart,
@@ -687,11 +712,12 @@ NODE_CLASS_MAPPINGS= {
 
 
 "Image_solo_crop": Image_solo_crop,  #(Deprecated)   
-
+"chx_YC_LG_Redux": chx_YC_LG_Redux,#(Deprecated)  
 
 "load_Nanchaku":load_Nanchaku,
 "load_GGUF": UnetLoaderGGUF2,
 #------------------------隐藏节点-------------------------
+
 
 
 #"model_Regional": model_Regional,
@@ -719,7 +745,9 @@ NODE_CLASS_MAPPINGS= {
 
 
 
-NODE_DISPLAY_NAME_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "view_Reference_Size": "view_Reference Size",
+}
 
 
 

@@ -1,4 +1,4 @@
-__version__ = "1.3.7"
+__version__ = "1.4.1"
 
 import yaml
 import json
@@ -11,6 +11,18 @@ comfy_path = folder_paths.base_path
 
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
+
+try:
+    import comfy.supported_models as _supported_models
+    _HAS_DIFFUSION_XY_SUPPORT = (
+        hasattr(_supported_models, "Anima")
+        and hasattr(_supported_models, "Krea2")
+    )
+except Exception:
+    _HAS_DIFFUSION_XY_SUPPORT = False
+
+if not _HAS_DIFFUSION_XY_SUPPORT:
+    print("[ComfyUI-Easy-Use] Anima/Krea2 XY nodes need comfy.supported_models.Anima and Krea2")
 
 importlib.import_module('.py.routes', __name__)
 importlib.import_module('.py.server', __name__)
