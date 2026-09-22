@@ -86,13 +86,13 @@ The union LoRA is trained to understand and respond to both control signals (dep
 
 ## HDR IC-LoRA
 
-We provide an **HDR IC-LoRA** that generates linear HDR video encoded in ARRI LogC3, enabling workflows that output high-dynamic-range content suitable for grading and EXR export.
+We provide an **HDR IC-LoRA** that upgrades SDR video into ACEScct HDR (same working space as pipelines `hdr_ic_lora`), suitable for grading, EXR export, and HLG masters. Use the **2.5** graph: [`LTX-2.5_ICLoRA_HDR_Distilled.json`](./example_workflows/2.5/LTX-2.5_ICLoRA_HDR_Distilled.json). The 2.3 workflow remains as a legacy LogC3 example.
 
 ### Key Features
 
 - **Linear HDR output**: The LoRA produces frames in LogC3-compressed space; the `LTXVHDRDecodePostprocess` node decodes these back to linear HDR values.
 - **SDR preview + raw HDR**: The node outputs both a Reinhard-tonemapped SDR preview and the raw linear HDR tensor for downstream use.
-- **EXR export**: Optionally writes the linear HDR frames as a 16/32-bit EXR image sequence. To enable EXR writing, set `OPENCV_IO_ENABLE_OPENEXR=1` in the environment before starting ComfyUI. The exported EXR sequence is best viewed in [DJV](https://github.com/grizzlypeak3d/DJV) (or [DJV for macOS](https://djv.en.uptodown.com/mac/download)).
+- **EXR export**: Optionally writes the linear HDR frames as a 16/32-bit EXR image sequence via **OpenImageIO** (`pip install openimageio`, also listed in `requirements.txt`). The exported EXR sequence is best viewed in [DJV](https://github.com/grizzlypeak3d/DJV) (or [DJV for macOS](https://djv.en.uptodown.com/mac/download)).
 
 ## Dub-It IC-LoRA
 

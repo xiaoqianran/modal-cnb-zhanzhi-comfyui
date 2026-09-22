@@ -57,6 +57,7 @@ class EasyMediaExtension(ComfyExtension):
             TimelineSegmentCount,
             # MultiTrack
             MultiTrackEditor,
+            MultiImagesLoader,
             MultiTrackTaskOutput,
             MultiTrackPromptEnhancer,
             MultiTrackPromptEnhanceToProject,
@@ -98,6 +99,7 @@ class EasyMediaExtension(ComfyExtension):
             EasyMiniMaxH3HiResContinuity,
             EasyH3MotionContextLatentTrim,
             EasyH3ProjectContextLatentLoad,
+            EasyH3ConditioningCache,
             EasyH3SegmentSamplingStart,
             EasyH3SamplingPreviewSampler,
             EasyMiniMaxH3LatentUpscaler,
@@ -107,6 +109,7 @@ class EasyMediaExtension(ComfyExtension):
             EasyH3AudioContextLatent,
             EasyH3LockedAudioDurationAlign,
             EasyH3ProjectArtifact,
+            EasyH3ProjectStaticPrepare,
             EasyMultiTrackProject,
             EasyMultiTrackProjectVideoCombine,
             EasyMiniMaxH3ToVideo,

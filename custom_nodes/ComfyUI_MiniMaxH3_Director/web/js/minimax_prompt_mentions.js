@@ -12,6 +12,7 @@ import {
     refImagePromptTag,
     refVideoLabel,
     refVideoPromptTag,
+    resolveTaskKey,
 } from "./minimax_gen_timeline.js";
 import { t } from "./minimax_i18n.js";
 
@@ -49,6 +50,22 @@ const MENTION_STYLES = `
 }
 .bd-token-editor:focus{border-color:#4a7a5a;box-shadow:0 0 0 1px rgba(79,255,143,.18)}
 .bd-token-editor:empty:before{content:attr(data-placeholder);color:#666;pointer-events:none}
+.bd-token-resize-handle{
+  position:absolute;left:50%;bottom:0;z-index:4;width:96px;max-width:40%;height:18px;
+  transform:translateX(-50%);display:flex;align-items:flex-end;justify-content:center;
+  padding:0;border:0;background:transparent;outline:none;border-radius:8px 8px 0 0;
+  cursor:ns-resize;touch-action:none;user-select:none
+}
+.bd-token-resize-handle::after{
+  content:"";width:54px;max-width:72%;height:3px;margin-bottom:3px;border-radius:999px;
+  background:#52665a;box-shadow:0 -4px 0 rgba(82,102,90,.65)
+}
+.bd-token-resize-handle:hover::after,
+.bd-token-resize-handle:focus-visible::after,
+.bd-token-wrap.bd-token-resizing .bd-token-resize-handle::after{
+  background:#4fff8f;box-shadow:0 -4px 0 rgba(79,255,143,.45)
+}
+body.bd-token-resizing{cursor:ns-resize!important;user-select:none!important}
 .bd-rv2v-layout .bd-token-editor,.bd-v2v-layout .bd-token-editor{
   min-height:220px;background:#101010;border-color:#2e2e2e;border-radius:8px;padding:10px;font-size:12px;line-height:1.45
 }
@@ -66,14 +83,23 @@ const MENTION_STYLES = `
 .bd-token{
   display:inline-flex;align-items:center;gap:4px;max-width:100%;
   margin:0 2px;padding:1px 7px 1px 3px;border-radius:999px;vertical-align:baseline;
-  border:1px solid rgba(79,255,143,.35);background:rgba(79,255,143,.08);color:#d8ffe8;
+  border:1.5px solid #3dcc7a;background:rgba(61,204,122,.12);color:#c8ffd9;
   font-size:11px;font-weight:600;line-height:1.4;user-select:none;cursor:default;white-space:nowrap
 }
 .bd-token[contenteditable="false"]{-webkit-user-modify:read-only}
-.bd-token-image{border-color:rgba(79,255,143,.4);background:rgba(79,255,143,.1)}
-.bd-token-video{border-color:rgba(120,180,255,.4);background:rgba(120,180,255,.1);color:#d0e6ff}
-.bd-token-audio{border-color:rgba(255,200,120,.4);background:rgba(255,200,120,.1);color:#ffe8c8}
-.bd-token.is-missing{opacity:.55;border-style:dashed;filter:grayscale(.35)}
+.bd-token.bd-token-image{
+  border-color:#3dcc7a;background:rgba(61,204,122,.14);color:#c8ffd9;
+  box-shadow:0 0 0 1px rgba(61,204,122,.22)
+}
+.bd-token.bd-token-video{
+  border-color:#4d9fff;background:rgba(77,159,255,.16);color:#d4e9ff;
+  box-shadow:0 0 0 1px rgba(77,159,255,.28)
+}
+.bd-token.bd-token-audio{
+  border-color:#e8a23a;background:rgba(232,162,58,.16);color:#ffe6bf;
+  box-shadow:0 0 0 1px rgba(232,162,58,.28)
+}
+.bd-token.is-missing{opacity:.62;border-style:dashed}
 .bd-token.is-missing .bd-token-label{text-decoration:line-through;text-decoration-color:rgba(255,255,255,.35)}
 .bd-token-thumb{
   width:16px;height:16px;border-radius:3px;object-fit:cover;flex-shrink:0;background:#111;border:1px solid rgba(0,0,0,.35)
@@ -82,6 +108,9 @@ const MENTION_STYLES = `
   width:16px;height:16px;border-radius:3px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
   font-size:10px;line-height:1;background:rgba(0,0,0,.35);color:inherit
 }
+.bd-token-image .bd-token-glyph{background:rgba(61,204,122,.28);color:#8dffb8}
+.bd-token-video .bd-token-glyph{background:rgba(77,159,255,.32);color:#9cc8ff}
+.bd-token-audio .bd-token-glyph{background:rgba(232,162,58,.32);color:#ffd48a}
 .bd-token-label{max-width:7em;overflow:hidden;text-overflow:ellipsis}
 `;
 
@@ -157,7 +186,7 @@ function listAvailableMentions(refs, audios, videos) {
         items.push({
             index,
             kind: "video",
-            label: refVideoLabel(index),
+            label: v.mentionLabel || v.displayName || refVideoLabel(index),
             tag: refVideoPromptTag(index),
             thumb: videoThumbUrl(v),
         });
@@ -175,6 +204,49 @@ function listAvailableMentions(refs, audios, videos) {
         });
     }
     return items;
+}
+
+function sourceVideoMention(editor, seg = null) {
+    const taskKey = resolveTaskKey(
+        seg?.taskType
+        || seg?.task_type
+        || editor?.timeline?.global?.taskType
+        || editor?.getTaskKey?.()
+        || "",
+    );
+    if (taskKey !== "v2v" && taskKey !== "rv2v") return [];
+
+    const clips = Array.isArray(editor?.timeline?.videoClips)
+        ? editor.timeline.videoClips
+        : [];
+    const clipId = seg?.videoClipId || seg?.video_clip_id;
+    const source = (
+        (clipId ? clips.find((clip) => clip?.id === clipId) : null)
+        || clips[0]
+        || editor?.timeline?.video
+        || {}
+    );
+    const videoFile = source.videoFile || source.fileName || "";
+    if (!videoFile) return [];
+    const fileName = source.fileName || String(videoFile).split(/[\\/]/).pop() || videoFile;
+    return [{
+        ...source,
+        index: 0,
+        videoFile,
+        fileName,
+        mentionLabel: `${refVideoLabel(0)} · ${fileName}`,
+        isTimelineSource: true,
+    }];
+}
+
+function promptVideosFor(editor, seg, extraVideos) {
+    const source = sourceVideoMention(editor, seg);
+    if (!source.length) return extraVideos || [];
+    // v2v/rv2v reserves <Video 1> for the segment's timeline source.
+    return [
+        ...source,
+        ...(extraVideos || []).filter((video) => Number(video?.index ?? video?.slot ?? 0) !== 0),
+    ];
 }
 
 function kindFromTagType(type) {
@@ -472,6 +544,46 @@ function insertAtCaret(editor, insertText, getMedia, options, { replaceFrom = nu
     return next;
 }
 
+// Serialized tag-string deletes: contenteditable=false chips make native caret
+// positions unreliable (element-level before a chip, text-node start after a
+// chip, Home / arrow landings). Operate on official tags as atomic units.
+const SERIAL_TAG_AT = /^<(?:Picture|Video|Audio)\s+\d+\s*>/i;
+const SERIAL_TAG_BEFORE = /<(?:Picture|Video|Audio)\s+\d+\s*>$/i;
+const SERIAL_TAG_GLOBAL = /<(?:Picture|Video|Audio)\s+\d+\s*>/gi;
+
+/** Delete key (forward). Returns {text, caret} or null if nothing to delete. */
+function serializedDeleteForward(full, offset) {
+    const lineStart = full.lastIndexOf("\n", offset - 1) + 1;
+    // If only chips/whitespace sit between line start and the caret, Delete
+    // should join this line to the previous one instead of eating the chip.
+    const headHasText =
+        full
+            .slice(lineStart, offset)
+            .replace(SERIAL_TAG_GLOBAL, "")
+            .replace(/\s+/g, "").length > 0;
+    if (!headHasText && lineStart > 0) {
+        return { text: full.slice(0, lineStart - 1) + full.slice(lineStart), caret: lineStart - 1 };
+    }
+    const tagLen = SERIAL_TAG_AT.exec(full.slice(offset))?.[0]?.length || 0;
+    if (tagLen > 0) {
+        return { text: full.slice(0, offset) + full.slice(offset + tagLen), caret: offset };
+    }
+    if (offset < full.length) {
+        return { text: full.slice(0, offset) + full.slice(offset + 1), caret: offset };
+    }
+    return null;
+}
+
+/** Backspace: delete a whole chip before the caret, else the previous character. */
+function serializedDeleteBackward(full, offset) {
+    if (offset <= 0) return null;
+    const tagLen = SERIAL_TAG_BEFORE.exec(full.slice(0, offset))?.[0]?.length || 0;
+    if (tagLen > 0) {
+        return { text: full.slice(0, offset - tagLen) + full.slice(offset), caret: offset - tagLen };
+    }
+    return { text: full.slice(0, offset - 1) + full.slice(offset), caret: offset - 1 };
+}
+
 function editorHasRawTagsInTextNodes(editor) {
     for (const node of editor.childNodes || []) {
         if (node.nodeType === Node.TEXT_NODE && TAG_RE.test(node.textContent || "")) {
@@ -544,6 +656,98 @@ function positionMenu(menu, editor) {
     menu.style.top = `${Math.round(top)}px`;
 }
 
+/**
+ * Native CSS resize handles are unreliable inside ComfyUI's transformed canvas.
+ * This explicit grip converts viewport pointer movement back into the editor's
+ * unscaled CSS height, so dragging remains accurate at every canvas zoom level.
+ */
+function installTokenResizeHandle(wrap, editor) {
+    if (!wrap || !editor || wrap.querySelector(":scope > .bd-token-resize-handle")) return;
+
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "bd-token-resize-handle";
+    handle.dataset.role = "prompt-resize-handle";
+    handle.setAttribute("aria-label", t("tooltip.promptEditorResize"));
+    handle.dataset.i18nTitle = "tooltip.promptEditorResize";
+    handle.title = t("tooltip.promptEditorResize");
+    wrap.appendChild(handle);
+
+    const applyHeight = (height, minHeight = 96) => {
+        const nextHeight = Math.max(minHeight, Math.round(height));
+        editor.style.height = `${nextHeight}px`;
+        wrap.style.height = `${nextHeight}px`;
+    };
+
+    handle.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+        event.preventDefault();
+        event.stopPropagation();
+        const computed = getComputedStyle(editor);
+        const current = Number.parseFloat(computed.height) || editor.offsetHeight || 96;
+        const minHeight = Number.parseFloat(computed.minHeight) || 96;
+        const step = event.shiftKey ? 80 : 24;
+        applyHeight(current + (event.key === "ArrowDown" ? step : -step), minHeight);
+    });
+
+    handle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+
+    handle.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        const computed = getComputedStyle(editor);
+        const rect = editor.getBoundingClientRect();
+        const startHeight = Number.parseFloat(computed.height) || editor.offsetHeight || 96;
+        const minHeight = Number.parseFloat(computed.minHeight) || 96;
+        const scaleY = rect.height > 0 ? rect.height / startHeight : 1;
+        const startY = event.clientY;
+        const pointerId = event.pointerId;
+
+        wrap.classList.add("bd-token-resizing");
+        document.body.classList.add("bd-token-resizing");
+        try {
+            handle.setPointerCapture(pointerId);
+        } catch {
+            /* Window listeners below keep dragging active without pointer capture. */
+        }
+
+        const onMove = (moveEvent) => {
+            if (moveEvent.pointerId !== pointerId) return;
+            moveEvent.preventDefault();
+            moveEvent.stopPropagation();
+            applyHeight(
+                startHeight + (moveEvent.clientY - startY) / Math.max(scaleY, 0.01),
+                minHeight
+            );
+        };
+
+        const stop = (endEvent) => {
+            if (endEvent.pointerId !== pointerId) return;
+            endEvent.preventDefault();
+            endEvent.stopPropagation();
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", stop);
+            window.removeEventListener("pointercancel", stop);
+            wrap.classList.remove("bd-token-resizing");
+            document.body.classList.remove("bd-token-resizing");
+            try {
+                handle.releasePointerCapture(pointerId);
+            } catch {
+                /* Ignore when capture already ended. */
+            }
+        };
+
+        window.addEventListener("pointermove", onMove, { passive: false });
+        window.addEventListener("pointerup", stop);
+        window.addEventListener("pointercancel", stop);
+    });
+}
+
 function ensureTokenShell(textarea) {
     if (textarea.dataset.tokenShell === "1" && textarea.__bdTokenEditor) {
         return textarea.__bdTokenEditor;
@@ -571,6 +775,10 @@ function ensureTokenShell(textarea) {
         editor.classList.add(cls);
     }
     wrap.appendChild(editor);
+    // R2V uses the growable card/list layout; other modes keep their existing flex sizing.
+    if (textarea.closest(".bd-batch-r2v")) {
+        installTokenResizeHandle(wrap, editor);
+    }
     textarea.__bdTokenEditor = editor;
     textarea.__bdTokenWrap = wrap;
 
@@ -608,6 +816,70 @@ function writeTextareaValue(textarea, value) {
     } finally {
         textarea.__bdTokenSyncing = false;
     }
+}
+
+// ComfyUI/litegraph listens for copy/cut/paste on window in the capture phase.
+// When the target is inside a canvas DOM widget (this chip editor), it
+// stopPropagation so editor-level and even document listeners never fire.
+// Copy then only keeps the chip's visible label and drops <Picture>/<Video>/<Audio>.
+// stopPropagation does not block other window-capture listeners, so register
+// once here and dispatch via rich.__bdClipboard (see wirePromptImageMentions).
+let __bdClipboardHookInstalled = false;
+function installGlobalClipboardHook() {
+    if (__bdClipboardHookInstalled) return;
+    __bdClipboardHookInstalled = true;
+
+    const editorFromSelection = () => {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return null;
+        const node = sel.anchorNode;
+        const el = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+        const editor =
+            el && typeof el.closest === "function" ? el.closest(".bd-token-editor") : null;
+        return editor && editor.__bdClipboard ? editor : null;
+    };
+
+    window.addEventListener(
+        "copy",
+        (e) => {
+            const editor = editorFromSelection();
+            if (!editor) return;
+            const text = editor.__bdClipboard.serializedSelectionText();
+            if (!text || !e.clipboardData) return;
+            e.preventDefault();
+            e.stopImmediatePropagation?.();
+            e.clipboardData.setData("text/plain", text);
+        },
+        true,
+    );
+
+    window.addEventListener(
+        "cut",
+        (e) => {
+            const editor = editorFromSelection();
+            if (!editor) return;
+            const text = editor.__bdClipboard.serializedSelectionText();
+            if (!text || !e.clipboardData) return;
+            e.preventDefault();
+            e.stopImmediatePropagation?.();
+            e.clipboardData.setData("text/plain", text);
+            editor.__bdClipboard.cutSelection();
+        },
+        true,
+    );
+
+    window.addEventListener(
+        "paste",
+        (e) => {
+            const editor = editorFromSelection();
+            if (!editor) return;
+            e.preventDefault();
+            e.stopImmediatePropagation?.();
+            const text = (e.clipboardData || window.clipboardData)?.getData("text/plain") || "";
+            editor.__bdClipboard.pasteText(text.replace(/\r\n/g, "\n"));
+        },
+        true,
+    );
 }
 
 /**
@@ -821,13 +1093,49 @@ export function wirePromptImageMentions(editorHost, textarea, getMedia) {
         if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) openIfMention();
     });
 
-    rich.addEventListener("paste", (e) => {
-        // Block Comfy canvas node-paste (clipboard still holds last copied nodes).
+    const serializedSelectionText = () => {
+        const { start, end } = serializedSelectionOffsets(rich);
+        if (end <= start) return "";
+        return serializeTokenEditor(rich).slice(start, end);
+    };
+
+    // Clipboard events inside the canvas are swallowed by the global window-capture
+    // listener (see installGlobalClipboardHook). Hang this editor's ops on
+    // rich.__bdClipboard so the single hook can find us from the selection.
+    rich.__bdClipboard = {
+        serializedSelectionText,
+        cutSelection() {
+            const { start, end } = serializedSelectionOffsets(rich);
+            const full = serializeTokenEditor(rich);
+            const next = full.slice(0, start) + full.slice(end);
+            hydrateTokenEditor(rich, next, getMedia, chipOpts);
+            setCaretBySerializedOffset(rich, start);
+            syncToTextarea({ emitInput: true });
+        },
+        pasteText(text) {
+            insertAtCaret(rich, text, getMedia, chipOpts);
+            syncToTextarea({ emitInput: true });
+            openIfMention();
+        },
+    };
+    installGlobalClipboardHook();
+
+    // When the caret sits at the element level (directly before/after a chip,
+    // line start, or editor edge) rather than inside a text node, native typing
+    // around contenteditable=false chips is unreliable. Route those keystrokes
+    // through the serialized editor.
+    rich.addEventListener("beforeinput", (e) => {
+        if (composing) return;
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !rich.contains(sel.anchorNode)) return;
+        const node = sel.getRangeAt(0).startContainer;
+        if (node.nodeType === Node.TEXT_NODE) return;
+        let insert = null;
+        if (e.inputType === "insertText" && e.data != null) insert = e.data;
+        else if (e.inputType === "insertParagraph" || e.inputType === "insertLineBreak") insert = "\n";
+        if (insert == null) return;
         e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation?.();
-        const text = (e.clipboardData || window.clipboardData)?.getData("text/plain") || "";
-        insertAtCaret(rich, text.replace(/\r\n/g, "\n"), getMedia, chipOpts);
+        insertAtCaret(rich, insert, getMedia, chipOpts);
         syncToTextarea({ emitInput: true });
         openIfMention();
     });
@@ -860,51 +1168,24 @@ export function wirePromptImageMentions(editorHost, textarea, getMedia) {
             }
         }
 
-        // Atomic backspace/delete against chips.
+        // Backspace/Delete on the serialized tag string (see serializedDelete*).
+        // DOM-neighbor checks miss Home/arrow landings after a chip, so Delete
+        // at line start would eat the chip or first character instead of joining lines.
         if (e.key === "Backspace" || e.key === "Delete") {
             const sel = window.getSelection();
             if (!sel || !sel.isCollapsed || !sel.rangeCount) return;
-            const range = sel.getRangeAt(0);
-            if (e.key === "Backspace") {
-                let node = range.startContainer;
-                let offset = range.startOffset;
-                if (node === rich && offset > 0) {
-                    const prev = rich.childNodes[offset - 1];
-                    if (prev?.classList?.contains(TOKEN_CLASS)) {
-                        e.preventDefault();
-                        prev.remove();
-                        syncToTextarea({ emitInput: true });
-                        return;
-                    }
-                }
-                if (node.nodeType === Node.TEXT_NODE && offset === 0) {
-                    const prev = node.previousSibling;
-                    if (prev?.classList?.contains(TOKEN_CLASS)) {
-                        e.preventDefault();
-                        prev.remove();
-                        syncToTextarea({ emitInput: true });
-                    }
-                }
-            } else if (e.key === "Delete") {
-                let node = range.startContainer;
-                let offset = range.startOffset;
-                if (node === rich) {
-                    const next = rich.childNodes[offset];
-                    if (next?.classList?.contains(TOKEN_CLASS)) {
-                        e.preventDefault();
-                        next.remove();
-                        syncToTextarea({ emitInput: true });
-                        return;
-                    }
-                }
-                if (node.nodeType === Node.TEXT_NODE && offset === (node.textContent || "").length) {
-                    const next = node.nextSibling;
-                    if (next?.classList?.contains(TOKEN_CLASS)) {
-                        e.preventDefault();
-                        next.remove();
-                        syncToTextarea({ emitInput: true });
-                    }
-                }
+            if (!rich.contains(sel.anchorNode)) return;
+            const { start: offset } = serializedSelectionOffsets(rich);
+            const full = serializeTokenEditor(rich);
+            const result =
+                e.key === "Delete"
+                    ? serializedDeleteForward(full, offset)
+                    : serializedDeleteBackward(full, offset);
+            if (result) {
+                e.preventDefault();
+                hydrateTokenEditor(rich, result.text, getMedia, chipOpts);
+                setCaretBySerializedOffset(rich, result.caret);
+                syncToTextarea({ emitInput: true });
             }
         }
     });
@@ -914,29 +1195,60 @@ export function wirePromptImageMentions(editorHost, textarea, getMedia) {
         refreshTokenStates(rich, getMedia);
     });
 
-    document.addEventListener("mousedown", (e) => {
+    // document/window listeners outlive the textarea. Batch cards rebuild with
+    // innerHTML, so unnamed handlers would accumulate and pin the whole editor.
+    const onDocMouseDown = (e) => {
         if (!menu || menu.classList.contains("hidden")) return;
         if (e.target === rich || rich.contains?.(e.target) || menu.contains(e.target)) return;
         closeMenu();
-    });
-
-    // Capture scroll closes the menu when the page/list moves — but must ignore
-    // scrolls inside the menu itself (overflow:auto), otherwise hovering/dragging
-    // the scrollbar instantly dismisses it.
-    window.addEventListener("scroll", (e) => {
+    };
+    const onWinScroll = (e) => {
         if (!menu || menu.classList.contains("hidden")) return;
         const t = e.target;
         if (t === menu || menu.contains(t)) return;
         closeMenu();
-    }, true);
+    };
+
+    document.addEventListener("mousedown", onDocMouseDown);
+    // Capture: close when the page/list moves, but ignore scrolls inside the menu.
+    window.addEventListener("scroll", onWinScroll, true);
     window.addEventListener("resize", closeMenu);
+
+    let tornDown = false;
+    const teardown = () => {
+        if (tornDown) return;
+        tornDown = true;
+        clearTimeout(rehydrateTimer);
+        document.removeEventListener("mousedown", onDocMouseDown);
+        window.removeEventListener("scroll", onWinScroll, true);
+        window.removeEventListener("resize", closeMenu);
+        menu?.remove();
+        menu = null;
+        delete rich.__bdClipboard;
+        textarea.__bdTokenPlaceholderObserver?.disconnect();
+        delete textarea.__bdTokenPlaceholderObserver;
+        delete textarea.dataset.mentionWired;
+        delete textarea.__bdTokenApi;
+    };
 
     textarea.__bdTokenApi = {
         hydrateFromValue,
         refreshMedia: () => refreshTokenStates(rich, getMedia),
         editor: rich,
         sync: () => syncToTextarea({ emitInput: false }),
+        teardown,
     };
+}
+
+/**
+ * Drop document/window listeners, body menus, and observers for token editors
+ * under ``root``. Call before wiping a list with innerHTML, and on editor destroy.
+ */
+export function teardownPromptImageMentions(root = document) {
+    const areas = root?.querySelectorAll?.("textarea.bd-token-source") || [];
+    for (const ta of areas) {
+        ta.__bdTokenApi?.teardown?.();
+    }
 }
 
 /** Refresh chip missing/thumb state after refs change (optional call sites). */
@@ -953,14 +1265,14 @@ export function mountPromptImageMentions(editor) {
     wirePromptImageMentions(editor, editor.globalPrompt, () => ({
         refs: editor.timeline?.global?.refs || [],
         audios: editor.timeline?.global?.refAudios || [],
-        videos: editor.timeline?.global?.refVideos || [],
+        videos: promptVideosFor(editor, null, editor.timeline?.global?.refVideos || []),
     }));
     wirePromptImageMentions(editor, editor.segPrompt, () => {
         const seg = editor.timeline?.segments?.[editor.selectedIndex];
         return {
             refs: seg?.refs || [],
             audios: seg?.refAudios || [],
-            videos: seg?.refVideos || [],
+            videos: promptVideosFor(editor, seg, seg?.refVideos || []),
         };
     });
 }

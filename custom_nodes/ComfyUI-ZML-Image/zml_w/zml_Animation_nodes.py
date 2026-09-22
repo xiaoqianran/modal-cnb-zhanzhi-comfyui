@@ -10,7 +10,8 @@ import uuid
 import json
 import base64
 from io import BytesIO
-
+import psutil
+import sys
 #==========================图像过度动画==========================
 
 class ZML_ImageTransition:
@@ -622,7 +623,7 @@ except ImportError:
         def __init__(self, value):
             self.value = value
 
-# ============================== 桥接预览图象 ==============================
+# ============================== 桥接预览图像 ==============================
 class ZML_ImageMemory:
     # 启用OUTPUT_NODE，使其能在UI中预览图像。
     OUTPUT_NODE = True
@@ -630,7 +631,7 @@ class ZML_ImageMemory:
     # 类变量，用于在节点实例之间共享缓存
     _image_cache = {}    # UI预览用的路径缓存
     _counter_cache = {}  # 计数器
-    _tensor_buffer = {}  # 【新增】核心数据缓存：用于存储真实的图像数据张量
+    _tensor_buffer = {}  # 核心数据缓存：用于存储真实的图像数据张量
 
     def __init__(self):
         self.stored_image = None
@@ -649,8 +650,8 @@ class ZML_ImageMemory:
             "required": {
                 "关闭输入": ("BOOLEAN", {"default": False, "tooltip": "开启后不执行上游节点，锁定当前状态"}),
                 "关闭输出": ("BOOLEAN", {"default": False, "tooltip": "开启后不执行下游节点"}),
-                "选择输出索引": ("INT", {"default": 0, "min": 0, "max": 50, "step": 1, "label": "选择输出索引(0=全部)", "tooltip": "0=输出缓存中的所有图像拼接结果，1-50=选择输出缓存队列中特定位置的单张图像"}),
-                "暂存次数": ("INT", {"default": 1, "min": 1, "max": 64, "step": 1, "display": "number", "tooltip": "设置缓存队列的大小。例如设为3，节点会保留最近3次运行的图像（或3个批次），并将其合并输出。"}),
+                "选择输出索引": ("INT", {"default": 0, "min": 0, "max": 50, "step": 1, "label": "选择输出索引(0=全部)", "tooltip": "0=输出缓存中的所有图像（同分辨率拼成batch，不同分辨率输出列表）；1-50=按【单张图像】索引取出缓存中的第N张图。注意：索引按展开后的单图算——一次输入5张的批次会被展开成5张单图分别按索引取。超出范围时自动返回最后一张。"}),
+                "暂存次数": ("INT", {"default": 1, "min": 1, "max": 10, "step": 1, "display": "number", "tooltip": "设置缓存队列的大小。例如设为3，节点会保留最近3次运行的图像（或3个批次），并将其合并输出。上限10次。"}),
             },
             "optional": {
                 "输入图像": ("IMAGE", lazy_options),
@@ -667,7 +668,7 @@ class ZML_ImageMemory:
     FUNCTION = "store_and_retrieve_image"
     CATEGORY = "image/ZML_图像/工具"
     OUTPUT_IS_LIST = (True,)
-    
+
     def check_lazy_status(self, 关闭输入, **kwargs):
         """告诉系统是否需要输入图像"""
         if 关闭输入:
@@ -679,7 +680,7 @@ class ZML_ImageMemory:
     def store_and_retrieve_image(self, 关闭输入, 关闭输出, 选择输出索引, 暂存次数=1, 输入图像=None, prompt=None, extra_pnginfo=None, unique_id=None):
         self.prompt = prompt
         self.extra_pnginfo = extra_pnginfo
-        
+
         # 1. 确保唯一ID对应的缓存列表存在
         if unique_id:
             if unique_id not in self._tensor_buffer:
@@ -694,16 +695,16 @@ class ZML_ImageMemory:
         if not 关闭输入 and 输入图像 is not None:
             current_input_image = 输入图像
             new_image_received = True
-            
-            # --- 【核心修改】数据累积逻辑 ---
+
+            # --- 数据累积逻辑 ---
             if unique_id:
                 # 不再清空缓存，支持暂存不同分辨率的图像
                 # 添加新图像到 Tensor 缓存
                 self._tensor_buffer[unique_id].append(current_input_image)
-                
+
                 # 维护队列长度（先进先出）
                 while len(self._tensor_buffer[unique_id]) > 暂存次数:
-                    self._tensor_buffer[unique_id].pop(0) # 移除最旧的
+                    self._tensor_buffer[unique_id].pop(0)  # 移除最旧的
 
         # 3. 准备生成 UI 预览图 (这一步主要是为了生成缩略图文件)
         # 我们只为"新进来的"图片生成预览文件，旧的已经在以前运行生成过了
@@ -711,7 +712,7 @@ class ZML_ImageMemory:
         if new_image_received and current_input_image is not None:
             subfolder_path = os.path.join(self.temp_output_dir, self.temp_subfolder)
             os.makedirs(subfolder_path, exist_ok=True)
-            
+
             batch_size = current_input_image.shape[0]
             for i in range(batch_size):
                 img_t = current_input_image[i:i+1]
@@ -721,13 +722,13 @@ class ZML_ImageMemory:
                     pil_img = Image.fromarray((preview_tensor.squeeze(0).cpu().numpy() * 255).astype(np.uint8))
                 else:
                     pil_img = Image.fromarray((img_t.squeeze(0).cpu().numpy() * 255).astype(np.uint8))
-                
+
                 filename = f"zml_mem_{unique_id}_{uuid.uuid4().hex[:8]}.png"
                 file_path = os.path.join(subfolder_path, filename)
-                
+
                 metadata = PngImagePlugin.PngInfo()
                 if self.prompt: metadata.add_text("prompt", json.dumps(self.prompt))
-                
+
                 pil_img.save(file_path, pnginfo=metadata, compress_level=4)
                 current_image_paths.append({"filename": filename, "subfolder": self.temp_subfolder, "type": "temp"})
 
@@ -738,56 +739,71 @@ class ZML_ImageMemory:
                 # 维护 UI 缓存长度
                 while len(self._image_cache[unique_id]) > 暂存次数:
                     self._image_cache[unique_id].pop(0)
-            
+
             # 扁平化 UI 列表 (因为 self._image_cache 是 [[paths_run1], [paths_run2]] 结构)
-            # 我们需要把它变成一个长列表给前端
             flat_ui_paths = []
             for batch_paths in self._image_cache[unique_id]:
                 flat_ui_paths.extend(batch_paths)
         else:
             flat_ui_paths = current_image_paths
 
-        # 5. --- 【核心修改】构建输出数据 ---
-        # 默认输出空
+        # 5. --- 把缓存里的所有张量按 batch 维度展开成"单图列表" ---
+        # 这样无论一次输入是 1 张还是 N 张，都会被拆成 N 张单独可索引的图像。
+        # 索引规则：先按缓存的先后顺序，再按每次缓存内部的 batch 顺序。
+        all_single_images = []  # 每个元素 shape: [1, H, W, C]
+        if unique_id and len(self._tensor_buffer[unique_id]) > 0:
+            for tensor in self._tensor_buffer[unique_id]:
+                # tensor shape: [B, H, W, C]，按 batch 拆开
+                for b in range(tensor.shape[0]):
+                    all_single_images.append(tensor[b:b+1])
+        elif current_input_image is not None:
+            # 极端情况：没有 unique_id 时，把当前输入也按 batch 拆开
+            for b in range(current_input_image.shape[0]):
+                all_single_images.append(current_input_image[b:b+1])
+
+        # 6. --- 构建输出数据 ---
         final_output_list = []
 
-        if unique_id and len(self._tensor_buffer[unique_id]) > 0:
-            # 检查所有图像的分辨率是否一致
-            resolutions = set()
-            for tensor in self._tensor_buffer[unique_id]:
-                h, w, c = tensor.shape[1:]
-                resolutions.add((h, w, c))
-            
-            if len(resolutions) == 1:
-                # 分辨率一致，拼接成一个大的 Batch
-                final_output_batch = torch.cat(self._tensor_buffer[unique_id], dim=0)
-                final_output_list = [final_output_batch]
+        if 选择输出索引 > 0:
+            # —— 单图模式：从展开后的单图列表里按索引取 1 张 ——
+            if len(all_single_images) > 0:
+                idx = 选择输出索引 - 1  # 用户输入1代表第1张(idx 0)
+                if 0 <= idx < len(all_single_images):
+                    final_output_list = [all_single_images[idx]]
+                else:
+                    # 索引越界时，返回最后一张并打印提示
+                    print(f"ZML_ImageMemory: 索引 {选择输出索引} 超出范围 (当前展开后共有 {len(all_single_images)} 张单图), 返回最后一张。")
+                    final_output_list = [all_single_images[-1]]
             else:
-                # 分辨率不同，输出图像列表
-                final_output_list = self._tensor_buffer[unique_id].copy()
-        elif current_input_image is not None:
-            # 如果没有 unique_id (极端情况)，直接透传当前输入
-            final_output_list = [current_input_image]
+                # 没有任何缓存图，输出空
+                final_output_list = []
         else:
-            # 没有图像，输出空列表
-            final_output_list = []
+            # —— 全部输出模式（索引=0）：维持原行为 ——
+            if unique_id and len(self._tensor_buffer[unique_id]) > 0:
+                # 检查所有图像的分辨率是否一致
+                resolutions = set()
+                for tensor in self._tensor_buffer[unique_id]:
+                    h, w, c = tensor.shape[1:]
+                    resolutions.add((h, w, c))
 
-        # 6. 处理索引选择
-        if 选择输出索引 > 0 and len(final_output_list) > 0:
-            # 输出指定索引的那一张
-            # 索引转换：用户输入1代表第1张(idx 0)
-            idx = 选择输出索引 - 1
-            if 0 <= idx < len(final_output_list):
-                final_output_list = [final_output_list[idx]]
+                if len(resolutions) == 1:
+                    # 分辨率一致，拼接成一个大的 Batch
+                    final_output_batch = torch.cat(self._tensor_buffer[unique_id], dim=0)
+                    final_output_list = [final_output_batch]
+                else:
+                    # 分辨率不同，输出图像列表
+                    final_output_list = self._tensor_buffer[unique_id].copy()
+            elif current_input_image is not None:
+                # 没有 unique_id 的极端情况，直接透传当前输入
+                final_output_list = [current_input_image]
             else:
-                # 索引越界时，返回最后一张
-                print(f"ZML_ImageMemory: 索引 {选择输出索引} 超出范围 (当前共有 {len(final_output_list)} 张), 返回最后一张。")
-                final_output_list = [final_output_list[-1]]
+                # 没有图像，输出空列表
+                final_output_list = []
 
         # 7. 处理关闭输出
         if 关闭输出 and ExecutionBlocker is not None:
             return {"ui": {"images": flat_ui_paths}, "result": (ExecutionBlocker(None),)}
-            
+
         return {"ui": {"images": flat_ui_paths}, "result": (final_output_list,)}
 
     def _save_to_local(self, image_tensor):
@@ -797,6 +813,7 @@ class ZML_ImageMemory:
     def _load_from_local(self):
         # 此方法保留
         return None
+
 
 # ============================== 提示词token统一 ==============================
 class ZML_PromptTokenBalancer:
@@ -902,69 +919,162 @@ class ZML_ImageCrop:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "图像": ("IMAGE",),
-                "裁剪比例": (["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"], {"default": "1:1"}),
-                "裁剪方向": (["居中", "顶部", "底部", "左侧", "右侧"], {"default": "居中"}),
+                "图像": ("IMAGE", {"tooltip": "输入要裁剪的图像"}),
+                "裁剪比例": (["禁用", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"], {"default": "禁用", "tooltip": "选择裁剪比例，选择'禁用'可使用自定义宽高"}),
+                "裁剪方向": (["居中", "顶部", "底部", "左侧", "右侧"], {"default": "居中", "tooltip": "裁剪比例模式下的裁剪方向"}),
+                "宽度": ("INT", {"default": 512, "min": 1, "max": 16384, "step": 1, "display": "number", "tooltip": "禁用比例模式时的裁剪宽度"}),
+                "高度": ("INT", {"default": 512, "min": 1, "max": 16384, "step": 1, "display": "number", "tooltip": "禁用比例模式时的裁剪高度"}),
+                "X偏移": ("INT", {"default": 0, "min": -16384, "max": 16384, "step": 1, "display": "number", "tooltip": "禁用比例模式时的水平偏移像素（正数向右，负数向左）"}),
+                "Y偏移": ("INT", {"default": 0, "min": -16384, "max": 16384, "step": 1, "display": "number", "tooltip": "禁用比例模式时的垂直偏移像素（正数向下，负数向上）"}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "IMAGE", "INT", "INT", "INT", "INT")
+    RETURN_NAMES = ("裁剪后图像", "裁剪掉的图像", "X坐标", "Y坐标", "裁剪宽度", "裁剪高度")
+    FUNCTION = "crop_image"
+    CATEGORY = "image/ZML_图像/图像"
+
+    def crop_image(self, 图像, 裁剪比例, 裁剪方向, 宽度, 高度, X偏移, Y偏移):
+        # 获取输入图像尺寸 (Batch, Height, Width, Channels)
+        batch_size, img_height, img_width, channels = 图像.shape
+
+        # 判断是否使用裁剪比例模式
+        if 裁剪比例 == "禁用":
+            # 禁用模式下，使用用户指定的宽高
+            new_width = min(宽度, img_width)
+            new_height = min(高度, img_height)
+            
+            # 计算基础裁剪坐标（居中）
+            base_x_start = (img_width - new_width) // 2
+            base_y_start = (img_height - new_height) // 2
+            
+            # 应用XY偏移
+            x_start = base_x_start + X偏移
+            y_start = base_y_start + Y偏移
+        else:
+            # 解析比例
+            if 裁剪比例 == "自定义":
+                target_ratio = 1.0
+            else:
+                try:
+                    w_ratio, h_ratio = map(float, 裁剪比例.split(":"))
+                    target_ratio = w_ratio / h_ratio
+                except:
+                    target_ratio = 1.0
+
+            current_ratio = img_width / img_height
+
+            # 计算新的尺寸
+            if current_ratio > target_ratio:
+                # 图像太宽，需要裁剪宽度 (高度保持不变)
+                new_height = img_height
+                new_width = int(img_height * target_ratio)
+            else:
+                # 图像太高，需要裁剪高度 (宽度保持不变)
+                new_width = img_width
+                new_height = int(img_width / target_ratio)
+
+            # 初始化裁剪坐标（默认为居中）
+            x_start = (img_width - new_width) // 2
+            y_start = (img_height - new_height) // 2
+
+            # 根据方向调整坐标
+            if 裁剪方向 == "顶部":
+                y_start = 0
+            elif 裁剪方向 == "底部":
+                y_start = img_height - new_height
+            elif 裁剪方向 == "左侧":
+                x_start = 0
+            elif 裁剪方向 == "右侧":
+                x_start = img_width - new_width
+
+        # 确保坐标不越界
+        x_start = max(0, min(x_start, img_width - new_width))
+        y_start = max(0, min(y_start, img_height - new_height))
+        
+        # 确保宽高不会超出图像边界
+        new_width = min(new_width, img_width - x_start)
+        new_height = min(new_height, img_height - y_start)
+
+        # 执行裁剪 (切片操作: Batch, Y, X, Channels)
+        cropped_image = 图像[:, y_start:y_start + new_height, x_start:x_start + new_width, :]
+        
+        # 创建裁剪掉的图像（将裁剪区域填充为黑色）
+        removed_image = 图像.clone()
+        removed_image[:, y_start:y_start + new_height, x_start:x_start + new_width, :] = 0
+
+        return (cropped_image, removed_image, x_start, y_start, new_width, new_height)
+
+#==========================图像拆分宫格节点==========================
+
+class ZML_ImageGridSplit:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "图像": ("IMAGE", {"tooltip": "输入要拆分的图像"}),
+                "行数": ("INT", {"default": 2, "min": 1, "max": 32, "step": 1, "display": "number", "tooltip": "垂直方向拆分的行数"}),
+                "列数": ("INT", {"default": 2, "min": 1, "max": 32, "step": 1, "display": "number", "tooltip": "水平方向拆分的列数"}),
+                "水平间距": ("INT", {"default": 0, "min": 0, "max": 1024, "step": 1, "display": "number", "tooltip": "宫格之间的水平间距（像素）"}),
+                "垂直间距": ("INT", {"default": 0, "min": 0, "max": 1024, "step": 1, "display": "number", "tooltip": "宫格之间的垂直间距（像素）"}),
+                "保持原尺寸": ("BOOLEAN", {"default": False, "tooltip": "是否保持每个宫格为原图尺寸，而非裁剪后的尺寸"}),
             }
         }
 
     RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("裁剪后图像",)
-    FUNCTION = "crop_image"
+    RETURN_NAMES = ("宫格图像批次",)
+    FUNCTION = "split_grid"
     CATEGORY = "image/ZML_图像/图像"
 
-    def crop_image(self, 图像, 裁剪比例, 裁剪方向):
-        # 解析比例
-        if 裁剪比例 == "自定义":
-            # 如果需要自定义，默认回退到1:1，或者这里可以扩展逻辑
-            target_ratio = 1.0
-        else:
-            try:
-                w_ratio, h_ratio = map(float, 裁剪比例.split(":"))
-                target_ratio = w_ratio / h_ratio
-            except:
-                target_ratio = 1.0
-
+    def split_grid(self, 图像, 行数, 列数, 水平间距, 垂直间距, 保持原尺寸):
         # 获取输入图像尺寸 (Batch, Height, Width, Channels)
-        batch_size, height, width, channels = 图像.shape
-        current_ratio = width / height
-
-        # 计算新的尺寸
-        if current_ratio > target_ratio:
-            # 图像太宽，需要裁剪宽度 (高度保持不变)
-            new_height = height
-            new_width = int(height * target_ratio)
-        else:
-            # 图像太高，需要裁剪高度 (宽度保持不变)
-            new_width = width
-            new_height = int(width / target_ratio)
-
-        # 初始化裁剪坐标（默认为居中）
-        x_start = (width - new_width) // 2
-        y_start = (height - new_height) // 2
-
-        # 根据方向调整坐标
-        # 注意：如果裁剪的是宽度，"顶部/底部"选项不起作用（因为高度没变，y_start已经是0），依然保持垂直居中(0)
-        # 同理，如果裁剪的是高度，"左侧/右侧"选项不起作用，依然保持水平居中(0)
+        batch_size, img_height, img_width, channels = 图像.shape
         
-        if 裁剪方向 == "顶部":
-            y_start = 0
-        elif 裁剪方向 == "底部":
-            y_start = height - new_height
-        elif 裁剪方向 == "左侧":
-            x_start = 0
-        elif 裁剪方向 == "右侧":
-            x_start = width - new_width
-        # "居中" 已经在初始化时计算过了
-
-        # 确保坐标不越界 (虽然计算逻辑上不应该越界，但做个保险)
-        x_start = max(0, min(x_start, width - new_width))
-        y_start = max(0, min(y_start, height - new_height))
-
-        # 执行裁剪 (切片操作: Batch, Y, X, Channels)
-        cropped_image = 图像[:, y_start:y_start + new_height, x_start:x_start + new_width, :]
-
-        return (cropped_image,)
+        # 计算每个宫格的尺寸：总宽度减去所有间距后平分
+        # 水平间距：每张图左右各减去一半间距
+        total_h_spacing = (列数 - 1) * 水平间距
+        total_v_spacing = (行数 - 1) * 垂直间距
+        
+        cell_width = (img_width - total_h_spacing) // 列数
+        cell_height = (img_height - total_v_spacing) // 行数
+        
+        # 存储所有宫格图像
+        grid_images = []
+        
+        # 按行优先顺序遍历所有宫格
+        for row in range(行数):
+            for col in range(列数):
+                # 计算当前宫格的左上角坐标（加上之前所有宫格的间距）
+                x_start = col * cell_width + col * 水平间距
+                y_start = row * cell_height + row * 垂直间距
+                
+                # 计算右下角坐标
+                x_end = x_start + cell_width
+                y_end = y_start + cell_height
+                
+                # 确保不越界
+                x_end = min(x_end, img_width)
+                y_end = min(y_end, img_height)
+                
+                # 裁剪出当前宫格
+                cell_image = 图像[:, y_start:y_end, x_start:x_end, :]
+                
+                if 保持原尺寸:
+                    # 创建与原图相同尺寸的黑底图像
+                    full_size_cell = torch.zeros_like(图像)
+                    # 将裁剪的宫格放到对应位置
+                    full_size_cell[:, y_start:y_end, x_start:x_end, :] = cell_image
+                    grid_images.append(full_size_cell)
+                else:
+                    grid_images.append(cell_image)
+        
+        # 将所有宫格合并为一个批次
+        if grid_images:
+            output_batch = torch.cat(grid_images, dim=0)
+        else:
+            output_batch = torch.zeros((1, img_height, img_width, channels))
+        
+        return (output_batch,)
 
 #==========================图像Base64互转节点==========================
 
@@ -1109,6 +1219,78 @@ class ZML_List_To_Batch:
 
         return (final_image, final_text)
 
+# 节点 8: ZML_批次转列表
+# ==========================================
+class ZML_Batch_To_List:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "分隔符": ("STRING", {"default": ",\\n", "multiline": False}),
+            },
+            "optional": {
+                "图像批次": ("IMAGE",),
+                "合并文本": ("STRING", {"forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("图像列表", "文本列表")
+    # 对应输出的列表化状态: 图像列表(是), 文本列表(是)
+    OUTPUT_IS_LIST = (True, True)
+    FUNCTION = "process_batch"
+    CATEGORY = "image/ZML_图像/图像"
+
+    def process_batch(self, 分隔符, 图像批次=None, 合并文本=None):
+        # 如果分隔符被传入为列表（这种情况在ComfyUI某些连接方式下会发生），取第一个元素
+        if isinstance(分隔符, list):
+            if len(分隔符) > 0:
+                分隔符 = 分隔符[0]
+            else:
+                分隔符 = ",\\n" # 默认回退值
+        
+        # 确保分隔符是字符串类型，防止其他意外类型报错
+        if not isinstance(分隔符, str):
+            分隔符 = str(分隔符)
+
+        # 1. 处理文本
+        text_list = []
+        # 处理转义符，将字符串的 "\n" 转换为实际换行符
+        sep = 分隔符.replace("\\n", "\n")
+        
+        if 合并文本:
+            # 再次防御：如果合并文本是列表（某些节点输出列表），取其内容
+            if isinstance(合并文本, list):
+                if len(合并文本) > 0:
+                    合并文本 = 合并文本[0]
+                else:
+                    合并文本 = ""
+            
+            # 分割文本
+            text_list = 合并文本.split(sep)
+            # 过滤空字符串
+            text_list = [t.strip() for t in text_list if t.strip()]
+
+        # 2. 处理图像
+        image_list = []
+        if 图像批次 is not None:
+            # 确保图像批次是4维张量 [B, H, W, C]
+            if len(图像批次.shape) == 3:
+                图像批次 = 图像批次.unsqueeze(0)
+            
+            # 将批次中的每个图像分离
+            batch_size = 图像批次.shape[0]
+            for i in range(batch_size):
+                # 取出单个图像并保持4维格式 [1, H, W, C]
+                single_image = 图像批次[i:i+1, :, :, :]
+                image_list.append(single_image)
+        
+        # 如果没有有效图像，生成一个空列表
+        if not image_list:
+            image_list = []
+
+        return (image_list, text_list)
+
 # ==========================================
 # 辅助类: 通用类型 (Any Type)
 # 用于连接任意类型的输入和输出
@@ -1176,22 +1358,283 @@ class ZML_Get_Item_From_List:
         
         # 5. 返回 (选定项, 长度)
         return (result, list_len)
+#==========================遮罩填充节点==========================
+
+class ZML_MaskFillHoles:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "遮罩": ("MASK",),
+                "闭合强度": ("INT", {"default": 0, "min": 0, "max": 64, "step": 1, "tooltip": "数值越大，越能连接断开的线条以形成闭合区域。如果遮罩本身有缺口，增加此值。"}),
+            }
+        }
+
+    RETURN_TYPES = ("MASK",)
+    RETURN_NAMES = ("填充后遮罩",)
+    FUNCTION = "fill_mask_holes"
+    CATEGORY = "image/ZML_图像/遮罩"
+
+    def fill_mask_holes(self, 遮罩, 闭合强度):
+        import scipy.ndimage as ndimage
+        
+        # 转换张量为numpy [Batch, H, W]
+        mask_np = 遮罩.cpu().numpy()
+        
+        # 检查维度，确保是 [Batch, H, W]
+        if len(mask_np.shape) == 2:
+            mask_np = mask_np[None, ...]
+            is_single = True
+        else:
+            is_single = False
+            
+        out_list = []
+        
+        for i in range(mask_np.shape[0]):
+            curr_mask = mask_np[i]
+            
+            # 1. 预处理：形态学闭合 (Closing)
+            # 作用：先膨胀再腐蚀，用于连接微小的断开缺口
+            if 闭合强度 > 0:
+                # 创建一个圆形的结构元素，比方形效果更圆润
+                y, x = np.ogrid[-闭合强度:闭合强度+1, -闭合强度:闭合强度+1]
+                structure = x*x + y*y <= 闭合强度*闭合强度
+                # 执行闭合操作
+                curr_mask = ndimage.binary_closing(curr_mask > 0.5, structure=structure).astype(np.float32)
+            
+            # 2. 核心：填充所有内部孔洞
+            # 只要是内部被白色包围的黑色区域，都会被填满
+            filled_mask = ndimage.binary_fill_holes(curr_mask > 0.5).astype(np.float32)
+            
+            out_list.append(torch.from_numpy(filled_mask))
+            
+        # 合并回张量
+        result = torch.stack(out_list)
+        
+        return (result.squeeze(0) if is_single else result,)
 
 #====================================================
+# 清理内存/显存节点
+#====================================================
 
+class ZML_MemoryCleaner:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "清理显存": ("BOOLEAN", {"default": True, "tooltip": "清理GPU显存"}),
+                "清理内存": ("BOOLEAN", {"default": False, "tooltip": "清理系统内存"}),
+            },
+            "optional": {
+                "任意数据": (ANY, {"forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = (ANY,)
+    RETURN_NAMES = ("输出",)
+    FUNCTION = "clean_memory"
+    CATEGORY = "image/ZML_图像/工具"
+
+    def clean_memory(self, 清理显存, 清理内存, 任意数据=None):
+        import gc
+        import comfy.model_management
+        
+        if 清理显存:
+            # 全面清理显存：卸载模型 + 垃圾回收 + 清空CUDA缓存
+            comfy.model_management.unload_all_models()
+            gc.collect()
+            comfy.model_management.soft_empty_cache()
+            print("[ZML] 已清理显存 (卸载模型+GC+CUDA缓存)")
+        
+        if 清理内存:
+            try:
+                import ctypes
+                from ctypes import wintypes
+                import platform
+                
+                system = platform.system()
+                if system == "Windows":
+                    # 清理系统文件缓存
+                    try:
+                        ctypes.windll.kernel32.SetSystemFileCacheSize(-1, -1, 0)
+                    except:
+                        pass
+                    
+                    # 清理进程工作集
+                    try:
+                        for process in psutil.process_iter(['pid', 'name']):
+                            try:
+                                handle = ctypes.windll.kernel32.OpenProcess(
+                                    wintypes.DWORD(0x001F0FFF),
+                                    wintypes.BOOL(False),
+                                    wintypes.DWORD(process.info['pid'])
+                                )
+                                ctypes.windll.psapi.EmptyWorkingSet(handle)
+                                ctypes.windll.kernel32.CloseHandle(handle)
+                            except:
+                                continue
+                    except:
+                        pass
+                    
+                    # 清理未使用DLL
+                    try:
+                        ctypes.windll.kernel32.SetProcessWorkingSetSize(-1, -1, -1)
+                    except:
+                        pass
+                    
+                    print("[ZML] 已清理系统内存")
+                elif system == "Linux":
+                    # Linux内存清理
+                    try:
+                        # 释放glibc内存池
+                        libc = ctypes.CDLL("libc.so.6")
+                        libc.malloc_trim(0)
+                    except:
+                        pass
+                    
+                    # 尝试清理系统缓存（需要root权限）
+                    try:
+                        with open('/proc/sys/vm/drop_caches', 'w') as f:
+                            f.write('3')
+                    except:
+                        pass
+                    
+                    print("[ZML] 已清理系统内存 (Linux)")
+            except Exception as e:
+                print(f"[ZML] 清理内存失败: {str(e)}")
+        
+        return (任意数据,)
+
+# ========================== 小番茄混淆 ==========================
+sys.setrecursionlimit(2000000)
+
+def gilbert2d(width, height):
+    """生成2D长方形的 Gilbert 曲线坐标序列"""
+    coordinates = []
+
+    def generate2d(x, y, ax, ay, bx, by):
+        w = abs(ax + ay)
+        h = abs(bx + by)
+        dax, day = (1 if ax > 0 else -1 if ax < 0 else 0), (1 if ay > 0 else -1 if ay < 0 else 0)
+        dbx, dby = (1 if bx > 0 else -1 if bx < 0 else 0), (1 if by > 0 else -1 if by < 0 else 0)
+
+        if h == 1:
+            for i in range(w):
+                coordinates.append((x, y))
+                x, y = x + dax, y + day
+            return
+        if w == 1:
+            for i in range(h):
+                coordinates.append((x, y))
+                x, y = x + dbx, y + dby
+            return
+
+        ax2, ay2 = ax // 2, ay // 2
+        bx2, by2 = bx // 2, by // 2
+        w2, h2 = abs(ax2 + ay2), abs(bx2 + by2)
+
+        if 2 * w > 3 * h:
+            if (w2 % 2) and (w > 2):
+                ax2, ay2 = ax2 + dax, ay2 + day
+            generate2d(x, y, ax2, ay2, bx, by)
+            generate2d(x + ax2, y + ay2, ax - ax2, ay - ay2, bx, by)
+        else:
+            if (h2 % 2) and (h > 2):
+                bx2, by2 = bx2 + dbx, by2 + dby
+            generate2d(x, y, bx2, by2, ax2, ay2)
+            generate2d(x + bx2, y + by2, ax, ay, bx - bx2, by - by2)
+            generate2d(x + (ax - dax) + (bx2 - dbx), y + (ay - day) + (by2 - dby),
+                       -bx2, -by2, -(ax - ax2), -(ay - ay2))
+
+    if width >= height:
+        generate2d(0, 0, width, 0, 0, height)
+    else:
+        generate2d(0, 0, 0, height, width, 0)
+    return coordinates
+
+class ZML_TomatoObfuscation:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "optional": {
+                "加密": ("IMAGE", {"label": "要加密的图像"}),
+                "解密": ("IMAGE", {"label": "要解密的图像"}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "IMAGE")
+    RETURN_NAMES = ("加密", "解密")
+    FUNCTION = "process"
+    CATEGORY = "image/ZML_图像/工具"
+
+    def process(self, 加密=None, 解密=None):
+        encrypted_output = None
+        decrypted_output = None
+        
+        if 加密 is not None:
+            batch_size, height, width, channels = 加密.shape
+            out_tensors = []
+            coords = gilbert2d(width, height)
+            total_pixels = width * height
+            offset = int(round((math.sqrt(5) - 1) / 2 * total_pixels))
+            curve_indices = np.array([y * width + x for x, y in coords], dtype=np.int32)
+            
+            for b in range(batch_size):
+                img_np = (加密[b].cpu().numpy() * 255).astype(np.uint8)
+                flat_pixels = img_np.reshape(-1, channels)
+                result_pixels = np.zeros_like(flat_pixels)
+                target_indices = curve_indices[(np.arange(total_pixels) + offset) % total_pixels]
+                result_pixels[target_indices] = flat_pixels[curve_indices]
+                out_img = result_pixels.reshape(height, width, channels).astype(np.float32) / 255.0
+                out_tensors.append(torch.from_numpy(out_img))
+            
+            encrypted_output = torch.stack(out_tensors)
+        
+        if 解密 is not None:
+            batch_size, height, width, channels = 解密.shape
+            out_tensors = []
+            coords = gilbert2d(width, height)
+            total_pixels = width * height
+            offset = int(round((math.sqrt(5) - 1) / 2 * total_pixels))
+            curve_indices = np.array([y * width + x for x, y in coords], dtype=np.int32)
+            
+            for b in range(batch_size):
+                img_np = (解密[b].cpu().numpy() * 255).astype(np.uint8)
+                flat_pixels = img_np.reshape(-1, channels)
+                result_pixels = np.zeros_like(flat_pixels)
+                source_indices = curve_indices[(np.arange(total_pixels) + offset) % total_pixels]
+                result_pixels[curve_indices] = flat_pixels[source_indices]
+                out_img = result_pixels.reshape(height, width, channels).astype(np.float32) / 255.0
+                out_tensors.append(torch.from_numpy(out_img))
+            
+            decrypted_output = torch.stack(out_tensors)
+        
+        if encrypted_output is None:
+            encrypted_output = torch.zeros((1, 1, 1, 3))
+        if decrypted_output is None:
+            decrypted_output = torch.zeros((1, 1, 1, 3))
+            
+        return (encrypted_output, decrypted_output)
+
+#====================================================
 NODE_CLASS_MAPPINGS = {
     "ZML_ImageTransition": ZML_ImageTransition,
     "ZML_ImageEncryption": ZML_ImageEncryption,
     "ZML_BooleanSwitch": ZML_BooleanSwitch,
     "ZML_MaskStroke": ZML_MaskStroke,
+    "ZML_MaskFillHoles": ZML_MaskFillHoles, 
     "ZML_PreviewImage": ZML_PreviewImage,
     "ZML_ImageMemory": ZML_ImageMemory,
     "ZML_PromptTokenBalancer": ZML_PromptTokenBalancer,
     "ZML_ImageBatchToInt": ZML_ImageBatchToInt,
-    "ZML_ImageCrop": ZML_ImageCrop, 
+    "ZML_ImageCrop": ZML_ImageCrop,
+    "ZML_ImageGridSplit": ZML_ImageGridSplit,
     "ZML_List_To_Batch": ZML_List_To_Batch,
+    "ZML_Batch_To_List": ZML_Batch_To_List,
     "ZML_Get_Item_From_List": ZML_Get_Item_From_List,
-    "ZML_ImageBase64Converter": ZML_ImageBase64Converter
+    "ZML_ImageBase64Converter": ZML_ImageBase64Converter,
+    "ZML_MemoryCleaner": ZML_MemoryCleaner,
+    "ZML_TomatoObfuscation": ZML_TomatoObfuscation
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1199,12 +1642,17 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ZML_ImageEncryption": "ZML_图像加密",
     "ZML_BooleanSwitch": "ZML_布尔开关",
     "ZML_MaskStroke": "ZML_遮罩描边",
+    "ZML_MaskFillHoles": "ZML_遮罩闭合填充", 
     "ZML_PreviewImage": "ZML_预览图像",
     "ZML_ImageMemory": "ZML_桥接预览图像",
     "ZML_PromptTokenBalancer": "ZML_提示词token统一",
     "ZML_ImageBatchToInt": "ZML_批次到整数",
     "ZML_ImageCrop": "ZML_图像裁剪",
+    "ZML_ImageGridSplit": "ZML_图像拆分宫格",
     "ZML_List_To_Batch": "ZML_列表转批次",
+    "ZML_Batch_To_List": "ZML_批次转列表",
     "ZML_Get_Item_From_List": "ZML_获取列表项",
-    "ZML_ImageBase64Converter": "ZML_图像Base64互转"
+    "ZML_ImageBase64Converter": "ZML_图像Base64互转",
+    "ZML_MemoryCleaner": "ZML_清理内存显存",
+    "ZML_TomatoObfuscation": "ZML_小番茄混淆"
 }

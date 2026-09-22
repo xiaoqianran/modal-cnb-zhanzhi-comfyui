@@ -9,12 +9,45 @@ import torch
 
 from ..lib.image_prep import ensure_minimax_canvas
 from .core_sampling import sample_single_stage
-from .refine_pack import refine_seed_for, refine_steps_for
+from .refine_pack import (
+    DEFAULT_UPSCALE_MEGAPIXELS,
+    canvas_from_source_megapixels,
+    latent_upscale_model_name,
+    refine_model_for,
+    refine_needs_canvas,
+    refine_passes_for,
+    refine_seed_for,
+    refine_sigmas_override,
+    refine_uses_h3_latent,
+)
 
 log = logging.getLogger("ComfyUI-MiniMaxH3-Director.director.refine")
 
 PhaseCallback = Callable[[str, float], None]
 StepPreviewCallback = Callable[[int, int, Any], None]
+RefinePassCallback = Callable[[int, int, dict], None]
+
+
+def _make_upscale_pbar(total: int):
+    try:
+        import comfy.utils
+
+        if getattr(comfy.utils, "PROGRESS_BAR_ENABLED", True):
+            return comfy.utils.ProgressBar(max(1, int(total)))
+    except Exception:
+        pass
+    return None
+
+
+def _report_upscale_frames(done: int, total: int, *, on_phase=None, pbar=None) -> None:
+    total = max(1, int(total))
+    done = max(0, min(int(done), total))
+    if pbar is not None:
+        pbar.update_absolute(done)
+    if on_phase is not None and (done == 0 or done == total or done % 4 == 0):
+        on_phase("upscale", done / total)
+    if done == 0 or done == total or done % 8 == 0:
+        log.info("upscale %d/%d (%.0f%%)", done, total, 100.0 * done / total)
 
 
 def _unpack(out):
@@ -99,7 +132,14 @@ def _scale_images(images: torch.Tensor, width: int, height: int) -> torch.Tensor
     ).movedim(1, -1)
 
 
-def _upscale_with_rtx_vsr(images: torch.Tensor, width: int, height: int) -> torch.Tensor:
+def _upscale_with_rtx_vsr(
+    images: torch.Tensor,
+    width: int,
+    height: int,
+    *,
+    on_phase=None,
+    pbar=None,
+) -> torch.Tensor:
     """NVIDIA RTX Video Super Resolution to an explicit canvas (same idea as KJNodes)."""
     try:
         import nvvfx
@@ -122,9 +162,11 @@ def _upscale_with_rtx_vsr(images: torch.Tensor, width: int, height: int) -> torc
         if frames_chw.device.type != "cuda":
             frames_chw = frames_chw.cuda()
         upscaled = []
-        for i in range(int(frames_chw.shape[0])):
+        n = int(frames_chw.shape[0])
+        for i in range(n):
             dlpack_out = nvvfx_sr.run(frames_chw[i]).image
             upscaled.append(torch.from_dlpack(dlpack_out).clone())
+            _report_upscale_frames(i + 1, n, on_phase=on_phase, pbar=pbar)
         return torch.stack(upscaled, dim=0).movedim(1, -1)
     finally:
         try:
@@ -133,17 +175,86 @@ def _upscale_with_rtx_vsr(images: torch.Tensor, width: int, height: int) -> torc
             pass
 
 
-def _upscale_with_model(upscale_model, images: torch.Tensor, chunk: int = 4) -> torch.Tensor:
-    from comfy_extras.nodes_upscale_model import ImageUpscaleWithModel
+def _upscale_with_model(
+    upscale_model,
+    images: torch.Tensor,
+    *,
+    width: int,
+    height: int,
+    chunk: int = 1,
+    on_phase=None,
+    pbar=None,
+) -> torch.Tensor:
+    """Load the pixel upscaler once, then snap each chunk to the target canvas.
+
+    Calling ImageUpscaleWithModel per chunk re-runs load_models_gpu and floods
+    the log with ``Requested to load RRDBNet`` / dynamic-VRAM prepare lines.
+    4× output is downscaled immediately so a 10s clip never sits at 4K.
+    """
+    import comfy.model_management as model_management
+    import comfy.utils
 
     n = int(images.shape[0])
+    step = max(1, int(chunk))
+    device = upscale_model.patcher.load_device
+    scale = float(max(getattr(upscale_model, "scale", 1.0) or 1.0, 1.0))
+    sample = images[: min(step, n)]
+    # Official ImageUpscaleWithModel asks for ~4–5GB and evicts H3, which then
+    # re-prepares RRDBNet every chunk. Ask only for the upscaler + one tile.
+    memory_required = (
+        128 * 1024 * 1024
+        + int(sample.nelement() * sample.element_size())
+    )
+    model_management.load_models_gpu(
+        [upscale_model.patcher],
+        memory_required=memory_required,
+        force_full_load=True,
+    )
+    log.info(
+        "upscale model: %d frame(s) → %d×%d, chunk=%d (loaded once)",
+        n,
+        int(width),
+        int(height),
+        step,
+    )
+
+    output_device = model_management.intermediate_device()
+    overlap = 32
     parts = []
-    node = ImageUpscaleWithModel()
-    for i in range(0, n, max(1, chunk)):
-        batch = images[i : i + chunk]
-        out = node.upscale(upscale_model, batch)
-        frame = _unpack(out)[0]
-        parts.append(frame)
+    for i in range(0, n, step):
+        batch = images[i : i + step]
+        in_img = batch.movedim(-1, -3).to(device)
+        oom = True
+        tile = 512
+        while oom:
+            try:
+                s = comfy.utils.tiled_scale(
+                    in_img,
+                    lambda a: upscale_model(a.float()),
+                    tile_x=tile,
+                    tile_y=tile,
+                    overlap=overlap,
+                    upscale_amount=scale,
+                    pbar=None,
+                    output_device=output_device,
+                )
+                oom = False
+            except Exception as exc:
+                model_management.raise_non_oom(exc)
+                tile //= 2
+                if tile < 128:
+                    raise
+        frame = torch.clamp(s.movedim(-3, -1), min=0, max=1.0)
+        try:
+            frame = frame.to(model_management.intermediate_dtype())
+        except Exception:
+            pass
+        fh, fw = int(frame.shape[1]), int(frame.shape[2])
+        if fw != int(width) or fh != int(height):
+            frame = _scale_images(frame, int(width), int(height))
+        parts.append(frame.cpu())
+        del in_img, s, frame
+        _report_upscale_frames(min(i + int(batch.shape[0]), n), n, on_phase=on_phase, pbar=pbar)
     return torch.cat(parts, dim=0)
 
 
@@ -154,26 +265,160 @@ def upscale_image_batch(
     height: int,
     upscale_model=None,
     upscale_method: str = "lanczos",
+    on_phase=None,
 ) -> torch.Tensor:
     width, height = ensure_minimax_canvas(width, height)
     method = str(upscale_method or "lanczos").strip().lower()
+    n = int(images.shape[0])
+    pbar = _make_upscale_pbar(n)
+    _report_upscale_frames(0, n, on_phase=on_phase, pbar=pbar)
     work = images
     if method == "nvidia_rtx_vsr":
         try:
-            work = _upscale_with_rtx_vsr(images, width, height)
+            work = _upscale_with_rtx_vsr(
+                images, width, height, on_phase=on_phase, pbar=pbar,
+            )
         except Exception as exc:
             log.warning("nvidia_rtx_vsr failed (%s); falling back to interpolate.", exc)
             work = images
     elif upscale_model is not None:
         try:
-            work = _upscale_with_model(upscale_model, images)
+            work = _upscale_with_model(
+                upscale_model,
+                images,
+                width=width,
+                height=height,
+                on_phase=on_phase,
+                pbar=pbar,
+            )
         except Exception as exc:
             log.warning("Upscale model failed (%s); falling back to interpolate.", exc)
             work = images
     h, w = int(work.shape[1]), int(work.shape[2])
     if w != width or h != height:
         work = _scale_images(work, width, height)
+    _report_upscale_frames(n, n, on_phase=on_phase, pbar=pbar)
     return work
+
+
+def _source_canvas(plan, first_pass_images: torch.Tensor | None) -> tuple[int, int]:
+    if first_pass_images is not None and getattr(first_pass_images, "ndim", 0) >= 3:
+        return int(first_pass_images.shape[2]), int(first_pass_images.shape[1])
+    return (
+        max(int(getattr(plan, "width", 1280) or 1280), 32),
+        max(int(getattr(plan, "height", 720) or 720), 32),
+    )
+
+
+def _resolve_refine_canvas(plan, pack: dict) -> tuple[int, int]:
+    src_w = max(int(getattr(plan, "width", 0) or 0), 32)
+    src_h = max(int(getattr(plan, "height", 0) or 0), 32)
+    return canvas_from_source_megapixels(
+        src_w,
+        src_h,
+        pack.get("megapixels") or DEFAULT_UPSCALE_MEGAPIXELS,
+    )
+
+
+def _apply_h3_latent_upscale(
+    work: dict,
+    pack: dict,
+    *,
+    plan,
+    tw: int,
+    th: int,
+    first_pass_images: torch.Tensor | None,
+    pin_frames: int,
+    task_key: str,
+    vae,
+    refine_positive,
+    on_phase=None,
+    prev_refine_av=None,
+    prev_end_frame: int | None = None,
+) -> tuple[dict, Any, list[str]]:
+    from .h3_latent_upscale import upscale_h3_video_latent
+
+    src_w, src_h = _source_canvas(plan, first_pass_images)
+    if on_phase:
+        on_phase("upscale", 0)
+    video_latent, audio_latent = _split_av(work)
+    model_name = latent_upscale_model_name(pack)
+    latent_mod = pack.get("latent_upscale_module")
+    log.info(
+        "Director H3 latent upscale: %s %d×%d → %d×%d",
+        model_name or ("(wired)" if latent_mod is not None else "(missing)"),
+        src_w,
+        src_h,
+        tw,
+        th,
+    )
+    encoded = upscale_h3_video_latent(
+        video_latent,
+        target_width=tw,
+        target_height=th,
+        source_width=src_w,
+        source_height=src_h,
+        model_name=model_name,
+        model=latent_mod,
+        enable_latent_chunking=bool(pack.get("enable_latent_chunking", False)),
+    )
+    if isinstance(encoded, dict):
+        encoded.pop("noise_mask", None)
+    if isinstance(audio_latent, dict):
+        audio_latent = dict(audio_latent)
+        audio_latent.pop("noise_mask", None)
+    work = _join_av(encoded, audio_latent, work)
+    notes = [f"{tw}×{th}", "h3_latent"]
+    if pin_frames > 0:
+        try:
+            prefix = None
+            if first_pass_images is not None:
+                prefix = first_pass_images[:pin_frames]
+                ph, pw = int(prefix.shape[1]), int(prefix.shape[2])
+                if pw != tw or ph != th:
+                    prefix = _scale_images(prefix, tw, th)
+            refine_positive, pinned, work = _repin_after_upscale(
+                refine_positive,
+                work,
+                vae=vae,
+                prefix_frames=prefix,
+                trim_frames=pin_frames,
+                task_key=task_key,
+                prev_refine_av=prev_refine_av,
+                prev_end_frame=prev_end_frame,
+            )
+            if pinned:
+                notes.append(f"re-pin {pin_frames}f")
+        except Exception as exc:
+            # Stale first-pass Guide keyframes are the old canvas — sampling
+            # the upscaled latent with them crashes (and the fallback looks soft).
+            log.warning(
+                "H3 latent upscale re-pin failed (%s); retrying keyframes only.",
+                exc,
+            )
+            try:
+                from .h3_motion_context import apply_motion_context
+
+                refine_positive, _, _ = apply_motion_context(
+                    refine_positive,
+                    work,
+                    vae=vae,
+                    context_length=pin_frames,
+                    context_latent=prev_refine_av,
+                    context_end_frame=prev_end_frame,
+                    context_frames=prefix,
+                    continue_audio=False,
+                    keep_existing_keyframes=(task_key == "fl2v"),
+                )
+                notes.append(f"re-pin {pin_frames}f (keyframes)")
+            except Exception as retry_exc:
+                raise RuntimeError(
+                    f"H3 latent upscale re-pin failed ({exc}); "
+                    f"keyframe retry also failed ({retry_exc})"
+                ) from retry_exc
+    if on_phase:
+        on_phase("upscale", 1)
+    return work, refine_positive, notes
 
 
 def _repin_after_upscale(
@@ -181,26 +426,135 @@ def _repin_after_upscale(
     latent: dict,
     *,
     vae,
-    prefix_frames: torch.Tensor,
     trim_frames: int,
     task_key: str,
+    prefix_frames: torch.Tensor | None = None,
+    prev_refine_av=None,
+    prev_end_frame: int | None = None,
 ):
-    """Rebuild motion-context keyframes at the new canvas. Does not touch first-pass."""
-    from .h3_motion_context import apply_motion_context
+    """Rebuild motion-context keyframes at the new canvas. Does not touch first-pass.
 
-    n = min(int(trim_frames), int(prefix_frames.shape[0]))
+    Prefer the previous segment's refined AV tail when canvases match: paste that
+    tail into the current latent head and re-pin keyframes so the second sample
+    locks to the look that will actually be concatenated.
+    Else slice this clip's upscaled head. Last resort: encode prefix frames.
+    """
+    from .h3_motion_context import (
+        apply_motion_context,
+        av_pixel_size,
+        copy_av_tail_into_prefix,
+        slice_av_prefix,
+    )
+
+    n = max(0, int(trim_frames or 0))
     if n < 1:
-        return positive, False
-    new_positive, _, _ = apply_motion_context(
-        positive,
-        latent,
+        return positive, False, latent
+    keep_fl2v = task_key == "fl2v"
+    target_sz = av_pixel_size(latent)
+    prev_sz = av_pixel_size(prev_refine_av)
+    work = latent
+    if target_sz is not None and prev_sz == target_sz:
+        log.info(
+            "Director refine: re-pin from previous refined tail %dx%d",
+            prev_sz[0],
+            prev_sz[1],
+        )
+        work = copy_av_tail_into_prefix(
+            latent, prev_refine_av, n, end_frame=prev_end_frame
+        )
+        try:
+            new_positive, _, _ = apply_motion_context(
+                positive,
+                work,
+                vae=vae,
+                context_length=n,
+                context_latent=prev_refine_av,
+                context_end_frame=prev_end_frame,
+                continue_audio=False,
+                keep_existing_keyframes=keep_fl2v,
+            )
+            return new_positive, True, work
+        except Exception as exc:
+            log.warning(
+                "Director refine: pasted prefix but keyframe pin failed (%s); "
+                "retrying pin on the upscaled latent.",
+                exc,
+            )
+            new_positive, _, _ = apply_motion_context(
+                positive,
+                latent,
+                vae=vae,
+                context_length=n,
+                context_latent=prev_refine_av,
+                context_end_frame=prev_end_frame,
+                continue_audio=False,
+                keep_existing_keyframes=keep_fl2v,
+            )
+            # Packed paste is unreadable — keep the NestedTensor upscale body.
+            return new_positive, True, latent
+    try:
+        prefix_latent = slice_av_prefix(latent, n)
+        new_positive, _, _ = apply_motion_context(
+            positive,
+            latent,
+            vae=vae,
+            context_length=n,
+            context_latent=prefix_latent,
+            continue_audio=False,
+            keep_existing_keyframes=keep_fl2v,
+        )
+        return new_positive, True, latent
+    except Exception as exc:
+        if prefix_frames is None or int(prefix_frames.shape[0]) < 1:
+            raise
+        log.warning(
+            "Director refine: latent-head re-pin failed (%s); encoding prefix frames.",
+            exc,
+        )
+        n_pix = min(n, int(prefix_frames.shape[0]))
+        new_positive, _, _ = apply_motion_context(
+            positive,
+            latent,
+            vae=vae,
+            context_length=n_pix,
+            context_frames=prefix_frames[:n_pix],
+            continue_audio=False,
+            keep_existing_keyframes=keep_fl2v,
+        )
+        return new_positive, True, latent
+
+
+def _relock_continue_refine(
+    work: dict,
+    *,
+    vae,
+    audio_vae=None,
+    pin_frames: int,
+    prev_refine_av=None,
+    prev_end_frame: int | None = None,
+    prev_tail: torch.Tensor | None = None,
+    seam_min: float = 0.10,
+) -> tuple[dict, bool]:
+    """Rewrite the continue prefix + mask onto refine latent. No Guide keyframes."""
+    from .h3_latent_continue import apply_latent_continue
+
+    n = max(0, int(pin_frames or 0))
+    if n < 1:
+        return work, False
+    if prev_refine_av is None and (prev_tail is None or int(getattr(prev_tail, "shape", [0])[0]) < 1):
+        return work, work.get("noise_mask") is not None
+    locked, _span, _trim = apply_latent_continue(
+        work,
+        prev_av=prev_refine_av,
+        prev_tail=prev_tail,
         vae=vae,
         context_length=n,
-        context_frames=prefix_frames[:n],
-        continue_audio=False,
-        keep_existing_keyframes=(task_key == "fl2v"),
+        context_end_frame=prev_end_frame,
+        pin_audio=False,
+        audio_vae=audio_vae,
+        seam_min_mask=seam_min,
     )
-    return new_positive, True
+    return locked, True
 
 
 def apply_segment_refine(
@@ -224,12 +578,20 @@ def apply_segment_refine(
     on_step_preview: StepPreviewCallback | None = None,
     first_pass_images: torch.Tensor | None = None,
     trim_frames: int = 0,
+    on_pass: RefinePassCallback | None = None,
+    prev_refine_av=None,
+    prev_end_frame: int | None = None,
+    prev_tail: torch.Tensor | None = None,
+    shift_cache=None,
 ) -> tuple[dict, str]:
     """Run optional refine/upscale second sample. Never raises — returns first-pass on failure.
 
     ``first_pass_images``: already-decoded first-pass frames (skips a second VAE
     decode in upscale mode). Includes motion-context prefix when continuity is on.
     ``trim_frames``: pinned prefix length from first pass (0 = no continuity).
+    ``passes``: sample this many times after first-pass. Upscale (if any) runs
+    once before pass 1; later passes are same-canvas refine only.
+    ``on_pass(pass_index, n_passes, latent)``: after each sample (1-based).
     First-pass sampling is unchanged — this only runs after it.
     """
     pack = getattr(plan, "refine", None)
@@ -239,99 +601,224 @@ def apply_segment_refine(
         return samples, "refine skipped (fl2v)"
 
     mode = pack.get("mode") or "refine"
-    denoise = float(pack.get("denoise") or 0.25)
-    r_steps = refine_steps_for(pack, first_steps)
-    r_seed = refine_seed_for(pack, seed)
-    note_parts = [f"{mode} denoise={denoise:.2f} steps={r_steps}"]
+    n_passes = refine_passes_for(pack)
+    refine_model = refine_model_for(pack, model)
+    note_parts = [mode]
+    if mode != "latent_upscale":
+        if n_passes > 1:
+            note_parts.append(f"passes={n_passes}")
+        if refine_model is not model:
+            note_parts.append("custom model")
     pin_frames = max(0, int(trim_frames or 0))
     task_key = str(getattr(seg, "task_key", "") or "")
+    from .segment_continuity import is_continue_mode
+
+    continue_mode = is_continue_mode(plan)
+    # Continue must not stack official Guide keyframes. Keep pin_frames so the
+    # copied tail can be rewritten + remasked; do not strip the lock.
+    guide_pin = 0 if continue_mode else pin_frames
 
     # Same-size refine keeps any first-pass mask so a continuity lock still holds.
     # No continuity → drop stray masks so refine can touch the whole clip.
     work = dict(samples) if pin_frames > 0 else _latent_without_mask(samples)
     refine_positive = positive
+    last_ok = samples
     try:
-        if mode == "upscale":
-            tw = int(pack.get("target_width") or 0)
-            th = int(pack.get("target_height") or 0)
-            if tw <= 0 or th <= 0:
-                tw, th = ensure_minimax_canvas(
-                    max(int(getattr(plan, "width", 1280) or 1280), 32),
-                    max(int(getattr(plan, "height", 720) or 720), 32),
+        if refine_needs_canvas(pack):
+            tw, th = _resolve_refine_canvas(plan, pack)
+            if refine_uses_h3_latent(pack):
+                work, refine_positive, extra = _apply_h3_latent_upscale(
+                    work,
+                    pack,
+                    plan=plan,
+                    tw=tw,
+                    th=th,
+                    first_pass_images=first_pass_images,
+                    pin_frames=guide_pin,
+                    task_key=task_key,
+                    vae=vae,
+                    refine_positive=refine_positive,
+                    on_phase=on_phase,
+                    prev_refine_av=prev_refine_av,
+                    prev_end_frame=prev_end_frame,
                 )
-            if on_phase:
-                on_phase("upscale", 0)
-            video_latent, audio_latent = _split_av(work)
-            if first_pass_images is not None:
-                frames = first_pass_images
+                note_parts.extend(extra)
+                last_ok = work
             else:
-                frames = _decode_video(vae, video_latent)
-            frames = upscale_image_batch(
-                frames,
-                width=tw,
-                height=th,
-                upscale_model=pack.get("upscale_model"),
-                upscale_method=pack.get("upscale_method") or "lanczos",
+                if on_phase:
+                    on_phase("upscale", 0)
+                video_latent, audio_latent = _split_av(work)
+                if first_pass_images is not None:
+                    frames = first_pass_images
+                else:
+                    frames = _decode_video(vae, video_latent)
+                method = pack.get("upscale_method") or "h3_latent"
+                pixel_model = pack.get("upscale_model")
+                if method == "nvidia_rtx_vsr":
+                    how = "nvidia_rtx_vsr"
+                elif pixel_model is not None:
+                    how = "upscale_model"
+                else:
+                    how = "lanczos"
+                log.info(
+                    "Director upscale: %d frames via %s → %d×%d",
+                    int(frames.shape[0]),
+                    how,
+                    tw,
+                    th,
+                )
+                frames = upscale_image_batch(
+                    frames,
+                    width=tw,
+                    height=th,
+                    upscale_model=pixel_model,
+                    upscale_method=method,
+                    on_phase=on_phase,
+                )
+                encoded = _encode_video(vae, frames)
+                work = _join_av(encoded, audio_latent, work)
+                if guide_pin > 0:
+                    try:
+                        refine_positive, pinned, work = _repin_after_upscale(
+                            refine_positive,
+                            work,
+                            vae=vae,
+                            prefix_frames=frames,
+                            trim_frames=guide_pin,
+                            task_key=task_key,
+                            prev_refine_av=prev_refine_av,
+                            prev_end_frame=prev_end_frame,
+                        )
+                        if pinned:
+                            note_parts.append(f"re-pin {guide_pin}f")
+                    except Exception as exc:
+                        log.warning(
+                            "Segment %s refine upscale re-pin failed (%s); "
+                            "second sample continues without a new pin.",
+                            int(getattr(seg, "index", 0)) + 1,
+                            exc,
+                        )
+                note_parts.append(f"{tw}×{th}")
+                note_parts.append(how)
+                if on_phase:
+                    on_phase("upscale", 1)
+                last_ok = work
+
+        continue_after_shift = None
+        if continue_mode and pin_frames > 0:
+            try:
+                work, locked = _relock_continue_refine(
+                    work,
+                    vae=vae,
+                    audio_vae=audio_vae,
+                    pin_frames=pin_frames,
+                    prev_refine_av=prev_refine_av,
+                    prev_end_frame=prev_end_frame,
+                    prev_tail=prev_tail,
+                    seam_min=float(getattr(plan, "continuity_redraw", 0.10)),
+                )
+                if locked:
+                    from .h3_latent_continue import install_continue_prefix_remask
+
+                    continue_after_shift = install_continue_prefix_remask
+                    note_parts.append(f"continue re-lock {pin_frames}f")
+                    last_ok = work
+            except Exception as exc:
+                log.warning(
+                    "Segment %s continue refine re-lock failed (%s); "
+                    "second sample continues without a prefix lock.",
+                    int(getattr(seg, "index", 0)) + 1,
+                    exc,
+                )
+
+        if mode == "latent_upscale":
+            if on_phase:
+                on_phase("refine", 1)
+            return work, "refine " + ", ".join(note_parts)
+
+        wired_sigmas = bool(pack.get("has_sigmas_tensor") or pack.get("sigmas_tensor") is not None)
+        sigma_list = refine_sigmas_override(pack)
+        if sigma_list is None:
+            raise ValueError(
+                "Refine 二采需要把 BasicScheduler 或 ManualSigmas 接到 sigmas 口。"
             )
-            encoded = _encode_video(vae, frames)
-            work = _join_av(encoded, audio_latent, work)
-            if pin_frames > 0:
+        sigma_sampler = str(pack.get("sampler") or "euler")
+        sigma_steps = max(1, len(sigma_list) - 1)
+        how = "sigmas wired" if wired_sigmas else f"sigma {sigma_sampler}"
+        note_parts.append(f"{how} {sigma_steps}-step")
+        note_parts.append(f"seed {refine_seed_for(pack, seed, 0)}")
+        if pack.get("enable_tiling"):
+            tile_count = max(1, min(8, int(pack.get("tile_count") or 2)))
+            overlap = max(0, int(pack.get("tile_overlap") or 128))
+            note_parts.append(f"spatial tiles {tile_count} overlap {overlap}px")
+        if refine_model is not model and sigma_steps <= 4:
+            log.warning(
+                "Refine sigma pass is short. "
+                "A custom refine_model without Turbo can look like noise. "
+                "Unwire refine_model so the first-pass UNET (Turbo+Sage) is reused, "
+                "or use a matching second-pass UNET."
+            )
+        # Pass 1 samples after optional upscale; later passes are same-canvas refine only.
+        for i in range(n_passes):
+            refine_seed = refine_seed_for(pack, seed, pass_index=i)
+            log.info(
+                "Director refine pass %d/%d (%s %s %d-step%s, seed=%s)",
+                i + 1,
+                n_passes,
+                "sigmas wired" if wired_sigmas else "sigma",
+                sigma_sampler,
+                sigma_steps,
+                ", custom model" if refine_model is not model else "",
+                refine_seed,
+            )
+            if on_phase:
+                on_phase("refine", (i + 0.5) / n_passes)
+            work = sample_single_stage(
+                model=refine_model,
+                positive=refine_positive,
+                negative=negative,
+                latent=work,
+                seed=refine_seed,
+                cfg=cfg,
+                steps=sigma_steps,
+                sampler_name=sigma_sampler,
+                scheduler=scheduler,
+                shift_video=shift_video,
+                shift_audio=shift_audio,
+                denoise=1.0,
+                on_phase=None,
+                on_step_preview=on_step_preview,
+                preview_every=-1,
+                phase_name="refine",
+                sigmas=sigma_list,
+                apply_shift=True,
+                after_shift=continue_after_shift,
+                enable_tiling=bool(pack.get("enable_tiling", False)),
+                tile_count=int(pack.get("tile_count") or 2),
+                tile_overlap=int(pack.get("tile_overlap") or 128),
+                shift_cache=shift_cache,
+            )
+            last_ok = work
+            if on_pass is not None:
                 try:
-                    refine_positive, pinned = _repin_after_upscale(
-                        refine_positive,
-                        work,
-                        vae=vae,
-                        prefix_frames=frames,
-                        trim_frames=pin_frames,
-                        task_key=task_key,
-                    )
-                    if pinned:
-                        note_parts.append(f"re-pin {pin_frames}f")
+                    on_pass(i + 1, n_passes, work)
                 except Exception as exc:
                     log.warning(
-                        "Segment %s refine upscale re-pin failed (%s); "
-                        "second sample continues without a new pin.",
+                        "Segment %s refine pass %d hook failed (%s).",
                         int(getattr(seg, "index", 0)) + 1,
+                        i + 1,
                         exc,
                     )
-            note_parts.append(f"{tw}×{th}")
-            method = pack.get("upscale_method") or "lanczos"
-            if method == "nvidia_rtx_vsr":
-                note_parts.append("nvidia_rtx_vsr")
-            elif pack.get("has_upscale_model"):
-                note_parts.append("upscale_model")
-            else:
-                note_parts.append("lanczos")
-            if on_phase:
-                on_phase("upscale", 1)
-
-        if on_phase:
-            on_phase("refine", 0)
-        work = sample_single_stage(
-            model=model,
-            positive=refine_positive,
-            negative=negative,
-            latent=work,
-            seed=r_seed,
-            cfg=cfg,
-            steps=r_steps,
-            sampler_name=sampler_name,
-            scheduler=scheduler,
-            shift_video=shift_video,
-            shift_audio=shift_audio,
-            denoise=denoise,
-            on_phase=None,
-            on_step_preview=on_step_preview,
-            preview_every=1,
-            phase_name="refine",
-        )
         if on_phase:
             on_phase("refine", 1)
         return work, "refine " + ", ".join(note_parts)
     except Exception as exc:
         log.warning(
-            "Segment %s refine failed (%s); keeping first-pass latent.",
+            "Segment %s refine failed (%s); keeping %s.",
             int(getattr(seg, "index", 0)) + 1,
             exc,
+            "last successful pass" if last_ok is not samples else "first-pass latent",
         )
+        if last_ok is not samples:
+            return last_ok, f"refine FAILED ({exc}); kept last good pass"
         return samples, f"refine FAILED ({exc}); used first pass"

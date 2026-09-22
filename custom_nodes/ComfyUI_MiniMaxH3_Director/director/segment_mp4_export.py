@@ -4,13 +4,17 @@ Best-effort: encode failures must never abort generation. Each run uses a
 timestamp folder: ``output/minimax_seg_export/<YYYYMMDD_HHMMSS>/``.
 
 Files:
-  ``seg_XXXX.mp4`` — final clip (二采 / no Refine)
+  ``seg_XXXX.mp4`` — final clip (last refine pass / no Refine; FaceRefine stitch if wired)
   ``seg_XXXX_pre.mp4`` — first pass (一采), only when Refine ran
+  ``seg_XXXX_pN.mp4`` — refine pass N (分段导出且次数>1)
+  ``seg_XXXX_facepre.mp4`` — before FaceRefine stitch, only when「输出修脸前」is on
 """
 
 from __future__ import annotations
 
 import logging
+import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -53,9 +57,34 @@ def new_segment_mp4_run_dir(plan: DirectorPlan) -> Path | None:
         return None
 
 
+def _safe_mp4_suffix(suffix: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9]", "", str(suffix or ""))
+
+
 def segment_mp4_path(run_dir: Path, seg: SegmentPlan, *, suffix: str = "") -> Path:
-    tag = f"_{suffix}" if suffix else ""
+    tag = f"_{_safe_mp4_suffix(suffix)}" if _safe_mp4_suffix(suffix) else ""
     return Path(run_dir) / f"seg_{int(seg.index):04d}{tag}.mp4"
+
+
+def mp4_export_kind(path: str | None) -> str:
+    name = Path(str(path or "")).name
+    if name.endswith("_facepre.mp4"):
+        return "修脸前 mp4"
+    if name.endswith("_pre.mp4"):
+        return "一采 mp4"
+    m = re.search(r"_p(\d+)\.mp4$", name)
+    if m:
+        return f"第{m.group(1)}轮精修 mp4"
+    return "mp4"
+
+
+def _suffix_log_label(suffix: str) -> str:
+    tag = str(suffix or "")
+    if tag == "pre":
+        return "first-pass "
+    if tag == "facepre":
+        return "pre-face "
+    return ""
 
 
 def _pre_frames_distinct(pre_frames, frames) -> bool:
@@ -80,6 +109,8 @@ def maybe_export_segment_mp4(
     """Write one segment mp4 into ``run_dir``. Never raises.
 
     ``suffix="pre"`` writes the first-pass clip (``seg_XXXX_pre.mp4``).
+    ``suffix="facepre"`` writes the clip before FaceRefine stitch.
+    ``suffix="p2"`` writes refine pass 2 (``seg_XXXX_p2.mp4``).
 
     Returns the absolute path string on success, otherwise None.
     """
@@ -111,7 +142,7 @@ def maybe_export_segment_mp4(
         log.info(
             "MiniMax H3 Director segment #%d %smp4 saved: %s",
             int(seg.index) + 1,
-            "first-pass " if suffix == "pre" else "",
+            _suffix_log_label(suffix),
             path,
         )
         return str(path)
@@ -119,7 +150,7 @@ def maybe_export_segment_mp4(
         log.warning(
             "Segment #%d %smp4 export failed (generation continues): %s",
             int(seg.index) + 1,
-            "first-pass " if suffix == "pre" else "",
+            _suffix_log_label(suffix),
             exc,
         )
         return None
@@ -133,8 +164,9 @@ def maybe_export_segment_mp4s(
     audio_dict: dict[str, Any] | None = None,
     *,
     pre_frames: torch.Tensor | None = None,
+    pre_face_frames: torch.Tensor | None = None,
 ) -> list[str]:
-    """Write final clip, plus first-pass when Refine produced a distinct tensor."""
+    """Write final clip, plus first-pass / pre-face when those tensors differ."""
     paths: list[str] = []
     final_path = maybe_export_segment_mp4(
         run_dir, plan, seg, frames, audio_dict,
@@ -147,4 +179,73 @@ def maybe_export_segment_mp4s(
         )
         if pre_path:
             paths.append(pre_path)
+    if _pre_frames_distinct(pre_face_frames, frames):
+        face_path = maybe_export_segment_mp4(
+            run_dir, plan, seg, pre_face_frames, audio_dict, suffix="facepre",
+        )
+        if face_path:
+            paths.append(face_path)
     return paths
+
+
+def copy_segment_mp4_suffix(
+    run_dir: Path | None,
+    plan: DirectorPlan,
+    seg: SegmentPlan,
+    *,
+    dest_suffix: str,
+) -> str | None:
+    """Copy ``seg_XXXX.mp4`` to ``seg_XXXX_<suffix>.mp4``. Never raises."""
+    if run_dir is None or getattr(plan, "export_mode", "all") != "segments":
+        return None
+    tag = _safe_mp4_suffix(dest_suffix)
+    if not tag:
+        return None
+    src = segment_mp4_path(run_dir, seg)
+    dest = segment_mp4_path(run_dir, seg, suffix=tag)
+    try:
+        if not src.is_file():
+            return None
+        shutil.copy2(src, dest)
+        log.info(
+            "MiniMax H3 Director segment #%d copied %s → %s",
+            int(seg.index) + 1,
+            src.name,
+            dest.name,
+        )
+        return str(dest)
+    except Exception as exc:
+        log.warning(
+            "Segment #%d copy to %s failed: %s",
+            int(seg.index) + 1,
+            dest.name,
+            exc,
+        )
+        return None
+
+
+def is_released_poster(tensor, expected_frames: int) -> bool:
+    """True when IMAGE slot was replaced by a 1-frame stand-in after mp4 flush."""
+    if not isinstance(tensor, torch.Tensor) or tensor.ndim != 4:
+        return False
+    expected = int(expected_frames or 0)
+    got = int(tensor.shape[0])
+    return expected > 1 and got < expected
+
+
+def released_output_slots(segment_outputs: list, frame_counts: list[int] | None) -> list[int]:
+    """Indexes whose IMAGE slot is a poster; full clip is already on disk."""
+    counts = frame_counts or []
+    out: list[int] = []
+    for pos, tensor in enumerate(segment_outputs):
+        expected = int(counts[pos]) if pos < len(counts) else 0
+        if is_released_poster(tensor, expected):
+            out.append(pos)
+            continue
+        if not isinstance(tensor, torch.Tensor) or tensor.ndim != 4:
+            out.append(pos)
+            continue
+        # 1x1 / odd-tiny leftovers encode to H.264 that Movies & TV rejects (0x80004005).
+        if int(tensor.shape[1]) < 2 or int(tensor.shape[2]) < 2:
+            out.append(pos)
+    return out

@@ -14,7 +14,13 @@ from .gemma_api_conditioning import GemmaAPITextEncode
 from .gemma_encoder import LTXVGemmaCLIPModelLoader, LTXVGemmaEnhancePrompt
 from .guide import LTXVAddGuideAdvanced, LTXVAddGuideAdvancedAttention
 from .guiders import GuiderParametersNode, MultimodalGuiderNode
-from .hdr import LTXVHDRDecodePostprocess
+from .hdr_nodes import (
+    LTXVHDRDecodePostprocess,
+    LTXVLoadEXRSequence,
+    LTXVSaveHLG,
+    LTXVSDRToHDRWorkingSpace,
+    LTXVVAEForceFloat32,
+)
 from .iclora import (
     LTXAddVideoICLoRAGuide,
     LTXAddVideoICLoRAGuideAdvanced,
@@ -28,7 +34,6 @@ from .latent_norm import (
     LTXVStatNormLatent,
 )
 from .latents import (
-    LTXVAddLatentGuide,
     LTXVImgToVideoConditionOnly,
     LTXVSelectLatents,
     LTXVSetVideoLatentNoiseMasks,
@@ -69,7 +74,6 @@ NODE_CLASS_MAPPINGS = {
     "LTXVLinearOverlapLatentTransition": LinearOverlapLatentTransition,
     "LTXVAddGuideAdvanced": LTXVAddGuideAdvanced,
     "LTXVAddGuideAdvancedAttention": LTXVAddGuideAdvancedAttention,
-    "LTXVAddLatentGuide": LTXVAddLatentGuide,
     "LTXVAdainLatent": LTXVAdainLatent,
     "LTXVImgToVideoConditionOnly": LTXVImgToVideoConditionOnly,
     "LTXVPerStepAdainPatcher": LTXVPerStepAdainPatcher,
@@ -118,6 +122,10 @@ NODE_CLASS_MAPPINGS = {
     "LTXVInpaintPreprocess": LTXVInpaintPreprocess,
     "LTXVLaplacianPyramidBlend": LTXVLaplacianPyramidBlend,
     "LTXVHDRDecodePostprocess": LTXVHDRDecodePostprocess,
+    "LTXVSDRToHDRWorkingSpace": LTXVSDRToHDRWorkingSpace,
+    "LTXVLoadEXRSequence": LTXVLoadEXRSequence,
+    "LTXVVAEForceFloat32": LTXVVAEForceFloat32,
+    "LTXVSaveHLG": LTXVSaveHLG,
     "LTXVAudioOnlyModel": LTXVAudioOnlyModel,
     "LTXVAudioOnlyEmptyVideoLatent": LTXVAudioOnlyEmptyVideoLatent,
 }

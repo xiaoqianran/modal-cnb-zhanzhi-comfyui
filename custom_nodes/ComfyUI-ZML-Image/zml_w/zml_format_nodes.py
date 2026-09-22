@@ -80,7 +80,10 @@ async def zml_select_text_v3_presets(request):
         item_id = input_data.get("id")
         new_name = input_data.get("new_name")
         new_content = input_data.get("new_content")
-        new_parent_id = input_data.get("new_parent_id") # For moving items
+        # For moving items. Older frontend code sent this as parent_id, while
+        # move operations use new_parent_id.
+        has_parent_update = "new_parent_id" in input_data or "parent_id" in input_data
+        new_parent_id = input_data.get("new_parent_id") if "new_parent_id" in input_data else input_data.get("parent_id")
         
         found_item = None
         for p in presets:
@@ -89,9 +92,11 @@ async def zml_select_text_v3_presets(request):
                 break
         
         if found_item:
+            target_parent_id = new_parent_id if has_parent_update else found_item.get("parent_id")
+
             # Check for duplicate name if name is changed and new name already exists (case-insensitive)
             if new_name and new_name.lower() != found_item['name'].lower():
-                if any(p['name'].lower() == new_name.lower() and p['id'] != item_id and p.get('parent_id') == found_item.get('parent_id') for p in presets):
+                if any(p['name'].lower() == new_name.lower() and p['id'] != item_id and p.get('parent_id') == target_parent_id for p in presets):
                     response_data = {"success": False, "message": f"A {found_item['type']} with new name '{new_name}' already exists in this location."}
                     return web.json_response(response_data)
             
@@ -99,8 +104,8 @@ async def zml_select_text_v3_presets(request):
                 found_item["name"] = new_name
             if found_item["type"] == "text" and new_content is not None:
                 found_item["content"] = new_content
-            # Always update parent_id regardless of its value (including None for root directory)
-            found_item["parent_id"] = new_parent_id
+            if has_parent_update:
+                found_item["parent_id"] = new_parent_id
             
             _write_presets(presets)
             response_data = {"success": True, "message": f"{found_item['type'].capitalize()} updated successfully."}
@@ -1778,6 +1783,39 @@ class ZML_MergeToList:
         return (collected_list,)
 
 
+# ============================== 替换提示词节点 ==============================
+class ZML_ReplaceText:
+    """ZML 替换提示词节点：将模板文本中的关键词替换为指定内容。
+    功能：输入模板文本（包含替换标记），用替换内容替换标记后输出。
+    例如：模板"我是{{提示词}}"，替换内容"神"，输出"我是神"
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "模板文本": ("STRING", {"multiline": True, "default": "", "tooltip": "输入包含替换标记的模板文本，如：我是{{提示词}}"}),
+                "替换内容": ("STRING", {"multiline": True, "default": "", "tooltip": "输入要替换到模板中的内容"}),
+                "替换关键词": ("STRING", {"multiline": False, "default": "{{提示词}}", "tooltip": "设置要替换的关键词标记，默认值为 {{提示词}}"}),
+            }
+        }
+
+    CATEGORY = "image/ZML_图像/文本"
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("结果文本",)
+
+    FUNCTION = "replace_text"
+
+    def replace_text(self, 模板文本, 替换内容, 替换关键词):
+        # 执行替换操作
+        if 替换关键词:
+            result = 模板文本.replace(替换关键词, 替换内容)
+        else:
+            result = 模板文本
+        return (result,)
+
+
 # ============================== 复制到列表节点 ==============================
 class ZML_CopyToList:
     """
@@ -1832,6 +1870,7 @@ NODE_CLASS_MAPPINGS = {
     "ZML_MergeText": ZML_MergeText,
     "ZML_MergeToList": ZML_MergeToList,
     "ZML_CopyToList": ZML_CopyToList,
+    "ZML_ReplaceText": ZML_ReplaceText,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1853,4 +1892,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ZML_MergeText": "ZML_合并文本（动态）",
     "ZML_MergeToList": "ZML_合并到列表",
     "ZML_CopyToList": "ZML_复制到列表",
+    "ZML_ReplaceText": "ZML_替换提示词",
 }

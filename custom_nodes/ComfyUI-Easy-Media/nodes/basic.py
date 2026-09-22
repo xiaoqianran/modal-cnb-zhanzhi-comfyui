@@ -80,6 +80,7 @@ from ..utils.multitrack import (
     _resize_multitrack_video,
     _trim_track_audio,
     _video_stream_source,
+    multitrack_runtime_cache,
 )
 
 
@@ -199,6 +200,7 @@ resolution_combo_options = [
 TYPE_TIMELINE = io.Custom(io_type="TIMELINE")
 TYPE_TIMELINE_INFO = io.Custom(io_type="TIMELINE_INFO")
 TYPE_TRACK_DATA = io.Custom(io_type="TRACK_DATA")
+TYPE_IMAGE_DATA = io.Custom(io_type="IMAGE_DATA")
 TYPE_TRACKS_INFO = io.Custom(io_type="TRACKS_INFO")
 TYPE_LLAMACPP_MODEL = io.Custom(io_type="LLAMACPPMODEL")
 TYPE_LLAMACPP_MODEL_CONFIG = io.Custom(io_type="LLAMACPPMODEL_CONFIG")
@@ -1753,6 +1755,64 @@ class TimelineEditor(io.ComfyNode):
         return io.NodeOutput(timeline_info, images_out, audio_out)
 
 
+class MultiImagesLoader(io.ComfyNode):
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="easy multiImagesLoader",
+            display_name="Multi Images Loader",
+            category=CATEGORY_MEDIA,
+            description="Load up to 25 images and resize each using the selected resolution.",
+            inputs=[
+                io.DynamicCombo.Input("resolution", options=resolution_combo_options),
+                io.Int.Input(
+                    "max_limit",
+                    default=-1,
+                    max=25,
+                    min=-1,
+                    tooltip="Maximum number of images to output. -1 means no limit (output all loaded images).",
+                ),
+                TYPE_IMAGE_DATA.Input("image_data"),
+            ],
+            outputs=[io.Image.Output("IMAGES", is_output_list=True)],
+        )
+
+    @classmethod
+    def execute(
+        cls,
+        resolution: str | dict,
+        max_limit: int,
+        image_data: str | dict,
+    ) -> io.NodeOutput:
+        if isinstance(image_data, str):
+            try:
+                image_data = json.loads(image_data)
+            except json.JSONDecodeError as exc:
+                raise ValueError("IMAGE_DATA must be valid JSON.") from exc
+        if not isinstance(image_data, dict) or not isinstance(image_data.get("images"), list):
+            raise ValueError("IMAGE_DATA.images must be a list.")
+        images = image_data["images"]
+        if len(images) > 25:
+            raise ValueError("IMAGE_DATA supports at most 25 images.")
+        if max_limit >= 0 and len(images) > max_limit:
+            images = images[:max_limit]
+
+        resize_method = _configured_resize_method(resolution)
+        output: list[torch.Tensor] = []
+        for index, item in enumerate(images):
+            if not isinstance(item, dict):
+                raise ValueError(f"IMAGE_DATA image {index + 1} must be an object.")
+            if item.get("source_type") not in {"input", "output", "local", "url"}:
+                raise ValueError(f"IMAGE_DATA image {index + 1} has an unsupported source type.")
+            image = _resolve_timeline_image_item(item, None)
+            if image is None:
+                raise ValueError(f"Unable to load IMAGE_DATA image {index + 1}.")
+            source_dimensions = (int(image.shape[2]), int(image.shape[1]))
+            width, height = _resolve_configured_dimensions(resolution, "None", source_dimensions)
+            output.append(resize_image(image, width, height, resize_method))
+        return io.NodeOutput(output)
+
+
 class MultiTrackEditor(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -2740,6 +2800,7 @@ class MultiTrackTaskOutput(io.ComfyNode):
     ) -> io.NodeOutput:
         del previous
         raw_info = _unwrap_list_scalar(tracks_info, {})
+        runtime_cache = multitrack_runtime_cache(raw_info)
         info = _parse_track_data(raw_info)
         preloaded_media = info.get("_preloaded_media", {})
         if not isinstance(preloaded_media, dict):
@@ -2757,6 +2818,46 @@ class MultiTrackTaskOutput(io.ComfyNode):
         output_full_timeline = requested_index == -1
         index = max(0, requested_index)
         selected_prompt_format = str(_unwrap_list_scalar(prompt_format, "default"))
+        task_cache_key = (
+            "multitrack_task_output",
+            requested_index,
+            selected_prompt_format,
+        )
+        can_restore_runtime = (
+            isinstance(runtime_cache, dict)
+            and "_preloaded_media" in info
+            and not image_items
+            and not audio_items
+            and not video_items
+        )
+        cached_task_output = (
+            runtime_cache.get(task_cache_key)
+            if can_restore_runtime
+            else None
+        )
+        if isinstance(cached_task_output, io.NodeOutput):
+            cache_status = info.get("_easy_media_cache_status", {})
+            if isinstance(cache_status, dict):
+                cache_status["task_output"] = "命中恢复缓存"
+            log_node_info(
+                "MultiTrack Cache",
+                f"segment={requested_index} | "
+                f"项目媒体={cache_status.get('project_media', '未知')} | "
+                f"分段媒体={cache_status.get('segment_media', '未知')} | "
+                "TaskOutput=命中恢复缓存",
+            )
+            return cached_task_output
+        if "_preloaded_media" in info:
+            cache_status = info.get("_easy_media_cache_status", {})
+            if isinstance(cache_status, dict):
+                cache_status["task_output"] = "首次加载"
+            log_node_info(
+                "MultiTrack Cache",
+                f"segment={requested_index} | "
+                f"项目媒体={cache_status.get('project_media', '未知')} | "
+                f"分段媒体={cache_status.get('segment_media', '未知')} | "
+                "TaskOutput=首次加载",
+            )
 
         tracks = info.get("tracks", [])
         task_entries = _multitrack_task_entries(info)
@@ -3211,7 +3312,7 @@ class MultiTrackTaskOutput(io.ComfyNode):
         output_system_prompt = (
             "" if selected_prompt_format in {"default", "promptRelay"} else chat_system_prompt
         )
-        return io.NodeOutput(
+        output = io.NodeOutput(
             output_system_prompt,
             user_prompt,
             task_type,
@@ -3222,6 +3323,9 @@ class MultiTrackTaskOutput(io.ComfyNode):
             image_indexes,
             locked_audio,
         )
+        if can_restore_runtime:
+            runtime_cache[task_cache_key] = output
+        return output
 
 
 class MultiTrackPromptEnhancer(io.ComfyNode):

@@ -1,4 +1,4 @@
-﻿/** Shared helpers for MiniMax H3 Director generation tasks. */
+/** Shared helpers for MiniMax H3 Director generation tasks. */
 
 import { t } from "./minimax_i18n.js";
 
@@ -166,10 +166,11 @@ export function resolutionFromSelector(aspectRatio, megapixels, multiple = MINIM
 export const IMAGE_BATCH_TASKS = new Set();
 export const FL2V_TASKS = new Set(["fl2v"]);
 /** Blank-canvas / subject-ref batch generation (not source-video editing). */
-export const VIDEO_BATCH_TASKS = new Set(["t2v", "i2v", "r2v"]);
+export const VIDEO_BATCH_TASKS = new Set(["t2v", "i2v", "r2v", "mixed"]);
+export const MIXED_SEGMENT_TASKS = new Set(["t2v", "i2v", "fl2v", "r2v"]);
 export const PROMPT_BATCH_TASKS = new Set([...VIDEO_BATCH_TASKS, ...FL2V_TASKS]);
 /** Tasks that never use source-video upload toolbar. v2v/rv2v use Bernini-style video timeline. */
-export const NO_VIDEO_UPLOAD_TASKS = new Set(["t2v", "i2v", "r2v"]);
+export const NO_VIDEO_UPLOAD_TASKS = new Set(["t2v", "i2v", "r2v", "mixed"]);
 
 export function resolveTaskKey(taskTypeValue) {
     let value = String(taskTypeValue || "").split(",[object Object]", 1)[0].trim();
@@ -187,6 +188,23 @@ export function isGenTaskType(taskTypeValue) {
 
 export function isVideoBatchTask(taskKey) {
     return VIDEO_BATCH_TASKS.has(taskKey);
+}
+
+export function isMixedTask(taskKey) {
+    return resolveTaskKey(taskKey) === "mixed";
+}
+
+/** Per-segment task inside mixed mode. Empty / unknown → t2v (never "mixed"). */
+export function resolveSegmentTaskKey(segOrTask, globalTaskKey) {
+    const globalKey = resolveTaskKey(globalTaskKey);
+    const raw = (segOrTask && typeof segOrTask === "object")
+        ? (segOrTask.taskType || segOrTask.task_type || "")
+        : (segOrTask || "");
+    const segKey = resolveTaskKey(raw);
+    if (globalKey === "mixed") {
+        return MIXED_SEGMENT_TASKS.has(segKey) ? segKey : "t2v";
+    }
+    return segKey || globalKey || "t2v";
 }
 
 export function isImageBatchTask(taskKey) {
@@ -214,7 +232,7 @@ export function imageBatchVariant(taskKey) {
 
 /** t2i/r2i/t2v/r2v need fixed canvas; i2i/i2v may use long_edge. */
 export function imageBatchRequiresFixedOutput(taskKey) {
-    return taskKey === "t2i" || taskKey === "r2i" || taskKey === "t2v" || taskKey === "r2v";
+    return taskKey === "t2i" || taskKey === "r2i" || taskKey === "t2v" || taskKey === "r2v" || taskKey === "mixed";
 }
 
 /** Maximum frames per diffusion segment (model / VRAM practical limit). */
@@ -285,9 +303,9 @@ export function defaultDurationSec(taskKey) {
     return 5;
 }
 
-export function defaultFrameCount(taskKey) {
+export function defaultFrameCount(taskKey, fps = 24) {
     if (isImageBatchTask(taskKey)) return 1;
-    return durationToMiniMaxFrames(defaultDurationSec(taskKey), 24);
+    return durationToMiniMaxFrames(defaultDurationSec(taskKey), Math.max(1, Number(fps) || 24));
 }
 
 export function minFrameCount(taskKey) {
@@ -296,14 +314,14 @@ export function minFrameCount(taskKey) {
     return 5;
 }
 
-export function minDurationSec() {
-    return roundDurationSec(framesToDurationSec(5, 24)) || 0.2;
+export function minDurationSec(fps = 24) {
+    return roundDurationSec(framesToDurationSec(5, fps)) || 0.2;
 }
 
 /** Max 1-decimal seconds whose aligned frame count still fits in MAX_GEN_FRAMES. */
-export function maxDurationSec() {
-    let sec = roundDurationSec(framesToDurationSec(MAX_GEN_FRAMES, 24));
-    while (sec > 0.1 && durationToMiniMaxFrames(sec, 24) > MAX_GEN_FRAMES) {
+export function maxDurationSec(fps = 24) {
+    let sec = roundDurationSec(framesToDurationSec(MAX_GEN_FRAMES, fps));
+    while (sec > 0.1 && durationToMiniMaxFrames(sec, fps) > MAX_GEN_FRAMES) {
         sec = roundDurationSec(sec - 0.1);
     }
     return sec;
@@ -311,7 +329,10 @@ export function maxDurationSec() {
 
 /**
  * Frame count for a duration, capped to MAX_GEN_FRAMES on the 17k+5 grid.
- * Returns the 1-decimal seconds that produced that count (may step down near the cap).
+ * durationSec is always the normalized seconds for that frame count
+ * (preferredDurationSecFromFrames). Returning the raw typed seconds would
+ * make the same frame count display as 20.7 vs 20.5 on different paths and
+ * fight the input while the user is editing.
  */
 export function durationToClampedMiniMaxFrames(seconds, fps = 24) {
     let sec = roundDurationSec(seconds);
@@ -323,9 +344,8 @@ export function durationToClampedMiniMaxFrames(seconds, fps = 24) {
     if (fc > MAX_GEN_FRAMES) {
         fc = alignMiniMaxFrameCount(MAX_GEN_FRAMES);
         while (fc > MAX_GEN_FRAMES) fc -= 17;
-        sec = preferredDurationSecFromFrames(fc, fps);
     }
-    return { frames: fc, durationSec: sec };
+    return { frames: fc, durationSec: preferredDurationSecFromFrames(fc, fps) };
 }
 
 export function sumFrameCounts(segments) {
@@ -368,22 +388,59 @@ export function isSegmentContinuityFromPrev(segOrShot, index) {
     return false;
 }
 
+export const REF_IMAGE_LONG_PRESETS = [1024, 1280, 1536];
+export const REF_IMAGE_SIZE_OPTIONS = ["match", ...REF_IMAGE_LONG_PRESETS.map(String), "max"];
+
+/** match | 1024 | 1280 | 1536 | max. Official node only sees match | max. */
+export function normalizeRefImageSize(value, extra = null) {
+    const raw = String(value || "match").trim().toLowerCase();
+    if (raw === "max") {
+        const edge = String(extra?.refImageLimitEdge ?? extra?.ref_image_limit_edge ?? "").toLowerCase();
+        const px = Number(extra?.refImageLimitPx ?? extra?.ref_image_limit_px);
+        if ((edge === "long" || edge === "longest" || edge === "long_edge") && REF_IMAGE_LONG_PRESETS.includes(px)) {
+            return String(px);
+        }
+        return "max";
+    }
+    const digits = raw.replace(/[^\d]/g, "");
+    const n = Number(digits);
+    if (REF_IMAGE_LONG_PRESETS.includes(n)) return String(n);
+    return "match";
+}
+
+/** Per-group/segment first; `fallback` may be a string or output object. */
+export function resolveSegmentRefImageSize(seg, fallback) {
+    const fromSeg = seg?.refImageSize ?? seg?.ref_image_size;
+    if (fromSeg != null && String(fromSeg).trim() !== "") {
+        return normalizeRefImageSize(fromSeg, seg);
+    }
+    if (fallback && typeof fallback === "object") {
+        return normalizeRefImageSize(fallback.refImageSize ?? fallback.ref_image_size, fallback);
+    }
+    return normalizeRefImageSize(fallback);
+}
+
 export function newBatchSegment(overrides = {}) {
     const taskKey = resolveTaskKey(overrides.taskType || overrides.task_type || "");
-    const isVideo = isVideoBatchTask(taskKey);
+    const isVideo = isVideoBatchTask(taskKey) || MIXED_SEGMENT_TASKS.has(taskKey);
+    const fps = Math.max(1, Number(overrides.frameRate ?? overrides.fps ?? 24) || 24);
     // durationSec is the user-facing source of truth; frameCount is derived by formula.
     let durationSec = defaultDurationSec(taskKey);
     if (overrides.durationSec != null && Number.isFinite(Number(overrides.durationSec))) {
         durationSec = Number(overrides.durationSec);
     } else if (overrides.frameCount != null || overrides.length != null) {
-        durationSec = preferredDurationSecFromFrames(overrides.frameCount ?? overrides.length, 24);
+        durationSec = preferredDurationSecFromFrames(overrides.frameCount ?? overrides.length, fps);
     }
     let fc = 1;
     if (isVideo) {
-        const resolved = durationToClampedMiniMaxFrames(durationSec, 24);
+        const resolved = durationToClampedMiniMaxFrames(durationSec, fps);
         durationSec = resolved.durationSec;
         fc = resolved.frames;
     }
+    const refImageSize = normalizeRefImageSize(
+        overrides.refImageSize ?? overrides.ref_image_size,
+        overrides,
+    );
     return {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
         start: 0,
@@ -399,10 +456,80 @@ export function newBatchSegment(overrides = {}) {
         genImage: { imageFile: "" },
         previewB64: "",
         previewFrames: [],
-        previewFps: 24,
+        previewFps: fps,
         ...overrides,
         length: fc,
         frameCount: fc,
         ...(isVideo ? { durationSec } : {}),
+        refImageSize,
     };
+}
+
+/** Extensions ComfyUI input/ will accept for director uploads. */
+const SAFE_UPLOAD_EXTS = new Set([
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff",
+    ".mp4", ".webm", ".mov", ".mkv", ".avi",
+    ".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac",
+]);
+const WIN_RESERVED_STEM = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+function extFromMime(mimeType) {
+    const mime = String(mimeType || "").toLowerCase();
+    if (mime.includes("png")) return ".png";
+    if (mime.includes("jpeg") || mime.includes("jpg")) return ".jpg";
+    if (mime.includes("webp")) return ".webp";
+    if (mime.includes("gif")) return ".gif";
+    if (mime.includes("bmp")) return ".bmp";
+    if (mime.includes("mp4")) return ".mp4";
+    if (mime.includes("webm")) return ".webm";
+    if (mime.includes("quicktime") || mime.includes("mov")) return ".mov";
+    if (mime.includes("wav")) return ".wav";
+    if (mime.includes("mpeg") || mime.includes("mp3")) return ".mp3";
+    if (mime.includes("flac")) return ".flac";
+    if (mime.includes("ogg")) return ".ogg";
+    if (mime.includes("aac") || mime.includes("m4a")) return ".m4a";
+    return "";
+}
+
+/** Windows CreateFile rejects these in a basename; CJK (微信图片_*.jpg) is fine. */
+const WIN_ILLEGAL_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g;
+
+/**
+ * Keep original names (including 微信图片_*.jpg). Only strip path pieces and
+ * characters Windows cannot store. Unique ASCII fallback if the stem is empty.
+ */
+export function safeUploadFilename(name, mimeType = "") {
+    const raw = String(name || "upload").replace(/\\/g, "/").split("/").pop() || "upload";
+    const dot = raw.lastIndexOf(".");
+    let ext = "";
+    let stem = raw;
+    if (dot > 0) {
+        const maybe = raw.slice(dot).toLowerCase();
+        if (SAFE_UPLOAD_EXTS.has(maybe)) {
+            ext = maybe === ".jpeg" ? ".jpg" : maybe;
+            stem = raw.slice(0, dot);
+        }
+    }
+    if (!ext) ext = extFromMime(mimeType) || ".bin";
+    stem = stem.replace(WIN_ILLEGAL_CHARS, "_").replace(/[. ]+$/g, "").slice(0, 80);
+    if (!stem || WIN_RESERVED_STEM.test(stem)) {
+        const stamp = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        stem = `upload_${stamp}`;
+    }
+    return `${stem}${ext}`;
+}
+
+/** Rename only when the original name would be an illegal Windows path. */
+export function fileForComfyUpload(file) {
+    if (!file) return file;
+    const filename = safeUploadFilename(file.name, file.type);
+    if (filename === file.name) return file;
+    try {
+        return new File([file], filename, {
+            type: file.type || "application/octet-stream",
+            lastModified: file.lastModified,
+        });
+    } catch {
+        return file;
+    }
 }

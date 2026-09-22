@@ -301,8 +301,7 @@
       "model": { "name": "模型" },
       "clip": { "name": "CLIP" },
       "vae": { "name": "VAE" },
-      "audio_vae": { "name": "音频 VAE" },
-      "preview_vae": { "name": "预览 VAE" }
+      "audio_vae": { "name": "音频 VAE" }
     },
     "outputs": {
       "0": { "name": "模型加载器" }
@@ -622,6 +621,18 @@
       "2": {
         "name": "Latent"
       }
+    }
+  },
+  "easy multiImagesLoader": {
+    "display_name": "多图像加载器",
+    "description": "加载最多 25 张图像，按所选分辨率处理后输出图像列表。",
+    "inputs": {
+      "resolution": { "name": "分辨率" },
+      "max_limit": { "name": "输出数量上限", "tooltip": "最终输出的图像数量，-1 表示不限制（输出所有加载的图像）。" },
+      "image_data": { "name": "图像数据" }
+    },
+    "outputs": {
+      "0": { "name": "图像列表" }
     }
   },
   "easy multiTrackEditor": {

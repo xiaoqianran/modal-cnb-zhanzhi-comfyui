@@ -2,10 +2,18 @@
 
 ---
 
-## [1.3.2] - preRelease
+## [1.3.3] - PreRelease
+
+### ✨ New Features
+
+- **Multi-Image Loader**: Added the `easy multiImagesLoader` node, supporting loading up to 25 images.
+
+## [1.3.2] - 2026-09-20
 
 ### ⚡ Improvements
 
+- **MultiTrack Project**: Optimized project media, segment media, TaskOutput, and per-segment H3 conditioning caching to avoid media reloads and repeated first-pass conditioning encodes when re-executing without parameter changes.
+- **H3 Conditioning Cache**: Store up to five recently used segment caches in ComfyUI's temporary directory, reset the pool when its project, model, or upstream media cache scope changes, rebuild zero-filled initial AV latents from compact metadata, and report a per-category tensor size breakdown after each write.
 - **MultiTrack Project**: Enhanced action continuity in context mode and optimized lip-sync when audio is locked.
 - **MultiTrack Editor**: Added the ability to freely drag and adjust the width ratio between the image item area and the prompt area within segments. Optimized the UI display of user prompt highlight tags.
 - **MultiTrack Project**: Added `selflift` option to `sampling_mode`, adapted from [comfyui-SelfLift](https://github.com/facok/comfyui-SelfLift)

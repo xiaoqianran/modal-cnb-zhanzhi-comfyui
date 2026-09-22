@@ -13,6 +13,15 @@ from comfy_api.latest import io
 from .latents import LTXVDilateLatent
 from .nodes_registry import NODES_DISPLAY_NAME_PREFIX, comfy_node
 
+FRAME_IDX_TOOLTIP = (
+    "RoPE position of the reference, in pixel frames.\n"
+    "0 aligns the reference with the generated clip. Use for video references.\n"
+    ">0 places the reference at a specific pixel-frame position in the clip.\n"
+    "-1 places the reference outside the generated frame range, while still using it "
+    "for attention conditioning. Use for single-image references.\n"
+    "For multi-frame references, >0 values are rounded down to 1 mod 8."
+)
+
 
 @comfy_node(name="LTXAddVideoICLoRAGuide")
 class LTXAddVideoICLoRAGuide(io.ComfyNode):
@@ -44,12 +53,7 @@ class LTXAddVideoICLoRAGuide(io.ComfyNode):
                     default=0,
                     min=-9999,
                     max=9999,
-                    tooltip=(
-                        "Frame index to start the conditioning at. "
-                        "For single-frame videos, any frame_idx value is acceptable. "
-                        "For videos, frame_idx must be 1 modulo 8, otherwise it will be rounded "
-                        "down to the nearest 1 modulo 8. Negative values are counted from the end of the video."
-                    ),
+                    tooltip=FRAME_IDX_TOOLTIP,
                 ),
                 io.Float.Input(
                     "strength",
@@ -100,6 +104,35 @@ class LTXAddVideoICLoRAGuide(io.ComfyNode):
                 io.Latent.Output("latent"),
             ],
         )
+
+    @classmethod
+    def resolve_frame_idx(
+        cls,
+        positive,
+        frame_idx,
+        latent_length,
+        image_length,
+        guide_latent,
+        scale_factors,
+    ):
+        """Map frame_idx to the position append_keyframe should use.
+
+        A negative value is a RoPE position before the clip, not an index counted back
+        from its end, so it bypasses get_latent_index. That is what lets a one-frame
+        reference sit at -1: adjacent to the first generated frame without landing in
+        its slot, which is the only position a one-frame guide can occupy that makes it
+        indistinguishable from the frame being generated. The length assert is
+        meaningless there -- the guide is outside the clip by construction.
+        """
+        if frame_idx < 0:
+            return frame_idx
+        frame_idx, latent_idx = nodes_lt.LTXVAddGuide.get_latent_index(
+            positive, latent_length, image_length, frame_idx, scale_factors
+        )
+        assert (
+            latent_idx + guide_latent.shape[2] <= latent_length
+        ), "Conditioning frames exceed the length of the latent sequence."
+        return frame_idx
 
     @classmethod
     def encode(
@@ -219,12 +252,9 @@ class LTXAddVideoICLoRAGuide(io.ComfyNode):
             guide_latent.shape[2] * guide_latent.shape[3] * guide_latent.shape[4]
         )
 
-        frame_idx, latent_idx = nodes_lt.LTXVAddGuide.get_latent_index(
-            positive, latent_length, len(image), frame_idx, scale_factors
+        frame_idx = cls.resolve_frame_idx(
+            positive, frame_idx, latent_length, len(image), guide_latent, scale_factors
         )
-        assert (
-            latent_idx + guide_latent.shape[2] <= latent_length
-        ), "Conditioning frames exceed the length of the latent sequence."
 
         positive, negative, latent_image, noise_mask = (
             nodes_lt.LTXVAddGuide.append_keyframe(
@@ -292,11 +322,7 @@ class LTXAddVideoICLoRAGuideAdvanced(LTXAddVideoICLoRAGuide):
                     default=0,
                     min=-9999,
                     max=9999,
-                    tooltip=(
-                        "Frame index to start the conditioning at. The value is rounded to the "
-                        "nearest frame and wrapped modulo the number of video frames. Negative "
-                        "values are counted from the end of the video before wrapping."
-                    ),
+                    tooltip=FRAME_IDX_TOOLTIP,
                 ),
                 io.Float.Input("strength", default=1.0, min=0.0, max=1.0, step=0.01),
                 io.Float.Input(
@@ -420,12 +446,9 @@ class LTXAddVideoICLoRAGuideAdvanced(LTXAddVideoICLoRAGuide):
             guide_latent.shape[2] * guide_latent.shape[3] * guide_latent.shape[4]
         )
 
-        frame_idx, latent_idx = nodes_lt.LTXVAddGuide.get_latent_index(
-            positive, latent_length, len(image), frame_idx, scale_factors
+        frame_idx = cls.resolve_frame_idx(
+            positive, frame_idx, latent_length, len(image), guide_latent, scale_factors
         )
-        assert (
-            latent_idx + guide_latent.shape[2] <= latent_length
-        ), "Conditioning frames exceed the length of the latent sequence."
 
         positive, negative, latent_image, noise_mask = (
             nodes_lt.LTXVAddGuide.append_keyframe(

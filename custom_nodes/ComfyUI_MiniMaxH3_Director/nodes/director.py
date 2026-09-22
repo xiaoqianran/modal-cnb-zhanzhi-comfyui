@@ -90,14 +90,53 @@ class MiniMaxH3Director:
                         ),
                     },
                 ),
+                "semantic_bridge": (
+                    "MMX_DIR_SEMANTIC_BRIDGE",
+                    {
+                        "tooltip": (
+                            "Optional Semantic Bridge node (above SelfLift). When connected, "
+                            "official cond tokens are rewritten with the student MLP "
+                            "(RMS-norm → residual mix). Unconnected = identical. "
+                            "Distilled on FL2VA; r2v / v2v / rv2v is forced-compat — use with care."
+                        ),
+                    },
+                ),
+                "selflift": (
+                    "MMX_DIR_SELFLIFT",
+                    {
+                        "tooltip": (
+                            "Optional SelfLift node (above Refine). When connected, first-pass "
+                            "is low-res prefix + 3D lift + high-res tail on this Director canvas. "
+                            "Unconnected = current single-stage sample. "
+                            "Refine may still upscale afterward (e.g. 1.0MP first pass → 2.0MP). "
+                            "Timeline continuity keeps native low-res carry + high-res pin. "
+                            "Euler only."
+                        ),
+                    },
+                ),
                 "refine": (
                     "MMX_DIR_REFINE",
                     {
                         "tooltip": (
                             "Optional Refine node. When connected, each segment runs a second "
                             "sample pass (same-size refine, or upscale then sample). "
+                            "Wire a MODEL into Refine.refine_model to use a different UNET for that pass; "
+                            "unwired uses this Director model. "
                             "images is the refined result; images_pre_refine is the first pass. "
                             "Unconnected = single-pass (current behavior)."
+                        ),
+                    },
+                ),
+                "face_refine": (
+                    "MMX_DIR_FACE_REFINE",
+                    {
+                        "tooltip": (
+                            "Optional FaceRefine node. When connected, Director tracks the face "
+                            "on the final decoded frames (after Refine if that is also wired), "
+                            "re-samples the crop, and pastes the face back. "
+                            "images is after stitch; images_pre_face_refine is before stitch "
+                            "when「输出修脸前」is on (otherwise that output is blocked). "
+                            "Unconnected = no face pass (that output stays blocked)."
                         ),
                     },
                 ),
@@ -108,7 +147,10 @@ class MiniMaxH3Director:
                         "default": 25,
                         "min": 1,
                         "max": 200,
-                        "tooltip": "Sampling steps — official template: 25.",
+                        "tooltip": (
+                            "一采步数（官方模板 25）。"
+                            "接了 sigmas 口后忽略此项，改用外接噪声表。"
+                        ),
                     },
                 ),
                 "sampler": (
@@ -122,7 +164,10 @@ class MiniMaxH3Director:
                     comfy.samplers.KSampler.SCHEDULERS,
                     {
                         "default": "simple",
-                        "tooltip": "Official template: BasicScheduler simple.",
+                        "tooltip": (
+                            "一采调度器（官方模板 simple）。"
+                            "接了 sigmas 口后忽略此项，改用外接噪声表。"
+                        ),
                     },
                 ),
                 "shift_video": (
@@ -134,6 +179,18 @@ class MiniMaxH3Director:
                     {"default": 3.0, "min": 0.01, "max": 100.0, "step": 0.01, "tooltip": "MiniMaxH3SigmaShift shift_audio."},
                 ),
                 **director_perf_inputs(),
+                "sigmas": (
+                    "SIGMAS",
+                    {
+                        "forceInput": True,
+                        "tooltip": (
+                            "可选。一采噪声表，接 BasicScheduler 或 ManualSigmas。"
+                            "接线后覆盖导演台「步数」和「调度器」（采样器下拉仍有效）。"
+                            "BasicScheduler 请接 SigmaShift 之后的同一套 H3 MODEL。"
+                            "不接则仍用步数 + 调度器、denoise=1 自动算表。"
+                        ),
+                    },
+                ),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -151,11 +208,51 @@ class MiniMaxH3Director:
                 got = input_types.get(name)
                 if got is not None and got != want:
                     return f"{name}: expected {want}, linked node returns {got}."
+            got_sigmas = input_types.get("sigmas")
+            if got_sigmas is not None and got_sigmas != "SIGMAS":
+                return f"sigmas: expected SIGMAS, linked node returns {got_sigmas}."
+            got_bridge = input_types.get("semantic_bridge")
+            if got_bridge is not None and got_bridge != "MMX_DIR_SEMANTIC_BRIDGE":
+                return (
+                    "semantic_bridge: expected MiniMax H3 Director Semantic Bridge "
+                    f"(MMX_DIR_SEMANTIC_BRIDGE), linked node returns {got_bridge}."
+                )
+            got_selflift = input_types.get("selflift")
+            if got_selflift is not None and got_selflift != "MMX_DIR_SELFLIFT":
+                return (
+                    "selflift: expected MiniMax H3 Director SelfLift "
+                    f"(MMX_DIR_SELFLIFT), linked node returns {got_selflift}."
+                )
+            got_face = input_types.get("face_refine")
+            if got_face is not None and got_face != "MMX_DIR_FACE_REFINE":
+                return (
+                    "face_refine: expected MiniMax H3 Director FaceRefine "
+                    f"(MMX_DIR_FACE_REFINE), linked node returns {got_face}."
+                )
         return True
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT", "INT", "IMAGE", "STRING", "IMAGE")
-    RETURN_NAMES = ("images", "audio", "fps", "frame_count", "source_images", "report", "images_pre_refine")
-    OUTPUT_IS_LIST = (True, True, False, False, True, False, True)
+    @classmethod
+    def IS_CHANGED(cls, unique_id=None, **kwargs):
+        # Do not return NaN: that would re-run every Director queue even when
+        # confirm_first_pass is off. Linked Refine is None here, so fingerprint
+        # the .pre cache files that only the confirmation hold writes.
+        del kwargs
+        from ..director.segment_cache import first_pass_cache_disk_signature
+
+        return first_pass_cache_disk_signature(unique_id)
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT", "INT", "IMAGE", "STRING", "IMAGE", "IMAGE")
+    RETURN_NAMES = (
+        "images",
+        "audio",
+        "fps",
+        "frame_count",
+        "source_images",
+        "report",
+        "images_pre_refine",
+        "images_pre_face_refine",
+    )
+    OUTPUT_IS_LIST = (True, True, False, False, True, False, True, True)
     FUNCTION = "execute"
     CATEGORY = _CATEGORY
     DESCRIPTION = (
@@ -163,8 +260,14 @@ class MiniMaxH3Director:
         "single-stage KSampler + MiniMaxH3SigmaShift, LTXVSeparateAVLatent decode. "
         "Supports t2v / i2v / fl2v / r2v / v2v / rv2v. "
         "Optional i2v_groups / r2v_groups accept multi-group packs from Director Group nodes "
-        "(external priority over UI cards). Optional refine accepts MiniMax H3 Director Refine "
-        "(second sample / upscale). images_pre_refine is the first-pass video before refine. "
+        "(external priority over UI cards). Optional semantic_bridge accepts "
+        "MiniMax H3 Director Semantic Bridge (cond-token student; Ref2VA forced-compat). "
+        "Optional selflift accepts MiniMax H3 Director SelfLift "
+        "(progressive first-pass on this canvas). Optional refine accepts MiniMax H3 Director Refine "
+        "(second sample / upscale). Optional face_refine accepts MiniMax H3 Director FaceRefine "
+        "(crop / re-sample / stitch). images_pre_refine is the first-pass video before refine. "
+        "images_pre_face_refine is the video before face stitch "
+        "(blocked unless FaceRefine is connected and「输出修脸前」is on). "
         "Defaults: 0.4MP 16:9 (864×480), 5s / 124 frames @ 24 fps."
     )
 
@@ -185,7 +288,11 @@ class MiniMaxH3Director:
         unique_id=None,
         i2v_groups=None,
         r2v_groups=None,
+        semantic_bridge=None,
+        selflift=None,
         refine=None,
+        face_refine=None,
+        sigmas=None,
         steps=25,
         sampler="res_multistep",
         scheduler="simple",
@@ -194,7 +301,10 @@ class MiniMaxH3Director:
         shift_video=12.0,
         shift_audio=3.0,
         clear_vram_between_segments=True,
+        clear_vram_before_refine=False,
+        clear_vram_before_face_refine=False,
         export_source_images=False,
+        export_pre_face_refine=False,
         **kwargs,
     ):
         del kwargs
@@ -211,36 +321,56 @@ class MiniMaxH3Director:
             unique_id=unique_id,
             i2v_groups=i2v_groups,
             r2v_groups=r2v_groups,
+            semantic_bridge=semantic_bridge,
+            selflift=selflift,
             refine=refine,
+            face_refine=face_refine,
         )
 
-        combined, segment_outputs, segment_audios, report, export_frame_counts, pre_combined, pre_segments = (
-            execute_director_plan_core(
-                plan,
-                node_id=unique_id,
-                model=model,
-                vae=video_vae,
-                audio_vae=audio_vae,
-                clip=clip,
-                cfg=cfg,
-                seed=seed,
-                steps=steps,
-                sampler=sampler,
-                scheduler=scheduler,
-                shift_video=shift_video,
-                shift_audio=shift_audio,
-                clear_vram_between_segments=clear_vram_between_segments,
+        try:
+            combined, segment_outputs, segment_audios, report, export_frame_counts, pre_combined, pre_segments, held_for_confirmation, pre_face_combined, pre_face_segments = (
+                execute_director_plan_core(
+                    plan,
+                    node_id=unique_id,
+                    model=model,
+                    vae=video_vae,
+                    audio_vae=audio_vae,
+                    clip=clip,
+                    cfg=cfg,
+                    seed=seed,
+                    steps=steps,
+                    sampler=sampler,
+                    scheduler=scheduler,
+                    sigmas=sigmas,
+                    shift_video=shift_video,
+                    shift_audio=shift_audio,
+                    clear_vram_between_segments=clear_vram_between_segments,
+                    clear_vram_before_refine=clear_vram_before_refine,
+                    clear_vram_before_face_refine=clear_vram_before_face_refine,
+                    export_pre_face_refine=export_pre_face_refine,
+                )
             )
-        )
 
-        return finalize_director_outputs(
-            plan,
-            combined,
-            segment_outputs,
-            report,
-            export_source_images=export_source_images,
-            segment_audios=segment_audios,
-            segment_frame_counts=export_frame_counts,
-            pre_refine_combined=pre_combined,
-            pre_refine_segments=pre_segments,
-        )
+            return finalize_director_outputs(
+                plan,
+                combined,
+                segment_outputs,
+                report,
+                export_source_images=export_source_images,
+                segment_audios=segment_audios,
+                segment_frame_counts=export_frame_counts,
+                pre_refine_combined=pre_combined,
+                pre_refine_segments=pre_segments,
+                pre_face_combined=pre_face_combined,
+                pre_face_segments=pre_face_segments,
+                export_pre_face_refine=export_pre_face_refine,
+                block_final_images=held_for_confirmation,
+            )
+        finally:
+            # Full source/reference PCM is execution-scoped.
+            cache = getattr(plan, "audio_decode_cache", None)
+            if isinstance(cache, dict):
+                cache.clear()
+            for item in getattr(plan, "global_ref_audios", None) or []:
+                if getattr(item, "audio_path", ""):
+                    item.audio = None
