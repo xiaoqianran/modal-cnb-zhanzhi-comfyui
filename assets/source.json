@@ -146,6 +146,12 @@
     "MelBandRoFormer/MelBandRoformer_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/MelBandRoFormer_comfy/-/lfs/6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
   },
   "loras": {
+	"minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/c8168ebc17bbacc4296103dda2fec1ba85b24392fa08cf2bfbcef0cff0dc3cc8",
+	"minimax_h3_lms_v1.0_r64_r.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/8400b520f399737fc208253b1ef9560d436e4c3981259ba451a83ddf018d55e0",
+	"minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/a117f18682a22a0381cadd9832da0afe9912f604305b3e44310b5aa1919734cc",
+	"Motion_Repair.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/a678a3657cefd5c2c2712f892da2f71be53c3f252e335557e918854f8abc579f",
+	"H3_Combat_V2.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
+	"GunFu.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/975083859a69cd1bd503e026e987c27cf2b66e97d992db353d2ceb7d0b175791",
     "MiniMax H3真实电影质感 V1.0.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/bd439f4b4ebda48dec768f69ecabaf66f28c1ebc7dedc4d11aed2eacb368f219",
     "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/6a56f41ab4229c9dd845b9501bbd475ee57e112d846cf2e819d534a1ae928c5a",
     "minimax_h3_fl2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/08cfe946033af7d27719b964b6e0a0e50c32138daabbd6ce4137e23df6bf9980",
