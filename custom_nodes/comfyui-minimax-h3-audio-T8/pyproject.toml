@@ -1,16 +1,64 @@
 [project]
 name = "minimax-h3-audio-t8"
-version = "1.9.0"
-description = "MiniMax H3 audio, experimental visual-reference strength and speech, dual-clock sampling, resumable long-video orchestration, and Ref2VA still-image editing nodes for ComfyUI"
+version = "1.85.0"
+description = "MiniMax H3 joint AV, audio refine, long-video, reference control, motion analysis, temporal restoration, and acceleration nodes for ComfyUI"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "GPL-3.0-or-later" }
+license = { file = "LICENSE" }
 dependencies = []
+classifiers = [
+    "Operating System :: Microsoft :: Windows",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+
+[project.urls]
+Repository = "https://github.com/T8mars/comfyui-minimax-h3-audio-T8"
+Documentation = "https://github.com/T8mars/comfyui-minimax-h3-audio-T8#readme"
+"Bug Tracker" = "https://github.com/T8mars/comfyui-minimax-h3-audio-T8/issues"
+
+[tool.comfy]
+PublisherId = "t8star"
+DisplayName = "MiniMax H3 Audio T8"
+Icon = "https://avatars.githubusercontent.com/u/96167788"
+includes = [
+    "CHANGELOG.md", "docs/README_POLICY.md", "docs/README_DETAILS_ZH.md", "docs/README_DETAILS_EN.md",
+    "docs/MODEL_DOWNLOADS_1.85.md", "docs/DIRECTOR_D1.md", "docs/DIRECTOR_D2A.md",
+    "docs/H16_3_CHUNKED_PASS2_EXP.md", "docs/H18_PROMPT_CHAIN_AUDIT.md",
+    "docs/README_ComfyUI.md",
+    "docs/CHANGELOG_ARCHIVE_ZH.md", "docs/CHANGELOG_ARCHIVE_EN.md",
+    "docs/RELEASE_1.85.0.md", "docs/MERIDIAN_LOCAL_EXP.md", "docs/MERIDIAN_CONVERSION_EXP.md",
+    "docs/AVATAR_PROGRESSIVE_EXP.md", "docs/NATIVE_VOICE_EMOTION_EXP.md",
+    "docs/TAEH3_SAMPLING_PREVIEW_EXP.md", "docs/READABLE_AUDIO_P1_EXP.md",
+    "tools/convert_meridian_convrot.py",
+    "docs/H16_OFFICIAL_INT8_VAE_QUALIFICATION.md", "docs/H16_STANDARD_LATENT_ADAPTER_EXP.md",
+    "docs/H16_TAOMATE_STREAM_LIFECYCLE_EXP.md", "docs/H16_SOURCE_UPDATE_20260917.md",
+    "docs/PREPARED_GENERATION_INTEGRATION_EXP.md", "docs/PREPARED_SOURCES_AND_ENVIRONMENT.md",
+    "docs/RELEASE_1.84.0.md",
+    "docs/SEMANTIC_BRIDGE_EXP.md", "docs/SEMANTIC_BRIDGE_QUALIFICATION.md", "tools/convert_semantic_bridge.py",
+    "sol_attn_minimax_v2.py", "docs/PATCH_STACK_POLICY.md", "docs/SELFLIFT_INTERFACE_REPAIR_20260917.md",
+    "docs/GITHUB_SOURCE_SYNC_20260917.md",
+    "docs/CORE_VDN_COMPATIBILITY.md", "docs/OUTPAINT_SOURCE_MODES.md",
+    "docs/PROGRESSIVE_SAMPLING_EXP.md", "docs/RELEASE_1.77.0.md", "docs/TRT_VAE_EXP.md",
+    "docs/RELEASE_1.78.0.md", "docs/REPOSITORY_LAYOUT.md", "docs/DUAL_MODEL_LONG_VIDEO_EXP.md",
+    "docs/DUAL_DISTINCT_BASE_RAM_20260911.md", "docs/TOPAZ_EXP.md", "docs/R1_RELIABILITY_20260911.md",
+    "docs/R1_FUN_QUANTIZATION_REPRODUCTION_20260911.md", "docs/RELEASE_1.79.0.md",
+    "docs/DUAL_MODEL_SEAM_FIX_20260913.md", "docs/RELEASE_1.79.1.md", "docs/RELEASE_1.79.3.md",
+    "docs/RELEASE_1.79.4.md", "docs/RELEASE_1.79.5.md", "docs/RELEASE_1.79.6.md",
+    "docs/RELEASE_1.80.0.md", "docs/RELEASE_1.81.0.md", "docs/RELEASE_1.82.0.md",
+    "docs/H3_MEMORY_NODES_EXP.md", "docs/MOTION_COLOR_EXP.md", "docs/PROGRESSIVE_COMPOSITION_EXP.md",
+    "docs/PROGRESSIVE_LONG_VIDEO_EXP.md", "docs/PROGRESSIVE_PUBLIC_WORKFLOW_EXP.md",
+    "docs/PROGRESSIVE_TRAINED_VALIDATION_EXP.md", "docs/TST_SOURCE_CONTRACT_EXP.md",
+    "docs/TAOMATE_NATIVE_THREE_STEP_EXP.md", "docs/FAST_H3_V2_EXP.md", "docs/FRAME_LIMITS.md",
+    "docs/RELEASE_1.83.0.md", "docs/CHUNKED_STANDARD_4PLUS4_EXP.md",
+]
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
 testpaths = ["tests"]
 norecursedirs = ["artifacts"]
+
+[tool.ruff]
+extend-exclude = ["h3_t8/flashvsr_vendor", "h3_t8/vendor/vretoucher_upstream"]
 
 [tool.ruff.lint.per-file-ignores]
 "tools/*.py" = ["T201"]

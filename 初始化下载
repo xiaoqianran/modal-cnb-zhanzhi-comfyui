@@ -4,6 +4,12 @@
 # 例如：
 # aria2c -x 4 -s 4 -c -d "" -o "" ""
 # 注意添加下载命令后需要在终端运行提交命令： add 初始化下载
+# aria2c -x 4 -s 4 -c -d "/models/llm/qwenimage-pe" -o "" ""
+
+# Qwen Image 2.1
+aria2c -x 4 -s 4 -c -d "/models/llm/qwenimage-pe" -o "pe_t2i_heretic-Q4_K_M.gguf" "https://cnb.cool/zhan_zhi/Models/-/lfs/fe176ded062942ac8858290a33c9303a6e9c09c31405020a22ad0d47fa7b9b69"
+aria2c -x 4 -s 4 -c -d "/models/llm/qwenimage-pe" -o "Qwen-Image-2.1-PE-I2I.mmproj-bf16.gguf" "https://cnb.cool/zhan_zhi/Models/-/lfs/8dedb71dbc3092dc47de9108ad373d68a12854e2527d59bd9399601738f3bce1"
+aria2c -x 4 -s 4 -c -d "/models/llm/qwenimage-pe" -o "Qwen-Image-2.1-PE-I2I.Q4_K_M.gguf" "https://cnb.cool/zhan_zhi/Models/-/lfs/a5c6cb28cbaf838834d1335c8392619af5809d9fe95d0ebd321e15751866dfe9"
 
 # MiniMax H3
 aria2c -x 4 -s 4 -c -d "/models/vae_approx" -o "taeh3.safetensors" "https://cnb.cool/zhan_zhi/Models/-/lfs/f0f60fa072089997f817402098c2fd90777cb2660dd79cf5df42fc1e3e08e527"

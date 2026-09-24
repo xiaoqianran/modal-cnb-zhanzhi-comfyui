@@ -9,14 +9,17 @@ from h3_audio_t8_pkg.tools.validate_h3_vram import (
     ValidationError,
     analyze_prompt,
     compare_reports,
+    _counter_delta,
     dynamic_vram_evidence,
     load_api_prompt,
+    make_activation_chunk_prompts,
     make_ab_prompts,
+    make_vram_policy_prompts,
     summarize_samples,
 )
 
 
-def make_prompt(*, steps=4, width=1024, seed=123):
+def make_prompt(*, steps=8, width=1024, seed=123):
     return {
         "1": {
             "class_type": "UNETLoader",
@@ -84,7 +87,7 @@ def make_report(prompt, *, label, peak_delta, status="success"):
     }
 
 
-def test_analysis_identifies_control_inputs_treatment_and_non_four_step_warning():
+def test_analysis_identifies_control_inputs_treatment_and_non_eight_step_warning():
     analysis = analyze_prompt(make_prompt(steps=12))
 
     assert analysis["node_count"] == 7
@@ -103,7 +106,7 @@ def test_analysis_resolves_sampling_literals_projected_by_long_video_orchestrato
     prompt["0"] = {
         "class_type": "MiniMaxH3LongVideoOrchestratorT8",
         "inputs": {
-            "steps": 4,
+            "steps": 8,
             "shift_video": 12.0,
             "shift_audio": 3.0,
             "sampler_name": "dual_clock_euler",
@@ -127,7 +130,7 @@ def test_analysis_resolves_sampling_literals_projected_by_long_video_orchestrato
     assert sampler == {
         "node_id": "4",
         "class_type": "MiniMaxH3DualClockSamplerT8",
-        "steps": 4,
+        "steps": 8,
         "video_steps": None,
         "audio_steps": None,
         "shift_video": 12.0,
@@ -175,9 +178,9 @@ def test_dynamic_vram_requires_log_marker_for_proven_enabled_status():
 
 def test_make_ab_prompts_rewires_all_dual_outputs_and_preserves_controls():
     prompt = make_prompt(steps=12)
-    stock, dual = make_ab_prompts(prompt, steps=4)
+    stock, dual = make_ab_prompts(prompt, steps=8)
 
-    assert dual["4"]["inputs"]["steps"] == 4
+    assert dual["4"]["inputs"]["steps"] == 8
     assert "4" not in stock
     stock_types = {node["class_type"] for node in stock.values()}
     assert {
@@ -197,6 +200,144 @@ def test_make_ab_prompts_rewires_all_dual_outputs_and_preserves_controls():
     assert stock[guider["inputs"]["model"][0]]["class_type"] == "MiniMaxH3SigmaShift"
     assert stock[sampler["inputs"]["sampler"][0]]["class_type"] == "KSamplerSelect"
     assert stock[sampler["inputs"]["sigmas"][0]]["class_type"] == "BasicScheduler"
+
+
+def make_hybrid_prompt():
+    prompt = make_prompt(steps=20, width=736, seed=2608125201)
+    prompt["1"] = {
+        "class_type": "MiniMaxH3HybridModelLoaderT8Advanced",
+        "inputs": {
+            "quality_base": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+            "mode": "base_only",
+            "weight_dtype": "default",
+        },
+    }
+    return prompt
+
+
+def make_activation_prompt():
+    prompt = make_prompt(steps=8, width=736, seed=2608131801)
+    prompt["8"] = {
+        "class_type": "MiniMaxH3ActivationChunkT8Advanced",
+        "inputs": {
+            "model": ["2", 0],
+            "mode": "report_only",
+            "chunk_rows": 512,
+            "block_start": 0,
+            "block_end": 49,
+            "preserve_short_path": True,
+            "expected_width": 736,
+            "expected_height": 608,
+            "expected_length": 362,
+            "expected_single_image_references": 0,
+        },
+    }
+    prompt["4"]["inputs"]["model"] = ["8", 0]
+    return prompt
+
+
+def test_make_activation_chunk_prompts_isolates_mode_as_treatment():
+    baseline, treatment = make_activation_chunk_prompts(
+        make_activation_prompt(), chunk_rows=256, block_start=5, block_end=44
+    )
+
+    assert baseline["8"]["inputs"]["mode"] == "report_only"
+    assert treatment["8"]["inputs"]["mode"] == "apply_exp"
+    assert treatment["8"]["inputs"]["chunk_rows"] == 256
+    assert treatment["8"]["inputs"]["block_start"] == 5
+    assert treatment["8"]["inputs"]["block_end"] == 44
+
+    baseline_analysis = analyze_prompt(baseline)
+    treatment_analysis = analyze_prompt(treatment)
+    assert baseline_analysis["controls"] == treatment_analysis["controls"]
+    assert baseline_analysis["treatment"] != treatment_analysis["treatment"]
+    assert treatment_analysis["treatment"]["activation_chunk"][0]["mode"] == (
+        "apply_exp"
+    )
+
+    first = make_report(baseline, label="baseline", peak_delta=12 * 1024 * MIB)
+    second = make_report(treatment, label="chunked", peak_delta=11 * 1024 * MIB)
+    comparison = compare_reports(first, second)
+    assert comparison["comparable"] is True
+    assert comparison["treatment_changed"] is True
+    assert comparison["verdict"] == "second_run_has_lower_peak"
+
+
+def test_make_activation_chunk_prompts_rejects_ambiguous_or_unused_node():
+    prompt = make_activation_prompt()
+    prompt["9"] = duplicate = json.loads(json.dumps(prompt["8"]))
+    duplicate["inputs"]["model"] = ["2", 0]
+    with pytest.raises(ValidationError, match="exactly one"):
+        make_activation_chunk_prompts(prompt)
+
+    unused = make_activation_prompt()
+    unused["4"]["inputs"]["model"] = ["2", 0]
+    with pytest.raises(ValidationError, match="MODEL output is unused"):
+        make_activation_chunk_prompts(unused)
+
+
+def test_make_vram_policy_prompts_preserves_controls_and_wires_loader():
+    baseline, policy = make_vram_policy_prompts(
+        make_hybrid_prompt(),
+        fixed_total_reserved_gib=2.0,
+        clean_before_load=False,
+    )
+
+    policy_nodes = [
+        (node_id, node)
+        for node_id, node in policy.items()
+        if node["class_type"] == "MiniMaxH3VRAMPolicyT8Advanced"
+    ]
+    assert len(policy_nodes) == 1
+    policy_id, policy_node = policy_nodes[0]
+    assert policy_node["inputs"]["mode"] == "fixed_total_reserved_exp"
+    assert policy_node["inputs"]["fixed_total_reserved_gib"] == 2.0
+    assert policy_node["inputs"]["clean_before_load"] is False
+    assert policy["1"]["inputs"]["vram_policy"] == [policy_id, 0]
+    assert "vram_policy" not in baseline["1"]["inputs"]
+
+    baseline_analysis = analyze_prompt(baseline)
+    policy_analysis = analyze_prompt(policy)
+    assert baseline_analysis["controls"] == policy_analysis["controls"]
+    assert baseline_analysis["treatment"]["vram_policy"] == []
+    assert policy_analysis["treatment"]["vram_policy"][0]["mode"] == (
+        "fixed_total_reserved_exp"
+    )
+    assert baseline_analysis["treatment"] != policy_analysis["treatment"]
+
+
+def test_vram_policy_pair_is_comparable_and_rejects_ambiguous_sources():
+    baseline, policy = make_vram_policy_prompts(make_hybrid_prompt())
+    first = make_report(baseline, label="baseline", peak_delta=15 * 1024 * MIB)
+    second = make_report(policy, label="policy", peak_delta=14 * 1024 * MIB)
+    comparison = compare_reports(first, second)
+    assert comparison["comparable"] is True
+    assert comparison["treatment_changed"] is True
+    assert comparison["verdict"] == "second_run_has_lower_peak"
+
+    existing = make_hybrid_prompt()
+    existing["1"]["inputs"]["vram_policy"] = ["99", 0]
+    with pytest.raises(ValidationError, match="already has a vram_policy"):
+        make_vram_policy_prompts(existing)
+
+    ambiguous = make_hybrid_prompt()
+    ambiguous["8"] = {
+        "class_type": "MiniMaxH3HybridModelLoaderT8Advanced",
+        "inputs": {
+            "quality_base": "other.safetensors",
+            "mode": "base_only",
+            "weight_dtype": "default",
+        },
+    }
+    with pytest.raises(ValidationError, match="requires exactly one"):
+        make_vram_policy_prompts(ambiguous)
+
+    with pytest.raises(ValidationError, match="requires clean_before_load=true"):
+        make_vram_policy_prompts(
+            make_hybrid_prompt(),
+            mode="external_usage_plus_margin_exp",
+            clean_before_load=False,
+        )
 
 
 def test_sample_summary_attributes_peak_to_node_and_uses_median_baseline():
@@ -238,6 +379,45 @@ def test_sample_summary_attributes_peak_to_node_and_uses_median_baseline():
     assert summary["peak_vram_node_type"] == "SamplerCustomAdvanced"
     assert summary["peak_vram_progress_value"] == 3
     assert summary["per_node"][0]["sample_count"] == 2
+
+
+def test_sample_summary_classifies_high_run_io_as_thrashing():
+    samples = [
+        {
+            "phase": "baseline",
+            "elapsed_seconds": 0.0,
+            "vram_used_bytes": 100 * MIB,
+            "torch_pool_used_bytes": 20 * MIB,
+            "ram_free_bytes": 32 * 1024**3,
+            "process_read_bytes": 1024,
+            "process_page_faults": 10,
+            "process_private_bytes": 4 * 1024**3,
+            "gpu_temperature_c": 50,
+            "gpu_power_mw": 100000,
+            "gpu_sm_clock_mhz": 1800,
+        },
+        {
+            "phase": "running",
+            "elapsed_seconds": 10.0,
+            "vram_used_bytes": 900 * MIB,
+            "torch_pool_used_bytes": 700 * MIB,
+            "ram_free_bytes": 24 * 1024**3,
+            "process_read_bytes": 65 * 1024**3 + 1024,
+            "process_page_faults": 2010,
+            "process_private_bytes": 8 * 1024**3,
+            "gpu_temperature_c": 70,
+            "gpu_power_mw": 200000,
+            "gpu_sm_clock_mhz": 1500,
+        },
+    ]
+    summary = summarize_samples(samples)
+    assert summary["resource_behavior"] == "fits_with_thrashing"
+    assert summary["process_read_delta_bytes"] == 65 * 1024**3
+    assert summary["process_page_fault_delta"] == 2000
+    assert summary["process_peak_private_bytes"] == 8 * 1024**3
+    assert summary["maximum_gpu_temperature_c"] == 70
+    assert summary["maximum_gpu_power_w"] == 200.0
+    assert _counter_delta(samples, "missing") is None
 
 
 def test_comparison_accepts_sampler_treatment_change_but_rejects_control_change():

@@ -34,7 +34,7 @@ def test_visual_reference_strength_schema_and_registration_are_isolated_exp():
     assert [item.id for item in schema.outputs] == ["positive", "report"]
 
     node_classes = asyncio.run(h3_audio_t8_pkg.comfy_entrypoint().get_node_list())
-    assert node_classes[-1] is MiniMaxH3VisualReferenceStrengthEXPT8
+    assert node_classes[35] is MiniMaxH3VisualReferenceStrengthEXPT8
 
 
 @pytest.mark.parametrize("strength", [0.999, 0.995, 0.990, 0.980, 0.950])
@@ -145,7 +145,7 @@ def test_explicit_0999_matches_current_h3_default_visual_noise_rows_exactly():
 def test_visual_reference_strength_api_example_patches_only_positive_conditioning():
     root = Path(__file__).resolve().parents[1]
     workflow = json.loads(
-        (root / "examples" / "ref2va_visual_reference_strength_exp_api.json").read_text(
+        (root / "tests" / "fixtures" / "api" / "ref2va_visual_reference_strength_exp_api.json").read_text(
             encoding="utf-8"
         )
     )
@@ -176,7 +176,8 @@ def test_visual_reference_strength_frontend_workflow_is_consistent_and_warns():
             root
             / "examples"
             / "workflows"
-            / "H3_Ref2VA_Visual_Reference_Strength_EXP.json"
+            / "03-image-video-edit"
+            / "2026-08-10_H3_Ref2VA_Visual_Reference_Strength_EXP.json"
         ).read_text(encoding="utf-8")
     )
     nodes = {node["id"]: node for node in workflow["nodes"]}

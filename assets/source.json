@@ -146,6 +146,7 @@
     "MelBandRoFormer/MelBandRoformer_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/MelBandRoFormer_comfy/-/lfs/6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
   },
   "loras": {
+  "minimax_h3_turbo_4step_10ErosMax_test4_pruned_curveproj1025_exp_v001-T8.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/6c2f38d45dfa3fc282a48de3171b6946a5e6d46e13f832c43b93734f6d12edf5",
 	"minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/c8168ebc17bbacc4296103dda2fec1ba85b24392fa08cf2bfbcef0cff0dc3cc8",
 	"minimax_h3_lms_v1.0_r64_r.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/8400b520f399737fc208253b1ef9560d436e4c3981259ba451a83ddf018d55e0",
 	"minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/a117f18682a22a0381cadd9832da0afe9912f604305b3e44310b5aa1919734cc",

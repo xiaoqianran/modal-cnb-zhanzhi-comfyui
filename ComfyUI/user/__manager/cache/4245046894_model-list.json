@@ -6181,6 +6181,28 @@
             "size": "2.54GB",
             "type": "controlnet",
             "url": "https://huggingface.co/Comfy-Org/Qwen-Image-InstantX-ControlNets/resolve/main/split_files/controlnet/Qwen-Image-InstantX-ControlNet-Inpainting.safetensors"
+        },
+        {
+            "base": "yolov8",
+            "description": "Anime eye detector (YOLOv8n). Detects eyes in anime-style character art for use with BboxDetectorSEGS/Detailer workflows.",
+            "filename": "eye_yolov8n.pt",
+            "name": "Anime Eye Detector (YOLOv8n)",
+            "reference": "https://huggingface.co/killjoyelite/anime-eye-yolov8",
+            "save_path": "ultralytics/bbox",
+            "size": "6.24MB",
+            "type": "Ultralytics",
+            "url": "https://huggingface.co/killjoyelite/anime-eye-yolov8/resolve/6bceece59aa38f7fe9d3867f3e2931b11c7ff9a1/eye_yolov8n.pt"
+        },
+        {
+            "base": "yolov8",
+            "description": "Anime eye detector (YOLOv8s). Detects eyes in anime-style character art for use with BboxDetectorSEGS/Detailer workflows.",
+            "filename": "eye_yolov8s.pt",
+            "name": "Anime Eye Detector (YOLOv8s)",
+            "reference": "https://huggingface.co/killjoyelite/anime-eye-yolov8",
+            "save_path": "ultralytics/bbox",
+            "size": "22.5MB",
+            "type": "Ultralytics",
+            "url": "https://huggingface.co/killjoyelite/anime-eye-yolov8/resolve/6bceece59aa38f7fe9d3867f3e2931b11c7ff9a1/eye_yolov8s.pt"
         }
     ]
 }

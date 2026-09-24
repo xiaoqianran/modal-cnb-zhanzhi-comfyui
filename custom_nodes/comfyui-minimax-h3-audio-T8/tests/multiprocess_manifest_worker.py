@@ -10,12 +10,18 @@ import time
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-COMFY_ROOT = PACKAGE_ROOT.parents[1]
+COMFY_SPEC = importlib.util.find_spec("folder_paths")
+if COMFY_SPEC is None or COMFY_SPEC.origin is None:
+    raise RuntimeError("CPU worker requires the configured Core folder_paths on PYTHONPATH")
+COMFY_ROOT = Path(COMFY_SPEC.origin).resolve().parent
 PACKAGE_NAME = "h3_audio_t8_pkg"
 
 
 def _load_package() -> None:
-    sys.path.insert(0, str(COMFY_ROOT))
+    if importlib.util.find_spec("comfy") is None:
+        sys.path.insert(0, str(COMFY_ROOT))
+    import comfy.cli_args
+    comfy.cli_args.args.cpu = True  # File locking/recovery must also work on CPU hosts.
     sys.path.insert(0, str(PACKAGE_ROOT / "tests"))
     if PACKAGE_NAME in sys.modules:
         return

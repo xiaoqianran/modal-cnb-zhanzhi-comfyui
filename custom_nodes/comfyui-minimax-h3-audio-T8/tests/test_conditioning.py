@@ -5,8 +5,11 @@ import json
 import pytest
 import torch
 
+import h3_audio_t8_pkg.conditioning as conditioning_module
 from h3_audio_t8_pkg.conditioning import (
     HYBRID_KEYFRAME_SENTINEL,
+    HYBRID_LAYOUT_LEGACY_SENTINEL,
+    HYBRID_LAYOUT_NATIVE_CONCAT,
     assert_hybrid_layout_contract,
     build_conditioning,
 )
@@ -78,16 +81,164 @@ def test_soundtrack_pairing_uses_autogrow_ordinal_not_dense_position():
 
 
 def test_exact_keyframe_and_audio_reference_use_guarded_hybrid_payload():
-    assert_hybrid_layout_contract()
+    hybrid_route = assert_hybrid_layout_contract()
     args = base_args()
     args["first_frame"] = torch.zeros((1, 128, 128, 3))
     conditioning, _, _, _, media_map, report = build_conditioning(**args)
     metadata = conditioning[0][1]
     assert metadata["minimax_keyframes"][0]["resolved_frame_index"] == 0
-    assert metadata["minimax_refs"][0]["kind"] == HYBRID_KEYFRAME_SENTINEL
+    if hybrid_route == HYBRID_LAYOUT_LEGACY_SENTINEL:
+        assert metadata["minimax_refs"][0]["kind"] == HYBRID_KEYFRAME_SENTINEL
+    else:
+        assert [item["kind"] for item in metadata["minimax_refs"]] == ["audio"]
     tokenize_kwargs = args["clip"].tokenize_calls[0][1]
     assert [item["type"] for item in tokenize_kwargs["minimax_ref_items"]] == ["image", "audio"]
     assert json.loads(media_map)["pictures"]["1"].startswith("first_frame")
+
+
+def test_hybrid_contract_accepts_semantically_compatible_external_wrapper(monkeypatch):
+    original = conditioning_module.MiniMaxH3BaseModel.extra_conds
+    expected_route = assert_hybrid_layout_contract()
+
+    def compatible_wrapper(self, **kwargs):
+        out = original(self, **kwargs)
+        keyframes = kwargs.get("minimax_keyframes")
+        refs = kwargs.get("minimax_refs")
+        if keyframes and refs and expected_route == HYBRID_LAYOUT_NATIVE_CONCAT:
+            payload = out["minimax_payload"].cond
+            payload["cond_video_latents"] = [
+                *[kf["latent"] for kf in keyframes],
+                *[ref["latent"] for ref in refs if "latent" in ref],
+            ]
+        return out
+
+    compatible_wrapper._minimax_kfref_patched = True
+    monkeypatch.setattr(
+        conditioning_module.MiniMaxH3BaseModel,
+        "extra_conds",
+        compatible_wrapper,
+    )
+
+    assert assert_hybrid_layout_contract() == expected_route
+
+
+@pytest.mark.parametrize("wrapper_depth", [1, 2])
+def test_hybrid_probe_survives_hjl_style_helper_rewrite(monkeypatch, wrapper_depth):
+    """Reproduce HJL 1753268's helper-only rewrite without importing the plugin."""
+    expected = assert_hybrid_layout_contract()
+    original_init = conditioning_module.PackedLayout.__init__
+    wrapped = conditioning_module.build_packed_layout
+
+    def install(original):
+        def wrapper(text_len, latent_t, latent_h, latent_w, audio_t,
+                    keyframes=None, refs=None, frame_count=None):
+            fixed = [
+                {**kf, "resolved_frame_index": 0}
+                if kf.get("resolved_frame_index") is not None
+                and kf["resolved_frame_index"] != 0
+                and (frame_count is None or kf["resolved_frame_index"] != frame_count - 1)
+                else kf
+                for kf in keyframes or []
+            ]
+            return original(text_len, latent_t, latent_h, latent_w, audio_t,
+                            keyframes=fixed, refs=refs, frame_count=frame_count)
+        return wrapper
+
+    for _ in range(wrapper_depth):
+        wrapped = install(wrapped)
+    monkeypatch.setattr(conditioning_module, "build_packed_layout", wrapped)
+    assert assert_hybrid_layout_contract() == expected
+    assert assert_hybrid_layout_contract() == expected
+    # Do not uninstall another plugin or replace the live Core implementation.
+    assert conditioning_module.build_packed_layout is wrapped
+    assert conditioning_module.PackedLayout.__init__ is original_init
+
+
+@pytest.mark.parametrize("first_last_only", [False, True])
+def test_hybrid_contract_preserves_legacy_overwrite_route(monkeypatch, first_last_only):
+    original = conditioning_module.MiniMaxH3BaseModel.extra_conds
+    original_layout = conditioning_module.PackedLayout.__init__
+    if first_last_only:
+        def legacy_layout(self, *args, **kwargs):
+            if any(kf["resolved_frame_index"] not in (0, 4) for kf in kwargs.get("keyframes") or ()):
+                raise ValueError("only first/last keyframe anchors are supported")
+            return original_layout(self, *args, **kwargs)
+        monkeypatch.setattr(conditioning_module.PackedLayout, "__init__", legacy_layout)
+
+    def legacy_wrapper(self, **kwargs):
+        out = original(self, **kwargs)
+        refs = kwargs.get("minimax_refs")
+        if refs is not None:
+            payload = out["minimax_payload"].cond
+            payload["cond_video_latents"] = [
+                ref["latent"] for ref in refs if "latent" in ref
+            ]
+        return out
+
+    monkeypatch.setattr(
+        conditioning_module.MiniMaxH3BaseModel,
+        "extra_conds",
+        legacy_wrapper,
+    )
+
+    assert assert_hybrid_layout_contract() == HYBRID_LAYOUT_LEGACY_SENTINEL
+
+
+def test_hybrid_contract_rejects_incompatible_external_layout_patch(monkeypatch):
+    original = conditioning_module.PackedLayout.__init__
+
+    def incompatible_wrapper(self, *args, **kwargs):
+        return original(self, *args, t8_invalid_layout_keyword=True, **kwargs)
+
+    monkeypatch.setattr(
+        conditioning_module.PackedLayout,
+        "__init__",
+        incompatible_wrapper,
+    )
+
+    with pytest.raises(RuntimeError, match="PackedLayout"):
+        assert_hybrid_layout_contract()
+
+
+def test_hybrid_contract_bypasses_verified_obsolete_painter_layout_patch(monkeypatch):
+    import inspect
+    original = conditioning_module.PackedLayout.__init__
+    expected_route = assert_hybrid_layout_contract()
+    native_accepts_frame_count = "frame_count" in inspect.signature(original).parameters
+
+    def obsolete_painter_wrapper(
+        self,
+        text_len,
+        latent_t,
+        latent_h,
+        latent_w,
+        audio_t,
+        keyframes=None,
+        refs=None,
+        frame_count=None,
+    ):
+        return original(
+            self,
+            text_len,
+            latent_t,
+            latent_h,
+            latent_w,
+            audio_t,
+            keyframes=keyframes,
+            refs=refs,
+            frame_count=frame_count,
+        )
+
+    obsolete_painter_wrapper._minimax_kfref_layout_patched = True
+    monkeypatch.setattr(
+        conditioning_module.PackedLayout,
+        "__init__",
+        obsolete_painter_wrapper,
+    )
+
+    assert assert_hybrid_layout_contract() == expected_route
+    expected_init = obsolete_painter_wrapper if native_accepts_frame_count else original
+    assert conditioning_module.PackedLayout.__init__ is expected_init
 
 
 def test_reference_only_keeps_blank_target_audio():
@@ -109,6 +260,36 @@ def test_native_t2va_needs_no_source_audio():
     assert "task=t2va" in report
 
 
+def test_plain_disconnected_media_number_is_preserved_as_text_and_reported():
+    args = base_args()
+    args.update({
+        "audio_mode": "native",
+        "drive_audio": None,
+        "add_source_as_reference": False,
+        "prompt_primary_audio_ordinal": 0,
+        "prompt": "Video 2 opens with a quiet landscape and Audio 3 fades in.",
+    })
+    _conditioning, _latent, _output_audio, prompt, _media_map, report = build_conditioning(
+        **args
+    )
+    assert prompt == "Video 2 opens with a quiet landscape and Audio 3 fades in."
+    assert "warning: <Video 2> is not connected" in report
+    assert "warning: <Audio 3> is not connected" in report
+
+
+def test_explicit_disconnected_media_tag_still_fails_closed():
+    args = base_args()
+    args.update({
+        "audio_mode": "native",
+        "drive_audio": None,
+        "add_source_as_reference": False,
+        "prompt_primary_audio_ordinal": 0,
+        "prompt": "Use <Picture 1> as the identity reference.",
+    })
+    with pytest.raises(ValueError, match="Connect the referenced media"):
+        build_conditioning(**args)
+
+
 def test_orphan_video_soundtrack_is_rejected():
     args = base_args()
     args["ref_video_audios"] = {"ref_video_audio_2": make_audio(2)}
@@ -116,7 +297,7 @@ def test_orphan_video_soundtrack_is_rejected():
         build_conditioning(**args)
 
 
-def test_canvas_allows_1080p_area_and_rejects_above_it():
+def test_canvas_above_reference_area_is_warning_only_without_opt_in():
     args = base_args()
     args.update({
         "width": 1920,
@@ -132,6 +313,18 @@ def test_canvas_allows_1080p_area_and_rejects_above_it():
     video, _audio = latent["samples"].unbind()
     assert video.shape[-2:] == (68, 120)
 
-    args.update({"width": 1952, "height": 1088})
-    with pytest.raises(ValueError, match="2,088,960"):
-        build_conditioning(**args)
+    # Exact canvas from the user report: 2,396,160 pixels, formerly rejected.
+    args.update({"width": 2080, "height": 1152})
+    result = build_conditioning(**args, return_details=True)
+    _conditioning, latent, *_rest, report, details = result
+    video, _audio = latent["samples"].unbind()
+    assert video.shape[-2:] == (72, 130)
+    assert "execution remains allowed" in report
+    assert details["exceeds_reference_area"] is True
+    assert details["allow_above_reference_area"] is False
+    assert details["reference_area_policy"] == "warning_only_no_area_gate"
+
+    args["allow_above_reference_area"] = True
+    _conditioning, latent_opt_in, *_rest = build_conditioning(**args)
+    video_opt_in, _audio = latent_opt_in["samples"].unbind()
+    assert video_opt_in.shape == video.shape

@@ -13,6 +13,10 @@
 
 -   bash /workspace/assets/tools/gpu_mem_once.sh
 
+### 查看初始化下载
+
+-   tail -f /tmp/初始化下载.log
+
 ### 云端模型编辑器：
 
 -   python3 /workspace/assets/tools/web_editor.py

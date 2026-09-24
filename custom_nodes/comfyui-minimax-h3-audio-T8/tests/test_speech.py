@@ -10,6 +10,7 @@ import torch
 import h3_audio_t8_pkg.speech_verification as speech_verification
 from h3_audio_t8_pkg.nodes_speech_exp import MiniMaxH3SpeechStudioT8
 from h3_audio_t8_pkg.speech import (
+    _energy_trim,
     assemble_speech_audio,
     build_speech_conditioning,
     decode_speech_audio,
@@ -23,6 +24,7 @@ from h3_audio_t8_pkg.speech import (
 )
 from h3_audio_t8_pkg.speech_verification import (
     exact_target_word_bounds,
+    normalized_asr_units,
     transcript_metrics,
     verify_speech_audio,
 )
@@ -82,6 +84,24 @@ def one_segment_plan(profile, text="The lantern is still burning.", language="En
         24,
     )
     return plan
+
+
+def test_conservative_energy_trim_keeps_a_weak_onset_and_requested_padding():
+    sample_rate = 1000
+    waveform = torch.zeros((1, 2, 1000), dtype=torch.float32)
+    # 0.004 is only about -48 dBFS: deliberately close to the -50 dBFS
+    # boundary so a reference-voice onset is not mistaken for silence.
+    waveform[..., 300:700] = 0.004
+    output, report = _energy_trim(
+        {"waveform": waveform, "sample_rate": sample_rate},
+        threshold_dbfs=-50.0,
+        padding_seconds=0.1,
+    )
+    assert report["applied"] is True
+    assert report["start_sample"] <= 210
+    assert report["end_sample"] >= 790
+    assert output["waveform"].shape[-1] == report["end_sample"] - report["start_sample"]
+    assert torch.count_nonzero(output["waveform"]) == 800
 
 
 def test_reference_profile_requires_rights_and_prepares_bounded_h3_audio():
@@ -172,6 +192,42 @@ def test_asr_metrics_and_exact_target_bounds_do_not_fuzzy_guess():
     assert transcript_metrics(expected, contaminated)["word_or_character_error_rate"] > 0
 
 
+def test_asr_units_preserve_accented_latin_cyrillic_and_arabic_words():
+    assert normalized_asr_units("L’été arrive déjà") == ["l'été", "arrive", "déjà"]
+    assert normalized_asr_units("Привет, мир") == ["привет", "мир"]
+    assert normalized_asr_units("مرحبا بالعالم") == ["مرحبا", "بالعالم"]
+    assert transcript_metrics("cafe\u0301 déjà", "café déjà")["primary_error_rate"] == 0.0
+
+    russian = transcript_metrics("Привет мир", "Привет")
+    arabic = transcript_metrics("مرحبا بالعالم", "مرحبا")
+    spanish = transcript_metrics("¿Dónde está José?", "¿Dónde está?")
+    assert russian["primary_metric"] == "WER" and russian["primary_error_rate"] == 0.5
+    assert arabic["primary_metric"] == "WER" and arabic["primary_error_rate"] == 0.5
+    assert spanish["primary_metric"] == "WER" and spanish["primary_error_rate"] == pytest.approx(1 / 3)
+
+
+def test_cjk_kana_hangul_and_extension_characters_use_cer_units():
+    for expected, heard in (
+        ("你好世界", "你好世间"),
+        ("こんにちは", "こんばんは"),
+        ("안녕하세요", "안녕하세오"),
+        ("𠀀人物", "𠀁人物"),
+    ):
+        metrics = transcript_metrics(expected, heard)
+        assert metrics["primary_metric"] == "CER"
+        assert metrics["primary_error_rate"] > 0.0
+
+    mixed = transcript_metrics("你好 H3 world", "你好 H4 world")
+    assert mixed["primary_metric"] == "CER"
+    assert mixed["primary_unit_mode"] == "unicode_alphanumeric_characters"
+    assert mixed["primary_error_rate"] == pytest.approx(1 / 9)
+
+
+def test_transcript_metrics_rejects_punctuation_only_expected_text():
+    with pytest.raises(ValueError, match="no evaluable Unicode"):
+        transcript_metrics("……！？", "")
+
+
 def test_asr_exact_target_mode_trims_and_retranscribes(monkeypatch):
     expected = "The door is open now. I'll wait beside the window."
     raw_words = [
@@ -237,7 +293,45 @@ def test_asr_exact_target_mode_trims_and_retranscribes(monkeypatch):
     assert speaker_similarity == 0.0
     assert accepted is True
     assert report["text_verification"]["trim"]["applied"] is True
+    assert report["text_verification"]["asr"]["vad_filter"] is True
     assert report["text_verification"]["asr"]["unload"]["released"] is True
+
+
+def test_asr_transcribe_enables_vad_for_timeline_accurate_word_bounds():
+    calls = []
+
+    class Word:
+        start = 0.62
+        end = 1.44
+        word = "hello"
+
+    class Segment:
+        text = "hello"
+        words = [Word()]
+
+    class Info:
+        language = "en"
+        language_probability = 1.0
+        duration = 2.0
+
+    class Model:
+        def transcribe(self, array, **kwargs):
+            calls.append(kwargs)
+            return iter([Segment()]), Info()
+
+    result = speech_verification._transcribe(
+        Model(), make_audio(2.0, 32000, value=0.1), "English", 5
+    )
+    assert calls == [
+        {
+            "language": "en",
+            "beam_size": 5,
+            "word_timestamps": True,
+            "condition_on_previous_text": False,
+            "vad_filter": True,
+        }
+    ]
+    assert result["words"][0]["start"] == pytest.approx(0.62)
 
 
 def test_asr_off_mode_never_requires_or_loads_a_model():
@@ -351,7 +445,7 @@ def test_speech_plan_never_guesses_render_duration_and_frame_window_is_explicit(
     assert "render_seconds" not in plan
     assert "not guessed" in data["limitations"][0]
     assert render_frame_count(10.0) == 243
-    with pytest.raises(ValueError, match="trained-range"):
+    with pytest.raises(ValueError, match="at least"):
         render_frame_count(4.0)
 
 
@@ -519,12 +613,45 @@ def test_speech_studio_expands_native_comfy_graph_without_loader_nodes():
         "MiniMaxH3SpeechDecodeT8",
         "MiniMaxH3SpeechVerifyT8",
         "MiniMaxH3SpeechFinalizeT8",
+        "MiniMaxH3SpeechGuardT8",
     }
     assert not {"UNETLoader", "CLIPLoader", "VAELoader"} & class_types
+    decode = next(
+        node for node in result.expand.values() if node["class_type"] == "MiniMaxH3SpeechDecodeT8"
+    )
+    assert decode["inputs"]["trim_mode"] == "none"
+
+
+def test_speech_studio_auto_boundary_is_reference_only():
+    profile, _prepared, _report = reference_profile()
+    plan = one_segment_plan(profile)
+    result = MiniMaxH3SpeechStudioT8.execute(
+        model=object(),
+        clip=object(),
+        video_vae=object(),
+        audio_vae=object(),
+        voice_profile=profile,
+        speech_plan=plan,
+        segment_index=0,
+        seed=123,
+        render_seconds=10.0,
+        resolution=32,
+        steps=20,
+        sampler_name="res_multistep",
+        scheduler="simple",
+        shift_video=12.0,
+        shift_audio=3.0,
+        trim_mode="auto_reference_voice",
+        release_policy="clear_execution_cache",
+    )
+    decode = next(
+        node for node in result.expand.values() if node["class_type"] == "MiniMaxH3SpeechDecodeT8"
+    )
+    assert decode["inputs"]["trim_mode"] == "conservative_energy"
 
 
 def test_described_speech_api_example_reuses_models_and_keeps_stock_baseline():
-    path = Path(__file__).resolve().parents[1] / "examples" / "speech_described_api.json"
+    path = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "api" / "speech_described_api.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
     assert {node["class_type"] for node in workflow.values()} == {
         "UNETLoader",
@@ -549,7 +676,7 @@ def test_described_speech_api_example_reuses_models_and_keeps_stock_baseline():
 
 
 def test_reference_speech_api_example_requires_rights_and_ref2va():
-    path = Path(__file__).resolve().parents[1] / "examples" / "speech_reference_clone_api.json"
+    path = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "api" / "speech_reference_clone_api.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
     assert workflow["1"]["inputs"]["unet_name"].startswith("minimax_h3_ref2va_")
     assert workflow["6"]["inputs"]["voice_mode"] == "reference_voice"
@@ -559,6 +686,7 @@ def test_reference_speech_api_example_requires_rights_and_ref2va():
     assert workflow["8"]["inputs"]["sampler_name"] == "res_multistep"
     assert workflow["8"]["inputs"]["scheduler"] == "simple"
     assert workflow["8"]["inputs"]["release_policy"] == "unload_all_models"
+    assert workflow["8"]["inputs"]["trim_mode"] == "auto_reference_voice"
     assert workflow["8"]["inputs"]["verify_mode"] == "trim_exact_target"
     assert workflow["8"]["inputs"]["unload_asr_after_verify"] is True
     assert workflow["8"]["inputs"]["speaker_check_mode"] == "report_cosine"
@@ -566,7 +694,7 @@ def test_reference_speech_api_example_requires_rights_and_ref2va():
 
 
 def test_dialogue_example_generates_turns_independently_before_sample_exact_mix():
-    path = Path(__file__).resolve().parents[1] / "examples" / "speech_dialogue_two_speaker_api.json"
+    path = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "api" / "speech_dialogue_two_speaker_api.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
     assert workflow["7"]["class_type"] == "MiniMaxH3DialogueScriptT8"
     assert workflow["8"]["class_type"] == "MiniMaxH3DialogueTurnSelectT8"
@@ -581,9 +709,18 @@ def test_dialogue_example_generates_turns_independently_before_sample_exact_mix(
 
 
 SPEECH_FRONTEND_WORKFLOWS = (
-    "H3_Speech_Described_Stock20_EXP.json",
-    "H3_Speech_Reference_Clone_Stock20_EXP.json",
-    "H3_Speech_Dialogue_Two_Speaker_Stock20_EXP.json",
+    "2026-08-10_H3_Speech_Described_Stock20_EXP.json",
+    "2026-08-10_H3_Speech_Reference_Clone_Stock20_EXP.json",
+    "2026-08-09_H3_Speech_Dialogue_Two_Speaker_Stock20_EXP.json",
+    "2026-08-10_H3_Speech_Performance_ADR_Stock20_EXP.json",
+    "2026-08-10_H3_Speech_LongForm_Resume_Stock20_EXP.json",
+    "2026-08-10_H3_Speech_LongForm_Compose_EXP.json",
+    "2026-08-10_H3_Speech_Voice_Library_Save_EXP.json",
+    "2026-08-10_H3_Speech_Voice_Library_Load_EXP.json",
+    "2026-08-10_H3_Speech_Voice_Library_Delete_EXP.json",
+    "2026-08-10_H3_Speech_VRAM_Preflight_EXP.json",
+    "2026-08-10_H3_Speech_LongForm_Control_EXP.json",
+    "2026-08-09_H3_Speech_Joint_Dialogue_Stock20_EXP.json",
 )
 
 
@@ -592,6 +729,7 @@ def load_speech_frontend_workflow(filename):
         Path(__file__).resolve().parents[1]
         / "examples"
         / "workflows"
+        / "05-speech-dialogue"
         / filename
     )
     return json.loads(path.read_text(encoding="utf-8"))
@@ -606,7 +744,7 @@ def test_speech_frontend_workflow_has_bidirectionally_consistent_links(filename)
     assert len(nodes) == len(workflow["nodes"])
     assert len(links) == len(workflow["links"])
     assert workflow["last_node_id"] == max(nodes)
-    assert workflow["last_link_id"] == max(links)
+    assert workflow["last_link_id"] == (max(links) if links else 0)
 
     for link_id, (_, source_id, source_slot, target_id, target_slot, link_type) in links.items():
         source = nodes[source_id]["outputs"][source_slot]
@@ -625,13 +763,13 @@ def test_speech_frontend_workflow_has_bidirectionally_consistent_links(filename)
 
 def test_speech_frontend_workflow_presets_keep_validated_exp_boundaries():
     described = load_speech_frontend_workflow(
-        "H3_Speech_Described_Stock20_EXP.json"
+        "2026-08-10_H3_Speech_Described_Stock20_EXP.json"
     )
     reference = load_speech_frontend_workflow(
-        "H3_Speech_Reference_Clone_Stock20_EXP.json"
+        "2026-08-10_H3_Speech_Reference_Clone_Stock20_EXP.json"
     )
     dialogue = load_speech_frontend_workflow(
-        "H3_Speech_Dialogue_Two_Speaker_Stock20_EXP.json"
+        "2026-08-09_H3_Speech_Dialogue_Two_Speaker_Stock20_EXP.json"
     )
 
     described_nodes = {node["id"]: node for node in described["nodes"]}
@@ -656,6 +794,7 @@ def test_speech_frontend_workflow_presets_keep_validated_exp_boundaries():
         "res_multistep",
         "simple",
     ]
+    assert reference_nodes[8]["widgets_values"][9] == "auto_reference_voice"
     assert reference_nodes[8]["widgets_values"][10:12] == [
         "trim_exact_target",
         "faster-whisper-small.en-d1d751a5",
@@ -686,3 +825,30 @@ def test_speech_frontend_workflow_presets_keep_validated_exp_boundaries():
         "audio_segments.audio_segment_1",
     }
     assert dialogue_nodes[13]["widgets_values"] == ["unload_all_models"]
+
+
+def test_speech_reliability_api_examples_keep_explicit_safety_boundaries():
+    root = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "api"
+    performance = json.loads((root / "speech_performance_adr_api.json").read_text(encoding="utf-8"))
+    assert performance["7"]["class_type"] == "MiniMaxH3SpeechPerformanceT8"
+    assert performance["8"]["inputs"]["speech_plan"] == ["7", 0]
+    assert performance["8"]["inputs"]["release_policy"] == "unload_all_models"
+    assert performance["9"]["class_type"] == "MiniMaxH3SpeechADRFitT8"
+    assert performance["9"]["inputs"]["minimum_rate"] == 0.9
+    assert performance["9"]["inputs"]["maximum_rate"] == 1.1
+
+    longform = json.loads((root / "speech_longform_resume_api.json").read_text(encoding="utf-8"))
+    assert longform["7"]["class_type"] == "MiniMaxH3SpeechLongFormStartT8"
+    assert longform["8"]["inputs"]["segment_index"] == ["7", 2]
+    assert longform["8"]["inputs"]["voice_profile"] == ["7", 1]
+    assert longform["8"]["inputs"]["release_policy"] == "unload_all_models"
+    assert longform["9"]["class_type"] == "MiniMaxH3SpeechLongFormAcceptT8"
+    assert longform["9"]["inputs"]["accepted"] == ["8", 7]
+
+    joint = json.loads((root / "speech_joint_dialogue_exp_api.json").read_text(encoding="utf-8"))
+    assert joint["10"]["class_type"] == "MiniMaxH3SpeechGuardT8"
+    assert joint["11"]["inputs"]["speech_guard"] == ["10", 0]
+    assert joint["17"]["inputs"]["speech_guard"] == ["10", 0]
+    assert joint["17"]["inputs"]["release_policy"] == "unload_all_models"
+    assert joint["5"]["inputs"]["audio"] == "speech_reference_a.flac"
+    assert joint["6"]["inputs"]["audio"] == "speech_reference_b.flac"

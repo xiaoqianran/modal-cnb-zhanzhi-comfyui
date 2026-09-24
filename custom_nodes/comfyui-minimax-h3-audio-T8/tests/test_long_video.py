@@ -7,8 +7,7 @@ import types
 import pytest
 import torch
 
-from comfy.ldm.minimax.model import PackedLayout
-
+from h3_audio_t8_pkg.conditioning import build_packed_layout
 from h3_audio_t8_pkg.core import empty_av_latent
 from h3_audio_t8_pkg.long_video import (
     LONG_VIDEO_CONDITIONING_KEY,
@@ -42,6 +41,24 @@ def make_context(width=128, height=128, source_segment_index=0):
             "audio_overhang": 1 / 3,
         },
     }
+
+
+@pytest.mark.parametrize("mode", ["reference_only", "remix_source", "lock_source"])
+def test_voice_reference_and_remix_do_not_replace_generated_delivery_audio(mode):
+    from helpers import make_audio
+    source = make_audio(3)
+    vae = FakeAudioVAE()
+    args = dict(clip=FakeClip(), video_vae=FakeVideoVAE(), audio_vae=vae,
+                context={"schema": LONG_VIDEO_SCHEMA, "empty": True}, segment_index=0, context_frames=0,
+                context_audio="video_and_audio", prompt="<Audio 1> voice",
+                width=128, height=128, length=124, audio_mode=mode, drive_audio=source)
+    positive, latent, mux, *_ = build_long_video_conditioning(**args)
+    assert mux is source if mode == "lock_source" else mux is None
+    if mode == "reference_only":
+        ref = next(item for item in positive[0][1]["minimax_refs"] if item["kind"] == "audio")
+        assert ref["ref_audio_t"] == 120  # Three seconds, not a padded target window.
+    explicit = make_audio(5)
+    assert build_long_video_conditioning(**args, final_audio=explicit)[2] is explicit
 
 
 def test_segment_planner_keeps_segment_zero_legacy_and_adds_later_overlap():
@@ -568,7 +585,7 @@ def test_local_payload_repair_handles_multiple_refs_without_global_patch():
         {
             "resolved_frame_index": 0,
             MOTION_FRAME_INDEX: offset,
-            "latent": torch.full((1,), float(index)),
+            "latent": torch.full((1, 24, 1, 8, 8), float(index)),
         }
         for index, offset in enumerate([0, 1, 5, 9, 13, 17, 18])
     ]
@@ -587,7 +604,7 @@ def test_local_payload_repair_handles_multiple_refs_without_global_patch():
             MOTION_AUDIO_END_FRAME: 22.0,
         },
     ]
-    layout = PackedLayout(
+    layout = build_packed_layout(
         text_len,
         latent_t,
         latent_h,
@@ -645,7 +662,11 @@ class _FakeModelPatcher:
 
 def test_model_patch_is_attached_only_to_clone_and_repairs_extra_conds_output():
     keyframes = [
-        {"resolved_frame_index": 0, MOTION_FRAME_INDEX: offset, "latent": torch.full((1,), float(index))}
+        {
+            "resolved_frame_index": 0,
+            MOTION_FRAME_INDEX: offset,
+            "latent": torch.full((1, 24, 1, 8, 8), float(index)),
+        }
         for index, offset in enumerate([0, 1, 5, 9, 13, 17, 18])
     ]
     refs = [
@@ -659,7 +680,7 @@ def test_model_patch_is_attached_only_to_clone_and_repairs_extra_conds_output():
     ]
 
     def extra_conds(_self, **kwargs):
-        layout = PackedLayout(
+        layout = build_packed_layout(
             7,
             37,
             8,

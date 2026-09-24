@@ -1,0 +1,87 @@
+# 学习型 Latent 放大与二阶段生成
+
+这一组把低分辨率 H3 首次生成的干净联合 AV latent，经独立 3D 学习型模型放大视频空间，再在高分辨率画布继续联合音画去噪。它与普通插值放大不同，也不会修改原来的 `Latent Upscale by 32` 稳定节点。
+
+## 工作流
+
+- `2026-09-20_H3_H16_3_Chunked_PASS2_I2VA_Advanced_EXP.json`：正式 H16-3 兼容模板。在已验证的 I2VA 4+4 学习型二采链上，只把 PASS 2 的 `SamplerCustomAdvanced` 原位替换为 `DeciiaChunkedPass2Sampler`；一采 `denoised_output`、3D latent 放大、HIGH Conditioning、Reconcile、Detail Mixer 与 AV Decode 接线保持不变。模板显式使用 `guarded_overlap_exp / 34 / 17 / 0.999 / refined_exp`，因此二采视频和分段精修音频都实际参与输出；合并异常会回退一采音频。若先做保守基线，将 `audio_output` 改为 `preserve_first_pass`。下游只接 `output`，不要接占位的 `denoised_output`。详见[H16-3 说明](../../../docs/H16_3_CHUNKED_PASS2_EXP.md)。
+
+- `2026-09-17_H3_Chunked_4plus4_接线修正版（低显存双分块双采样）.json`：用户自定义 EXP 组合，按用户明确要求一并发布。保留 Ref2VA 底模、Turbo 强度0.7、T8 FFN→KJ省显存Sage→普通backend→Sol→LoRA链；需 KJNodes、Comfyroll、Various、Easy-Use，以及对应 Sage/Sol 环境。实际LOW864×480→HIGH1728×960、5秒输入对齐124帧≈5.17秒；136帧窗口下只有一窗、共8NFE。改到8秒才产生两窗／12NFE。图名“低显存”不构成16GB或组合质量保证，单独完整审片；见[用法及参数来源](../../../docs/CHUNKED_STANDARD_4PLUS4_EXP.md)。
+
+- `2026-09-17_H3_NonPDD_Standard_4plus4_Chunked_EXP.json`：非PDD、标准前4步＋每窗后4步的联合AV时间分块新合同。Plan已接一采源LATENT，默认倍率2×，计算448×224→896×448，并用INT `width/height` 自动同步HIGH条件；复用普通学习型节点的比例和32像素对齐约束。8秒192帧，136/34两窗；3D放大只执行一次，二采真正完成音频，后窗重叠AV只读，不做后期叠化。两窗总计12次前向，不是整片8次；需本次新代码并重启，仍为待完整人审EXP。详见[接线与边界](../../../docs/CHUNKED_STANDARD_4PLUS4_EXP.md)。旧Plan默认不变，不包含被撤销的8+3误配。
+
+- `2026-09-01_H3_Subject_Safe_RGB_Composite_v8_Advanced_EXP.json`：人物安全RGB后处理。分别载入D0基底、T2细化结果和同帧同尺寸的无损逐帧alpha，只在alpha内混入T2，alpha外逐像素保留D0，并接回D0音频。节点不自动识别人、脸、字幕、遮挡或相机运动；工作流用于生成待人工审核候选，不改变任何现有二采工作流。
+- `2026-08-30_H3_Mask_Preserving_Low_Sigma_TwoPass_v4_Advanced_EXP.json`：背景保护 v4。首遍和二遍使用同一视频掩码，第二遍只做空间尺寸对齐，不对动态时间掩码插值；黑色背景保持，白色人物区域允许生成。默认完整画面、完整时间轴、8步首采和3步/0.30低Sigma二采，最终仍返回首遍音频。单条576×320→1152×640×124串行验证严格解码通过，背景相对首帧累计变化比v3下降约70%，但完整人工质量与普遍16GB安全仍未通过，因此只保留Advanced EXP。
+- `2026-08-30_H3_Chunked_TwoPass_Global_Noise_v2_Advanced_EXP.json`：全局噪声 v2。完整上下文起点固定`full_frame_safe + full_clip_safe`，只跑一个空间画布和一条完整H3时间轨迹；旧 v1 工作流不变。工作流先把首尾关键帧统一中心裁剪到同一目标画布再复用，避免非等比输入在首尾端产生不同几何。独立空间块与时间重叠方案的实跑均失败，只保留为显式诊断EXP；完整上下文仍需逐片人审，不称“画质安全”。
+- `2026-08-21_H3_Learned_Latent_TwoPass_I2VA_Standard_Advanced_EXP.json`：标准I2VA二次采样；默认执行低分辨率4步、学习型latent放大、高分辨率4步，共8次联合AV前向。新增的是高噪声`0.8`落点，不是尾段步骤。二采专用Mixer默认旁路。
+- `2026-08-21_H3_Learned_Latent_TwoPass_Hybrid_Lock_Source_Advanced_EXP.json`：清晰语音`lock_source`，LOW/HIGH均连接同一drive audio，最终保存必须接HIGH Conditioning的`mux_audio`。
+- `2026-08-21_H3_Learned_Latent_TwoPass_Hybrid_Remix_Source_020_Advanced_EXP.json`：清晰语音`remix_source=0.20`，保留源节奏并由模型重混，最终保存AV Decode生成音频。
+- `2026-08-21_H3_Learned_Latent_TwoPass_Hybrid_Reference_Only_Advanced_EXP.json`：源音频只作为`<Audio 1>`节奏/语速参考，目标声音重新生成，最终保存AV Decode音频。
+- `2026-08-21_H3_Learned_Latent_TwoPass_I2VA_Native_Speech_Advanced_EXP.json`：不连接源音频的native语音基线，LOW/HIGH提示词相同并由pass 2完成联合AV。
+- `2026-08-16_H3_Latent_Upscale_By32.json`：普通插值latent放大，只负责32像素整除和画幅误差报告，不创造学习型细节。
+
+## 模型与成果
+
+学习型工作流读取 `ComfyUI/models/latent_upscale_models/minimax_h3_latent_upscaler_3d_fp16.safetensors`。当前固定文件SHA-256为 `043E5A48E161610EF6C3EA974645220354D06FA618ABCA15F76D084812EB55C2`，322个FP16张量、24通道3D输入输出。节点只处理视频latent，音频latent保持联合H3原值；默认每次完成后只定向卸载该放大模型的GPU权重。
+
+当前已确认本地和上游网络的322个参数及固定随机输入输出逐位一致。最新示例固定到上游工作流
+`64fc9d4`的I2VA合同：FL2VA full INT8、正确`comfyui_alpha8` LightX2V LoRA、量化底模bypass加载、
+shift 12/3、低清`simple8`前4步，以及高分原始4步sigma
+`0.9035, 0.8, 0.6316, 0.3158, 0`。不要使用缺少PEFT alpha处理的普通`_comfyui`文件；它会把LoRA更新
+放大约16倍并造成整幅融化。
+
+高分第二阶段从video sigma `0.9035`开始时，shift 12/3对应的audio sigma约为`0.701`。Comfy通用
+Custom Sampler会先按video sigma初始化整个packed AV latent；T8自定义双时钟现在会在第一次模型调用前，
+只把audio slice从video时钟精确重建到audio时钟。该修复保留video初态和随机噪声，不改上游3D网络；
+当前默认4+4共8 NFE。
+
+历史真实I2VA 4+3基线使用736×416低清latent和`scale_by=2.0`，节点输出1472×832并自动连接高分
+Conditioning宽高，无需维护第二套尺寸。任务626.969秒完成，输出1472×832、124帧、24fps、32kHz
+双声道，视频/音频严格解码通过；8帧检查未见前一错误LoRA样本的整幅崩坏。单素材仍不能证明普遍
+画质或显存优势，因此继续保留Advanced/EXP。
+历史v1.35.0的1120×640链曾只开启二采Mixer的Tail +3：高分辨率阶段由3次增至6次前向，任务
+302.85秒，媒体合同与严格解码通过。它不是本轮1472×832、corrected alpha8路线的同图A/B，只证明
+节点可以串联，不自动证明画质增益。
+
+2026-08-21新默认4+4中文对白实测使用句子“你在干嘛呢，我在这里呀，看看效果如何”，
+日志完整执行低清4/4+高分4/4联合AV前向。RTX 4060 Ti 16GB上按ComfyUI任务时间戳计算总耗时
+1572.264秒，主要受DynamicVRAM权重换页影响。成片1472×832、124帧、24fps、32kHz双声道，
+视频/音频严格解码零错误。本地Whisper识别只将“呀”识别为“啊”，归一化CER为1/16=6.25%；
+这只证明该单条音频内容可辨，听感是否较旧4+3改善仍需人耳评审。
+
+## 使用方法
+
+人物安全v8是后处理模板：D0和T2必须使用同一来源、帧数、尺寸、时间轴和色彩路径；alpha建议使用无损灰度视频，黑色为D0、白色为T2。默认`strict_exact`拒绝单帧掩码误广播，面积或轨迹跳变越界时整段回D0。需要保护脸、字幕或其他区域时，应在最终alpha中预先清零，或连接节点的`protect_mask`。模板只证明输入合同和单样本人审不劣，不会自动判断成片优劣。
+
+背景保护 v4 需要用户提供与低分辨率首采画布对齐的掩码：黑色`0`表示保留背景，白色`1`表示允许人物区域生成，灰色只用于边缘过渡。`inherit_required`缺少掩码会在采样前明确报错；静态单帧掩码可沿时间展开，动态掩码必须精确匹配latent时间长度。该路线不会自动识别人或自动生成可靠掩码，也不能修复首遍已经产生的背景漂移。
+
+全局噪声 v2 继续使用原来的 `Chunked Two-Pass Upscale` 执行节点，只把 Plan 换成新 v2 节点。普通使用保持`full_frame_safe + full_clip_safe`：tile和时间chunk数值在完整上下文档不触发切片。首尾图片应先用同一中心裁剪统一到目标宽高，再同时连接两套Conditioning；不要把同一张非等比原图直接分别接到首尾端。`independent_tiles_exp`会改变H3局部空间坐标，`guarded_overlap_exp`仍会合并多条时间轨迹，两者都不是质量通过方案。推荐Euler；ancestral/SDE采样器内部追加的逐步噪声不受本节点控制。音频始终不加噪，最终音频Tensor按原值返回。
+
+1. 第一套 Conditioning 使用低分辨率；第一采样器必须把 `denoised_output` 接到 Learned Latent Upscale，不能使用仍处在中间噪声状态的 `output`。
+2. 第二套 Conditioning 必须用相同提示词、首帧、参考媒体和时长；其宽高直接连接Learned Latent Upscale的`width/height`输出。用户只改`scale_by`，不要再手填第二套高分尺寸。Reconcile会拒绝低分辨率旧keyframe，避免 `cond_video_rows` 错配。
+3. 使用`Learned Two-Pass Parity Plan`，默认`base_steps=8 / coarse_steps=4 / refine_steps=4 / shift 12/3`；旧工作流若已保存`refine_steps=3/5`仍按原值加载。旧`Two-Pass Sigma Plan`继续保留兼容。
+4. Parity Plan的`coarse_sigmas`接第一采样器；`refine_sigmas`接`Two-Pass Detail Mixer.refine_sigmas`。Mixer的MODEL、SAMPLER、SIGMAS三路接第二采样器。
+5. Mixer全部开关关闭时严格透传高分辨率refine schedule；需要Tail +3时只打开`enable_tail=true`并保留`extra_tail_steps=3`。Bias/STG/Restart可组合但会改变联合音画预测，必须试听审片。
+6. `Temporal Detail Enhance`不能接在latent放大和第二采样器之间；它只能接在AV Decode的IMAGE输出之后，AUDIO直接旁路到保存节点。
+7. native作者对齐路线保持`second_pass_audio_source=legacy_policy`，第二采样器`output`直接进入AV Decode。
+   第一阶段audio随放大后video一起进入第二阶段，第二阶段继续完成联合AV轨迹；不要把第一阶段尚未完成的
+   audio x0估计当作最终声音。
+8. `first_pass + second_pass_audio_strength=0.0`是显式音频锁定实验，不是native默认。它会阻止第二阶段
+   完成audio，可能改变口型条件和声音质量。只有确实需要冻结某条已验证audio latent时才使用，并单独做
+   完整试听与口型检查；`highres_template`同样属于显式实验来源。
+9. `Two-Pass Audio Audit`只服务上述零mask锁定实验：它校验采样前后audio latent并回锁。不要把它插到
+   native默认图中，否则会把第一阶段中间音频误当成最终成品。
+10. 默认 `offload_after` 只释放学习型放大模型；`clear_after`连CPU缓存一起清理，`keep_loaded`会持续占显存，只适合连续批量放大。
+11. 示例固定用VHS的H.265 MP4。本机Windows上H.264曾产生一帧损坏；H.265结果已通过124帧、32kHz双声道和`-xerror -err_detect explode`严格解码。
+12. 量化H3底模使用`LoraLoaderBypassModelOnly`加载`minimax_h3_fl2v_turbo_4step_v0.1_comfyui_alpha8.safetensors`、强度1.0。普通`minimax_h3_fl2v_turbo_4step_v0.1_comfyui.safetensors`为已否决转换，不要替换回去。
+
+## 边界
+
+这是二阶段生成，不是把最终视频直接锐化。模型最大仍只允许4倍空间放大，但节点不再用2MP面积上限阻止执行：目标像素可按原作者范围设置到8MP/4096边长，超过1920×1088参考面积时只报告显存风险，由用户决定是否运行。不能据单次运行宣称普遍更清晰或16GB永不OOM。
+
+2026-08-21的历史同prompt/seed/model/4+3 NFE检查中，Comfy原生`ModelSamplingAV + Euler`输出与修正后的
+T8自定义双时钟输出均由用户完整试听确认为声音正常；二者解码PCM相关约`0.9491`。此前第一阶段audio
+零mask硬锁版本由用户明确判定声音异常，已撤销为默认。随后同一正脸首帧、5.152秒LibriSpeech语音、
+seed `2608215001`和相同4+3路线分别完成`lock_source`、`remix_source=0.20`、`reference_only`与native
+清晰语音生成；四条完整成片均由用户试听/观看后审核通过。上述四个保存工作流固定该次连线和参数，
+但结论仍只覆盖单图、单语音、单seed、单模型和单评审，不能外推为通用音素同步、音色保持或16GB保证。
