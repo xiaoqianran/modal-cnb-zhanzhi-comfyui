@@ -41,6 +41,7 @@ from comfy.comfy_types.node_typing import IO
 from comfy_api.latest import io as comfy_io, InputImpl, Types
 from fractions import Fraction
 from comfy_extras.nodes_audio import vae_decode_audio
+from comfy_extras.nodes_lt import LTXVSeparateAVLatent
 
 from math import ceil
 from nodes import CLIPSetLastLayer, CheckpointLoaderSimple, UNETLoader
@@ -629,8 +630,8 @@ class sum_load_adv:
             if clip1.endswith(".gguf"):
                 if not GGUF_AVAILABLE:
                     raise RuntimeError("GGUF not installed. Please install gguf and protobuf using: pip install gguf protobuf")
-                from .load_GGUF.nodes import DualCLIPLoaderGGUF2
-                clip = DualCLIPLoaderGGUF2().load_clip(clip1, clip2, clip_type)[0]
+                from .load_GGUF.nodes import DualCLIPLoaderGGUF
+                clip = DualCLIPLoaderGGUF().load_clip(clip1, clip2, clip_type)[0]
             else:
                 clip = DualCLIPLoader().load_clip(clip1, clip2, clip_type, device)[0]
         elif clip1 != "None" and clip2 != "None" and clip3 != "None" and clip4 == "None":
@@ -3083,8 +3084,8 @@ class load_Nanchaku:
             if clip1.endswith(".gguf"):
                 if not GGUF_AVAILABLE:
                     raise RuntimeError("GGUF not installed. Please install gguf and protobuf using: pip install gguf protobuf")
-                from .load_GGUF.nodes import DualCLIPLoaderGGUF2
-                clip = DualCLIPLoaderGGUF2().load_clip(clip1, clip2, clip_type)[0]
+                from .load_GGUF.nodes import DualCLIPLoaderGGUF
+                clip = DualCLIPLoaderGGUF().load_clip(clip1, clip2, clip_type)[0]
             else:
                 clip = DualCLIPLoader().load_clip(clip1, clip2, clip_type, device)[0]
         
@@ -4032,11 +4033,7 @@ class AD_CreateVideo(comfy_io.ComfyNode):
             display_name="AD Create Video",
             category="Apt_Preset/AD",
             essentials_category="Video Tools",
-            description=(
-                "Create a video from frames and audio. trim_frames removes "
-                "that many leading image frames and the matching audio; use "
-                "0 for no trim or 22 for an H3 continuation clip."
-            ),
+
             inputs=[
                 RUN_CONTEXT.Input("context", optional=True),
                 comfy_io.Image.Input("images", optional=True),
@@ -4059,11 +4056,7 @@ class AD_CreateVideo(comfy_io.ComfyNode):
                     step=1,
                     optional=True,
                     display_mode=comfy_io.NumberDisplay.number,
-                    tooltip=(
-                        "Remove this many leading image frames and the "
-                        "matching audio. 0 disables trimming; use 22 for "
-                        "Apt MiniMax H3 continuation clips."
-                    ),
+
                 ),
             ],
             outputs=[
@@ -4078,6 +4071,18 @@ class AD_CreateVideo(comfy_io.ComfyNode):
     ) -> comfy_io.NodeOutput:
         if images is None and context is not None:
             images = context.get("images")
+            if images is None:
+                latent = context.get("latent")
+                vae = context.get("vae")
+                if latent is not None and vae is not None:
+                    samples = latent.get("samples")
+                    video_latent = latent
+                    if (
+                        isinstance(samples, comfy.nested_tensor.NestedTensor)
+                        or getattr(samples, "is_nested", False)
+                    ):
+                        video_latent, _audio_latent = LTXVSeparateAVLatent.execute(latent).result
+                    images = VAEDecode().decode(vae, video_latent)[0]
         if audio is None and context is not None:
             latent = context.get("latent")
             audio_vae = context.get("audio_vae")

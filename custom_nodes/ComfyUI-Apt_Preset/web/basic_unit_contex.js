@@ -11,6 +11,9 @@ const LATENT_SIZE_WIDGETS = ["ratio_selected", "batch_size", "width", "height"];
 const SAMPLE_PARAMETERS_WIDGET = "sample_parameters";
 const COLLAPSE_WIDGET = "collapse_sampling_parameters";
 const LATENT_SIZE_WIDGET = "latent_size";
+const RATIO_WIDGET = "ratio_selected";
+const CUSTOM_RATIO = "自定义宽和高";
+const LEGACY_CUSTOM_RATIOS = new Set(["None", "customer_WxH"]);
 
 function getWidget(node, name) {
     return node.widgets?.find((widget) => widget?.name === name) || null;
@@ -61,6 +64,14 @@ function resizeNode(node) {
     node.setDirtyCanvas?.(true, true);
 }
 
+function setWidgetGrayed(widget, grayed) {
+    if (!widget) return;
+    widget.disabled = grayed;
+    if (widget._state) widget._state.disabled = grayed;
+    const element = widget.inputEl || widget.element;
+    if (element && "disabled" in element) element.disabled = grayed;
+}
+
 function applySamplingParametersState(node, controlName) {
     const controlWidget = getWidget(node, controlName);
     if (!controlWidget) return;
@@ -97,7 +108,33 @@ function applyLatentSizeState(node) {
     for (const name of LATENT_SIZE_WIDGETS) {
         setWidgetVisible(getWidget(node, name), visible);
     }
+    applyRatioState(node);
     resizeNode(node);
+}
+
+function applyRatioState(node) {
+    const ratioWidget = getWidget(node, RATIO_WIDGET);
+    if (!ratioWidget) return;
+    if (LEGACY_CUSTOM_RATIOS.has(ratioWidget.value)) ratioWidget.value = CUSTOM_RATIO;
+    const useCustomSize = ratioWidget.value === CUSTOM_RATIO;
+    setWidgetGrayed(getWidget(node, "width"), !useCustomSize);
+    setWidgetGrayed(getWidget(node, "height"), !useCustomSize);
+    node.setDirtyCanvas?.(true, true);
+}
+
+function installRatioControl(node) {
+    const ratioWidget = getWidget(node, RATIO_WIDGET);
+    if (!ratioWidget) return;
+    if (!ratioWidget.__aptRatioBound) {
+        ratioWidget.__aptRatioBound = true;
+        const originalCallback = ratioWidget.callback;
+        ratioWidget.callback = function ratioChanged() {
+            const result = originalCallback?.apply(this, arguments);
+            applyRatioState(node);
+            return result;
+        };
+    }
+    applyRatioState(node);
 }
 
 function installLatentSizeControl(node) {
@@ -114,6 +151,7 @@ function installLatentSizeControl(node) {
             return result;
         };
     }
+    installRatioControl(node);
     applyLatentSizeState(node);
 }
 

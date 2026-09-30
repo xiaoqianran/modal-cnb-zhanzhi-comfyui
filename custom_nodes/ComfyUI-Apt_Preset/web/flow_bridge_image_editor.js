@@ -1,24 +1,6 @@
 import { app, ComfyApp } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
-function debugReport(hypothesisId, location, msg, data = {}) {
-    // #region debug-point common:report
-    fetch("http://127.0.0.1:7777/event", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            sessionId: "mask-save-lag",
-            runId: "post-fix",
-            hypothesisId,
-            location,
-            msg: `[DEBUG] ${msg}`,
-            data,
-            ts: Date.now(),
-        }),
-    }).catch(() => {});
-    // #endregion
-}
-
 function sanitizeNodeId(nodeId) {
     const text = String(nodeId ?? "default");
     return text.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -74,11 +56,16 @@ function setBooleanWidget(node, name, value) {
     }
 }
 
-function refreshNodePreview(node, filename = "bridge_preview_0.png") {
+async function refreshNodePreview(node, filename = "bridge_preview_0.png") {
     const ref = buildBridgeImageRef(node.id, filename);
     const viewUrl = buildBridgeFileUrl(node.id, filename);
     const image = new Image();
-    image.src = `${viewUrl}${viewUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
+    const imageUrl = `${viewUrl}${viewUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
+    await new Promise((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error(`编辑预览加载失败: ${filename}`));
+        image.src = imageUrl;
+    });
     node.imgs = [image];
     node.images = [ref];
     node.imageIndex = 0;
@@ -115,10 +102,10 @@ function getMaskEditorServerRef(node) {
     if (!imageRef?.filename) {
         return null;
     }
-    if ((imageRef.subfolder || "") !== "clipspace") {
+    if (!/^clipspace-painted-masked-\d+\.png$/i.test(imageRef.filename)) {
         return null;
     }
-    if (!/^clipspace-painted-masked-\d+\.png$/i.test(imageRef.filename)) {
+    if ((imageRef.type || "input") !== "input") {
         return null;
     }
     return imageRef;
@@ -144,8 +131,65 @@ function getMaskEditorServerUrl(node) {
     return imageRef ? buildViewUrlFromRef(imageRef) : "";
 }
 
-function prepareNodeForOfficialMaskEditor(node) {
-    refreshNodePreview(node, "bridge_editor_preview_0.png");
+function hasBridgePreview(node) {
+    const imageRef = node.images?.[0];
+    return imageRef?.filename === "bridge_preview_0.png"
+        && (imageRef.subfolder || "") === `zml_image_memory/${sanitizeNodeId(node.id)}`;
+}
+
+function queueNodeAndWait(node) {
+    return new Promise((resolve, reject) => {
+        const nodeId = String(node.id);
+        const timeoutId = setTimeout(() => {
+            cleanup();
+            reject(new Error("等待节点生成编辑预览超时。"));
+        }, 120000);
+
+        const cleanup = () => {
+            clearTimeout(timeoutId);
+            api.removeEventListener("executed", onExecuted);
+            api.removeEventListener("execution_cached", onExecutionCached);
+            api.removeEventListener("execution_error", onExecutionError);
+        };
+        const finish = () => {
+            cleanup();
+            resolve();
+        };
+        const onExecuted = ({ detail }) => {
+            if (String(detail?.node) === nodeId) {
+                finish();
+            }
+        };
+        const onExecutionCached = ({ detail }) => {
+            if (detail?.nodes?.some((cachedNodeId) => String(cachedNodeId) === nodeId)) {
+                finish();
+            }
+        };
+        const onExecutionError = ({ detail }) => {
+            cleanup();
+            reject(new Error(detail?.exception_message || "工作流执行失败，无法生成编辑预览。"));
+        };
+
+        api.addEventListener("executed", onExecuted);
+        api.addEventListener("execution_cached", onExecutionCached);
+        api.addEventListener("execution_error", onExecutionError);
+        Promise.resolve(app.queuePrompt(0)).catch((error) => {
+            cleanup();
+            reject(error);
+        });
+    });
+}
+
+async function prepareNodeForOfficialMaskEditor(node) {
+    if (!hasBridgePreview(node)) {
+        await queueNodeAndWait(node);
+    }
+    try {
+        await refreshNodePreview(node, "bridge_editor_preview_0.png");
+    } catch (error) {
+        await queueNodeAndWait(node);
+        await refreshNodePreview(node, "bridge_editor_preview_0.png");
+    }
 }
 
 async function syncEditedMaskToBackend(node, options = {}) {
@@ -155,17 +199,6 @@ async function syncEditedMaskToBackend(node, options = {}) {
     if (!serverRef && !imageUrl) {
         throw new Error("官方遮罩编辑器没有产出可同步的图片。");
     }
-
-    // #region debug-point A:sync-start
-    debugReport("A", "flow_bridge_image_editor.js:syncEditedMaskToBackend:start", "准备同步编辑结果到后端", {
-        nodeId: node.id,
-        imageUrl,
-        serverRef,
-        signature: getNodeImageSignature(node),
-        imageRef: node.images?.[0] || null,
-        imgSrc: node.imgs?.[0]?.src || "",
-    });
-    // #endregion
 
     const formData = new FormData();
     formData.append("node_id", String(node.id));
@@ -189,19 +222,9 @@ async function syncEditedMaskToBackend(node, options = {}) {
         node.__flowBridgeLastMaskEditorServerRef = cloneMaskEditorServerRef(serverRef);
     }
 
-    // #region debug-point E:sync-response
-    debugReport("E", "flow_bridge_image_editor.js:syncEditedMaskToBackend:response", "后端已返回保存结果", {
-        nodeId: node.id,
-        ok: result.ok,
-        view_url: result.view_url || "",
-        imageRef: node.images?.[0] || null,
-        imgSrc: node.imgs?.[0]?.src || "",
-    });
-    // #endregion
-
     setBooleanWidget(node, "disable_input", true);
     setBooleanWidget(node, "disable_output", false);
-    refreshNodePreview(node, "bridge_preview_0.png");
+    await refreshNodePreview(node, "bridge_preview_0.png");
     restoreClipspaceReturnNode(node);
     setTimeout(() => {
         Promise.resolve(app.queuePrompt(0)).catch((error) => {
@@ -251,7 +274,7 @@ function restoreClipspaceReturnNode(node) {
     node.__flowBridgePreviousReturnNode = null;
 }
 
-function waitForFinalNodeImage(node, initialSignature) {
+function waitForFinalNodeImage(node) {
     clearMaskWatcher(node);
 
     let attempts = 0;
@@ -260,23 +283,9 @@ function waitForFinalNodeImage(node, initialSignature) {
     node.__flowBridgeMaskWatcher = setInterval(async () => {
         attempts += 1;
         const currentSignature = getNodeImageSignature(node);
-        // #region debug-point C:watcher-tick
-        debugReport("C", "flow_bridge_image_editor.js:waitForFinalNodeImage:tick", "等待节点最终图像稳定", {
-            nodeId: node.id,
-            attempts,
-            initialSignature,
-            currentSignature,
-            lastSignature,
-            stableTicks,
-            serverRef: getMaskEditorServerRef(node),
-            imageRef: node.images?.[0] || null,
-            imgSrc: node.imgs?.[0]?.src || "",
-        });
-        // #endregion
-
         const serverRef = getMaskEditorServerRef(node);
         if (!serverRef) {
-            if (attempts > 40) {
+            if (attempts > 7200) {
                 clearMaskWatcher(node);
                 restoreClipspaceReturnNode(node);
             }
@@ -306,47 +315,7 @@ function waitForFinalNodeImage(node, initialSignature) {
     }, 250);
 }
 
-function watchMaskEditorDialogLifecycle(node, initialSignature) {
-    clearMaskWatcher(node);
-
-    let attempts = 0;
-    let dialogSeen = false;
-    node.__flowBridgeMaskWatcher = setInterval(() => {
-        attempts += 1;
-        const dialogOpen = isMaskEditorProbablyOpen();
-        // #region debug-point C:dialog-lifecycle
-        debugReport("C", "flow_bridge_image_editor.js:watchMaskEditorDialogLifecycle:tick", "轮询官方 MaskEditor 弹窗状态", {
-            nodeId: node.id,
-            attempts,
-            dialogOpen,
-            dialogSeen,
-            initialSignature,
-            imageRef: node.images?.[0] || null,
-            imgSrc: node.imgs?.[0]?.src || "",
-        });
-        // #endregion
-
-        if (dialogOpen) {
-            dialogSeen = true;
-            return;
-        }
-
-        if (dialogSeen) {
-            clearMaskWatcher(node);
-            setTimeout(() => {
-                waitForFinalNodeImage(node, initialSignature);
-            }, 150);
-            return;
-        }
-
-        if (attempts > 80) {
-            clearMaskWatcher(node);
-            restoreClipspaceReturnNode(node);
-        }
-    }, 250);
-}
-
-function openOfficialMaskEditor(node) {
+async function openOfficialMaskEditor(node) {
     if (typeof ComfyApp?.copyToClipspace !== "function") {
         alert("当前前端没有可用的官方 Clipspace 接口。");
         return;
@@ -359,20 +328,17 @@ function openOfficialMaskEditor(node) {
 
     clearMaskWatcher(node);
     restoreClipspaceReturnNode(node);
-    prepareNodeForOfficialMaskEditor(node);
-    const initialSignature = getNodeImageSignature(node);
-    // #region debug-point B:open-editor
-    debugReport("B", "flow_bridge_image_editor.js:openOfficialMaskEditor", "准备打开官方 MaskEditor", {
-        nodeId: node.id,
-        initialSignature,
-        imageRef: node.images?.[0] || null,
-        imgSrc: node.imgs?.[0]?.src || "",
-    });
-    // #endregion
+    try {
+        await prepareNodeForOfficialMaskEditor(node);
+    } catch (error) {
+        console.error("[flow_bridge_image] 打开遮罩编辑器失败:", error);
+        alert(error?.message || "打开遮罩编辑器失败");
+        return;
+    }
     node.__flowBridgePreviousReturnNode = ComfyApp?.clipspace_return_node ?? null;
     ComfyApp.copyToClipspace(node);
     ComfyApp.clipspace_return_node = node;
-    watchMaskEditorDialogLifecycle(node, initialSignature);
+    waitForFinalNodeImage(node);
     ComfyApp.open_maskeditor();
 }
 

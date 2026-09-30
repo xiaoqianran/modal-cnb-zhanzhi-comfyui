@@ -185,7 +185,16 @@ class DynamicTileSplit:
                    width_factor, height_factor, overlap_rate):
         if upscale_model != "None":
             up_model = load_upscale_model(upscale_model)
-            image = upscale_with_model(up_model, image)
+            if image.shape[-1] == 4:
+                alpha = image[..., 3:4]
+                image = upscale_with_model(up_model, image[..., :3])
+                alpha = F.interpolate(
+                    alpha.movedim(-1, 1).to(device=image.device, dtype=torch.float32),
+                    size=image.shape[1:3], mode="bilinear", align_corners=False,
+                ).movedim(1, -1).to(dtype=image.dtype)
+                image = torch.cat((image, alpha), dim=-1)
+            else:
+                image = upscale_with_model(up_model, image)
 
         tile_width, tile_height = self.image_width_height(
             image, width_factor, height_factor, overlap_rate,

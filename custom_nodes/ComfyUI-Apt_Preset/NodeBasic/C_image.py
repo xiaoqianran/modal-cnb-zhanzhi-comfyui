@@ -1,6 +1,8 @@
 
 import torch
 import numpy as np
+import json
+import os
 
 import torchvision.transforms.functional as TF
 import math
@@ -19,6 +21,8 @@ import node_helpers
 from typing import Tuple
 
 import comfy.utils
+from aiohttp import web
+from server import PromptServer
 
 
 from ..main_unit import *
@@ -5685,6 +5689,40 @@ class Image_pad_adjust_restore:
         
         return mask.unsqueeze(-1)
 
+    def composite_region(self, background, content, feather_mask=None):
+        content = content.to(device=background.device, dtype=background.dtype)
+        target_channels = background.shape[-1]
+        content_channels = content.shape[-1]
+        alpha = None
+
+        if content_channels == 4 and target_channels != 4:
+            alpha = content[..., 3:4].clamp(0.0, 1.0)
+            content = content[..., :3]
+            content_channels = 3
+
+        if content_channels != target_channels:
+            if target_channels == 1 and content_channels >= 3:
+                content = (content[..., :1] * 0.299
+                           + content[..., 1:2] * 0.587
+                           + content[..., 2:3] * 0.114)
+            elif content_channels == 1:
+                content = content.expand(*content.shape[:-1], target_channels)
+            elif target_channels == 4 and content_channels == 3:
+                content = torch.cat((content, torch.ones_like(content[..., :1])), dim=-1)
+            elif content_channels > target_channels:
+                content = content[..., :target_channels]
+            else:
+                content = torch.cat((content, content[..., -1:].expand(*content.shape[:-1], target_channels - content_channels)), dim=-1)
+
+        blend_mask = feather_mask
+        if blend_mask is not None:
+            blend_mask = blend_mask.to(device=background.device, dtype=background.dtype)
+        if alpha is not None:
+            blend_mask = alpha if blend_mask is None else blend_mask * alpha
+        if blend_mask is None:
+            return content
+        return torch.lerp(background, content, blend_mask)
+
     def restore(self, pad_image, stitch, smoothness):
         original_image = stitch["original_image"]
         original_h, original_w = stitch["original_shape"]
@@ -5738,26 +5776,20 @@ class Image_pad_adjust_restore:
             
             if actual_src_width > 0 and actual_src_height > 0:
                 content_img = content_img[:, :actual_src_height, :actual_src_width, :]
-                
-                if smoothness > 0 and feather_mask is not None:
-                    background = restored_image[:, dst_top:dst_bottom, dst_left:dst_right, :]
-                    blended = background * (1 - feather_mask) + content_img * feather_mask
-                    restored_image[:, dst_top:dst_bottom, dst_left:dst_right, :] = blended
-                else:
-                    restored_image[:, dst_top:dst_bottom, dst_left:dst_right, :] = content_img
+                background = restored_image[:, dst_top:dst_bottom, dst_left:dst_right, :]
+                restored_image[:, dst_top:dst_bottom, dst_left:dst_right, :] = self.composite_region(
+                    background, content_img, feather_mask if smoothness > 0 else None
+                )
         else:
             restored_image = original_image.clone()
             content_img = pad_image[0, valid_top:valid_bottom, valid_left:valid_right, :]
             
             if actual_src_width > 0 and actual_src_height > 0:
                 content_img = content_img[:actual_src_height, :actual_src_width, :]
-                
-                if smoothness > 0 and feather_mask is not None:
-                    background = restored_image[0, dst_top:dst_bottom, dst_left:dst_right, :]
-                    blended = background * (1 - feather_mask) + content_img * feather_mask
-                    restored_image[0, dst_top:dst_bottom, dst_left:dst_right, :] = blended
-                else:
-                    restored_image[0, dst_top:dst_bottom, dst_left:dst_right, :] = content_img
+                background = restored_image[0, dst_top:dst_bottom, dst_left:dst_right, :]
+                restored_image[0, dst_top:dst_bottom, dst_left:dst_right, :] = self.composite_region(
+                    background, content_img, feather_mask if smoothness > 0 else None
+                )
         
         if has_mask and original_mask is not None:
             restored_mask = original_mask

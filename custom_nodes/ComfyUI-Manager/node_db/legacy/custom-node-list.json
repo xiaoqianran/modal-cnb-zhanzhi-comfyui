@@ -1,6 +1,246 @@
 {
     "custom_nodes": [
         {
+            "author": "StevenBaby",
+            "title": "comfyui-tools [REMOVED]",
+            "reference": "https://github.com/StevenBaby/comfyui-tools",
+            "files": [
+                "https://github.com/StevenBaby/comfyui-tools"
+            ],
+            "install_type": "git-clone",
+            "description": "IntParameterNode: A Node contain 4 int parameters to quick switch input to other nodes."
+        },
+        {
+            "author": "saganaki22",
+            "title": "Kitten-TTS [NAME CONFLICT] [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-KittenTTS",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-KittenTTS"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom node for KittenTTS - Ultra-lightweight text-to-speech (CUDA / CPU)"
+        },
+        {
+            "author": "Saganaki22",
+            "title": "ComfyUI-NovaSR [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-NovaSR",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-NovaSR"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI node for NovaSR - Ultra-fast audio super resolution (3600x realtime, 50KB model)"
+        },
+        {
+            "author": "Saganaki22",
+            "title": "ComfyUI YTDL Nodes [WIP] [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-ytdl_nodes",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-ytdl_nodes"
+            ],
+            "install_type": "git-clone",
+            "description": "Custom ComfyUI nodes for downloading, converting, and previewing audio/video from YouTube and 1,000+ other platforms"
+        },
+        {
+            "author": "pollockjj",
+            "title": "JAXTools [REMOVED]",
+            "reference": "https://github.com/pollockjj/ComfyUI-JAXTools",
+            "files": [
+                "https://github.com/pollockjj/ComfyUI-JAXTools"
+            ],
+            "install_type": "git-clone",
+            "description": "JAX-accelerated image processing nodes for ComfyUI via dm_pix sealed worker isolation"
+        },
+        {
+            "author": "pollockjj",
+            "title": "ComfyUI-StabilityTest [REMOVED]",
+            "reference": "https://github.com/pollockjj/ComfyUI-StabilityTest",
+            "files": [
+                "https://github.com/pollockjj/ComfyUI-StabilityTest"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI stability testing node. (Description by CC)"
+        },
+        {
+            "author": "denislov",
+            "title": "Comfyui_AutoSurvey [REMOVED]",
+            "reference": "https://github.com/denislov/Comfyui_AutoSurvey",
+            "files": [
+                "https://github.com/denislov/Comfyui_AutoSurvey"
+            ],
+            "install_type": "git-clone",
+            "description": "Nodes:AutoSurvey, WriteOutline, WriteSection, ChatModel, QueryKnowledge, ManageDatabase, AddDoc2Knowledge"
+        },
+        {
+            "author": "saganaki22",
+            "title": "ZONOS2 TTS [REMOVED]",
+            "reference": "https://github.com/Saganaki22/Zonos2_TTS-ComfyUI",
+            "files": [
+                "https://github.com/Saganaki22/Zonos2_TTS-ComfyUI"
+            ],
+            "install_type": "git-clone",
+            "description": "Native ComfyUI nodes for Zyphra ZONOS2 text-to-speech and voice cloning with AIMDO memory tracking"
+        },
+        {
+            "author": "saganaki22",
+            "title": "WavTTS [REMOVED]",
+            "reference": "https://github.com/Saganaki22/WavTTS-ComfyUI",
+            "files": [
+                "https://github.com/Saganaki22/WavTTS-ComfyUI"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom nodes for WavTTS zero-shot text-to-speech with real ComfyUI memory tracking"
+        },
+        {
+            "author": "saganaki22",
+            "title": "Step Audio EditX TTS [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-Step_Audio_EditX_TTS",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-Step_Audio_EditX_TTS"
+            ],
+            "install_type": "git-clone",
+            "description": "Professional voice cloning and audio editing node for ComfyUI using Step Audio EditX"
+        },
+        {
+            "author": "Saganaki22",
+            "title": "SoulX-Singer [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-SoulX-Singer",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-SoulX-Singer"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom nodes for SoulX-Singer - Zero-Shot Singing Voice Synthesis"
+        },
+        {
+            "author": "Saganaki22",
+            "title": "Seedream4 Replicate [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-Seedream4_Replicate",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-Seedream4_Replicate"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI node for Seedream 4 image generation via Replicate API with support for text-to-image and image-to-image generation"
+        },
+        {
+            "author": "saganaki22",
+            "title": "MOSS-TTS [REMOVED]",
+            "reference": "https://github.com/Saganaki22/Moss_TTS-ComfyUI",
+            "files": [
+                "https://github.com/Saganaki22/Moss_TTS-ComfyUI"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom nodes for OpenMOSS MOSS-TTS Local Transformer v1.5 with model catalog downloads, Whisper prefix transcription, continuation, voice cloning, and AIMDO memory tracking"
+        },
+        {
+            "author": "Saganaki22",
+            "title": "Maya1 TTS [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-Maya1_TTS",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-Maya1_TTS"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI node for Maya1 TTS - Expressive voice generation with 20+ emotions, voice design, and SNAC neural codec"
+        },
+        {
+            "author": "saganaki22",
+            "title": "LongCat AudioDiT TTS [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-LongCat-AudioDIT-TTS",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-LongCat-AudioDIT-TTS"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom nodes for LongCat-AudioDiT TTS - zero-shot and voice cloning diffusion TTS"
+        },
+        {
+            "author": "saganaki22",
+            "title": "Ideogram 4 Prompter [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ideogram4_prompter-ComfyUI",
+            "files": [
+                "https://github.com/Saganaki22/ideogram4_prompter-ComfyUI"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom nodes for Ideogram 4 Magic Prompt and Ideogram 4 resolution selection"
+        },
+        {
+            "author": "saganaki22",
+            "title": "Higgs v3 TTS [REMOVED]",
+            "reference": "https://github.com/Saganaki22/Higgs_v3-TTS-ComfyUI",
+            "files": [
+                "https://github.com/Saganaki22/Higgs_v3-TTS-ComfyUI"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom nodes for Higgs Audio v3 TTS with native inference, voice cloning, multi-speaker dialogue, longform chunking, and AIMDO DynamicVRAM support"
+        },
+        {
+            "author": "Saganaki22",
+            "title": "Foundation-1 [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-Foundation-1",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-Foundation-1"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom nodes for Foundation-1 | structured text-to-sample generation for music production"
+        },
+        {
+            "author": "Saganaki22",
+            "title": "dotWaveform [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-dotWaveform",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-dotWaveform"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI node for generating animated dotted waveform visualizations with multiple animation styles including teardrop bars"
+        },
+        {
+            "author": "saganaki22",
+            "title": "Dots TTS [REMOVED]",
+            "reference": "https://github.com/Saganaki22/Dots-TTS-ComfyUI",
+            "files": [
+                "https://github.com/Saganaki22/Dots-TTS-ComfyUI"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI custom nodes for rednote-hilab dots.tts with model loading, generation, voice cloning, Whisper transcription, progress tracking, and AIMDO memory visualization"
+        },
+        {
+            "author": "Saganaki22",
+            "title": "AudioSR [REMOVED]",
+            "reference": "https://github.com/Saganaki22/ComfyUI-AudioSR",
+            "files": [
+                "https://github.com/Saganaki22/ComfyUI-AudioSR"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI node for AudioSR - Versatile Audio Super Resolution upscales audio to 48kHz using latent diffusion"
+        },
+        {
+            "author": "pollockjj",
+            "title": "comfyui-sealedcuda [REMOVED]",
+            "reference": "https://github.com/pollockjj/ComfyUI-SealedCuda",
+            "files": [
+                "https://github.com/pollockjj/ComfyUI-SealedCuda"
+            ],
+            "install_type": "git-clone",
+            "description": "Sealed-worker CUDA image nodes (NATTEN, fused-ssim) sourced from prebuilt cuda-wheels"
+        },
+        {
+            "author": "lvquan",
+            "title": "CS Hybrid 4K Image-to-Video [REMOVED]",
+            "reference": "https://github.com/lvqunx/comfyui-cs-hybrid",
+            "files": [
+                "https://github.com/lvqunx/comfyui-cs-hybrid"
+            ],
+            "install_type": "git-clone",
+            "description": "Compressed-sensing hybrid 4K image-to-video: RAFT flow transfer, dual-channel Laplacian recompose, CS tile scheduler, keyframe refresh helpers."
+        },
+        {
+            "author": "leylahviolet",
+            "title": "iolet Tools 💅 [REMOVED]",
+            "reference": "https://github.com/leylahviolet/ComfyUI-Violet-Tools",
+            "files": [
+                "https://github.com/leylahviolet/ComfyUI-Violet-Tools"
+            ],
+            "install_type": "git-clone",
+            "description": "Aesthetic-focused custom nodes for ComfyUI with sophisticated style and prompt management"
+        },
+        {
             "author": "mahshid1378",
             "title": "ThinkSound_Wrapper [REMOVED]",
             "reference": "https://github.com/mahshid1378/ThinkSound_Wrapper",

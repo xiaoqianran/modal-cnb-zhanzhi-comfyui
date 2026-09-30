@@ -11,13 +11,14 @@ The current workflow connections are becoming increasingly dense, making them di
 
 # I. Update Record
 
-2026.9.16  Add new node "media edit", support material sharing, and link automatic segmentation and automatic time allocation
+2026.9.24  Add new node "sum_Qwenimage2"
+
+<img width="3014" height="1189" alt="image" src="https://github.com/user-attachments/assets/3af4fb19-8f82-4d2a-bdb5-cf353b1fa510" />
 
 <img width="1438" height="731" alt="ec079aad3a6e53fe02eaeab5ac51e138" src="https://github.com/user-attachments/assets/4d8ecaec-ecd0-47a0-a015-2e00ec1cacd5" />
 
 <img width="2639" height="1309" alt="image" src="https://github.com/user-attachments/assets/a6a2130e-e877-4d2a-a254-5344c5fd16c3" />
 
-<img width="3249" height="1473" alt="image" src="https://github.com/user-attachments/assets/426ece34-5b17-4c32-8f8c-44443371f3c9" />
 
 
 

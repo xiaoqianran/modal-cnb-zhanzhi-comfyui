@@ -55,7 +55,7 @@ app.registerExtension({
 
       //从ComfyUI\web\scripts\widgets.js，IMAGEUPLOAD参考代码
       function showImage (file) {
-        const { filename, subfolder } = file
+        const { filename, subfolder = '', type = 'input' } = file
         const img = new Image()
         img.onload = () => {
           node.imgs = [img]
@@ -64,15 +64,15 @@ app.registerExtension({
         img.src = api.apiURL(
           `/view?filename=${encodeURIComponent(
             filename
-          )}&type=input&subfolder=${subfolder}${app.getPreviewFormatParam()}${app.getRandParam()}`
+          )}&type=${encodeURIComponent(type)}&subfolder=${encodeURIComponent(subfolder)}${app.getPreviewFormatParam()}${app.getRandParam()}`
         )
         node.setSizeForImage?.()
       }
 
-      if (image_update.value?.images?.length > 0)
+      if (image_update?.value?.images?.length > 0) {
         showImage(image_update.value.images[0])
-        // 数据要写入到节点
-        node.images=image_update.value.images;
+        node.images = image_update.value.images
+      }
     }
   }
 })

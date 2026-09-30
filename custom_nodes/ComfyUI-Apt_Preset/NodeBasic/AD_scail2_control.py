@@ -13,15 +13,22 @@ from comfy.patcher_extension import WrappersMP
 from ..main_unit import load_upscale_model, new_context, upscale_with_model
 from .C_AD import (
     _AD_H3_LATENT_TILE_PRESETS,
+    _AD_H3_SAMPLE_LATENT_TILE_CHOICES,
+    _AD_H3_SAMPLE_LATENT_TILE_PRESETS,
+    _ad_h3_resolve_tile_preset,
     _ad_repair_boundary_flash,
     _ad_stage_info,
     _ad_stage_output_dir,
     _ad_stage_video_outputs,
 )
-from .minimaxH3 import _ad_h3_aligned_tile_regions, _ad_h3_core_halo_window
+from .minimaxH3 import (
+    _ad_h3_aligned_tile_regions,
+    _ad_h3_bridge_window,
+    _ad_h3_core_halo_window,
+)
 
 
-_SCAIL_NO_LATENT_TILE = next(iter(_AD_H3_LATENT_TILE_PRESETS))
+_SCAIL_NO_LATENT_TILE = next(iter(_AD_H3_SAMPLE_LATENT_TILE_PRESETS))
 _SCAIL_TILED_APPLY_MODEL_KEY = "apt_scail2_tiled_apply_model"
 _SCAIL_SPATIAL_CONDS = ("pose_latents", "sam_latents", "reference_latent", "ref_mask_latents")
 
@@ -44,9 +51,10 @@ def _scail_crop_scaled(value, axis, start, end, full_size):
 
 
 class _SCAIL2TiledApplyModel:
-    def __init__(self, tile_count, overlap_pixels):
+    def __init__(self, tile_count, overlap_pixels, bridge_seams=False):
         self.tile_count = int(tile_count)
         self.overlap_pixels = int(overlap_pixels)
+        self.bridge_seams = bool(bridge_seams)
 
     def apply_model_wrapper(self, executor, x, t, c_concat=None, c_crossattn=None,
                             control=None, transformer_options={}, **kwargs):
@@ -61,11 +69,25 @@ class _SCAIL2TiledApplyModel:
         if len(regions) <= 1 or any(start == 0 and end == full_size for start, end, _, _ in regions):
             return executor(x, t, c_concat, c_crossattn, control, transformer_options, **kwargs)
 
+        weighted_regions = []
+        for start, end, core_start, core_end in regions:
+            window = _ad_h3_core_halo_window(start, end, core_start, core_end, x.device)
+            weighted_regions.append((start, end, window))
+        if self.bridge_seams and len(regions) > 1 and halo > 0:
+            context_half = max(4, ((halo * 3 + 3) // 4) * 2)
+            for index in range(len(regions) - 1):
+                boundary = int(regions[index][3])
+                start = max(0, boundary - context_half)
+                end = min(full_size, boundary + context_half)
+                if end - start < 4:
+                    continue
+                window = _ad_h3_bridge_window(start, end, boundary, halo, x.device)
+                weighted_regions.append((start, end, window))
+
         output = torch.zeros_like(x, dtype=torch.float32)
         weight_shape = (1, 1, 1, full_size, 1) if axis == "H" else (1, 1, 1, 1, full_size)
         weights = torch.zeros(weight_shape, dtype=torch.float32, device=x.device)
-        for start, end, core_start, core_end in regions:
-            window = _ad_h3_core_halo_window(start, end, core_start, core_end, x.device)
+        for start, end, window in weighted_regions:
             window = window.view(1, 1, 1, -1, 1) if axis == "H" else window.view(1, 1, 1, 1, -1)
             tile_x = _scail_crop_spatial(x, axis, start, end)
             tile_concat = _scail_crop_scaled(c_concat, axis, start, end, full_size)
@@ -88,13 +110,24 @@ class _SCAIL2TiledApplyModel:
         return (output / weights.clamp_min(1e-8)).to(dtype=x.dtype)
 
 
-def _scail_tiled_model(model, tile_count, overlap_pixels):
+def _scail_tiled_model(model, tile_count, overlap_pixels, bridge_seams=False):
     tiled_model = model.clone()
-    state = _SCAIL2TiledApplyModel(tile_count, overlap_pixels)
+    state = _SCAIL2TiledApplyModel(tile_count, overlap_pixels, bridge_seams)
     tiled_model.add_wrapper_with_key(
         WrappersMP.APPLY_MODEL, _SCAIL_TILED_APPLY_MODEL_KEY, state.apply_model_wrapper
     )
     return tiled_model
+
+
+def _scail_resolve_tile_preset(preset, latent):
+    if preset in _AD_H3_SAMPLE_LATENT_TILE_PRESETS:
+        return _ad_h3_resolve_tile_preset(
+            _AD_H3_SAMPLE_LATENT_TILE_PRESETS, preset, latent
+        )
+    if preset in _AD_H3_LATENT_TILE_PRESETS:
+        tile_count, overlap_pixels = _AD_H3_LATENT_TILE_PRESETS[preset]
+        return int(tile_count), int(overlap_pixels), False
+    raise ValueError(f"unknown latent tile preset: {preset}")
 
 
 def _scail_resize_video_tensor(value, height, width, channel_dim=1, mode="bilinear"):
@@ -240,8 +273,11 @@ class AD_scail2_generate:
                 "previous_frame_count": ("INT", {"default": 5, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4, "tooltip": "Tail frames of previous_frames to anchor. SCAIL-2 was trained with 5."}),
                 "replacement_mode": ("BOOLEAN", {"default": False, "tooltip": "False: Animation Mode with a black pose mask background. True: Replacement Mode with a white pose mask background."}),
                 "latent_sample_tile": (
-                    list(_AD_H3_LATENT_TILE_PRESETS),
-                    {"default": _SCAIL_NO_LATENT_TILE, "tooltip": "Spatially tile each model prediction while keeping the sampler on the complete latent."},
+                    list(_AD_H3_SAMPLE_LATENT_TILE_CHOICES),
+                    {
+                        "default": _SCAIL_NO_LATENT_TILE,
+                        "tooltip": "与 AD_MinMax_Ref2_sample 同步的 latent 分块档位；质量优先档自动选择重叠并桥接接缝。",
+                    },
                 ),
             },
             "optional": {
@@ -281,9 +317,6 @@ class AD_scail2_generate:
         ) if value is None]
         if missing:
             raise ValueError(f"AD_scail2_generate context is missing: {', '.join(missing)}")
-        if latent_sample_tile not in _AD_H3_LATENT_TILE_PRESETS:
-            raise ValueError(f"AD_scail2_generate: unknown latent tile preset: {latent_sample_tile}")
-        tile_count, overlap_pixels = _AD_H3_LATENT_TILE_PRESETS[latent_sample_tile]
         if segment_count != 1:
             raise ValueError("AD_scail2_generate: segment_count is fixed at 1")
         if stage_info_data1 is None:
@@ -361,8 +394,16 @@ class AD_scail2_generate:
             previous_frames=previous_frames,
         ).result
         segment_seed = (seed + stage_index) & 0xffffffffffffffff
+        try:
+            tile_count, overlap_pixels, bridge_seams = _scail_resolve_tile_preset(
+                latent_sample_tile, latent
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"AD_scail2_generate: unknown latent tile preset: {latent_sample_tile}"
+            ) from error
         sample_model = (
-            _scail_tiled_model(model, tile_count, overlap_pixels)
+            _scail_tiled_model(model, tile_count, overlap_pixels, bridge_seams)
             if tile_count > 1 else model
         )
         latent = nodes.common_ksampler(
@@ -462,8 +503,11 @@ class AD_scail2_generate_refine:
                     "step": 0.01,
                 }),
                 "latent_sample_tile": (
-                    list(_AD_H3_LATENT_TILE_PRESETS),
-                    {"default": _SCAIL_NO_LATENT_TILE, "tooltip": "Spatially tile each refine prediction while keeping the complete latent sampler state."},
+                    list(_AD_H3_SAMPLE_LATENT_TILE_CHOICES),
+                    {
+                        "default": _SCAIL_NO_LATENT_TILE,
+                        "tooltip": "与 AD_MinMax_Ref2_sample 同步的 latent 分块档位；质量优先档自动选择重叠并桥接接缝。",
+                    },
                 ),
             },
             "optional": {
@@ -510,8 +554,6 @@ class AD_scail2_generate_refine:
         ) if value is None]
         if missing:
             raise ValueError(f"AD_scail2_generate_refine context is missing: {', '.join(missing)}")
-        if latent_sample_tile not in _AD_H3_LATENT_TILE_PRESETS:
-            raise ValueError(f"AD_scail2_generate_refine: unknown latent tile preset: {latent_sample_tile}")
         if pixel_refine_model != "None" and pixel_refine_model not in folder_paths.get_filename_list("upscale_models"):
             raise ValueError(f"AD_scail2_generate_refine: invalid pixel_refine_model: {pixel_refine_model}")
 
@@ -565,9 +607,16 @@ class AD_scail2_generate_refine:
         latent_height, latent_width = int(samples.shape[-2]), int(samples.shape[-1])
         positive = _scail_resize_refine_conditioning(positive, latent_height, latent_width)
         negative = _scail_resize_refine_conditioning(negative, latent_height, latent_width)
-        tile_count, overlap_pixels = _AD_H3_LATENT_TILE_PRESETS[latent_sample_tile]
+        try:
+            tile_count, overlap_pixels, bridge_seams = _scail_resolve_tile_preset(
+                latent_sample_tile, latent
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"AD_scail2_generate_refine: unknown latent tile preset: {latent_sample_tile}"
+            ) from error
         sample_model = (
-            _scail_tiled_model(model, tile_count, overlap_pixels)
+            _scail_tiled_model(model, tile_count, overlap_pixels, bridge_seams)
             if tile_count > 1 else model
         )
         refined_latent = nodes.common_ksampler(

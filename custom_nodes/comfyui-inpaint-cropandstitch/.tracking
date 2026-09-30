@@ -39,6 +39,7 @@ testimgs/example.png
 tests/__init__.py
 tests/test_context_areas.py
 tests/test_crop_and_stitch.py
+tests/test_input_shielding.py
 tests/test_nodes_pipeline.py
 tests/test_processor_cpu.py
 tests/test_processor_gpu.py

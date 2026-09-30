@@ -176,6 +176,24 @@ Download the following models:
 
 ## Advanced Techniques
 
+### Tiled Fusion Sampler
+
+`LTXVTiledFusionSampler` (🅛🅣🅧 Tiled Fusion Sampler) denoises a canvas larger
+than the model's trained window by running each denoise step on overlapping
+spatial tiles that share one latent canvas and one noise field. It is meant for
+IC-LoRA video-to-video where `LTXAddVideoICLoRAGuide` has already attached the
+guide. Pair it with `LTXVGetTilingSizes` (🅛🅣🅧 Get Tiling Sizes) for legal
+canvas / tile / `tile_frames` values. See
+[tiled_fusion_sampler.md](./tiled_fusion_sampler.md).
+Do not confuse it with `LTXVTiledSampler`, which samples tiles independently.
+
+Example graphs (2.5 distilled):
+
+* [`V2V upscale`](./example_workflows/2.5/LTX-2.5_V2V_TiledFusion_Upscale.json) — detail-refine at FullHD / 4K / 8K
+* [`V2V native 4K/8K`](./example_workflows/2.5/LTX-2.5_V2V_TiledFusion_Native_4K_8K.json) — FullHD stage 1, then 4K or 8K
+
+Prompt those graphs for look and style only (lighting, palette, sharpness, grade). Do not name specific objects in the scene: after upscale, named details can appear in every spatial tile.
+
 ### Low VRAM
 * For systems with low VRAM you can use the model loader nodes from [low_vram_loaders.py](./low_vram_loaders.py). Those nodes ensure the correct order of execution and perform the model offloading such that generation fits in 32 GB VRAM.
 * Use --reserve-vram ComfyUI parameter: `python -m main --reserve-vram 5` (or other number in GB).

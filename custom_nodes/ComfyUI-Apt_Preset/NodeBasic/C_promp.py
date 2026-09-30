@@ -1704,9 +1704,11 @@ class text_MinimaxH3:
         return {"required": {
             "text": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False}),
             "delimiter": ("STRING", {"default": "【Segment {n}】",
-                "tooltip": "分隔标识必须从行首开始；{n} 匹配数字。可在其后添加 【Duration 3.5s】 和该段正文。"}),
+                "tooltip": "分隔标识必须从行首开始；{n} 匹配数字。其后可添加 Duration、Motion 标识和该段正文。"}),
             "duration_delimiter": ("STRING", {"default": "【Duration {t}s】",
                 "tooltip": "时长标识必须包含 {t}，支持自定义文字、全角或半角字符及任意空格。"}),
+            "motion_delimiter": ("STRING", {"default": "【Motion {m}】",
+                "tooltip": "Motion 标识必须包含 {m}；值只能是 none、guide_22、guide_39、native_39。"}),
         }}
 
     @staticmethod
@@ -1734,11 +1736,28 @@ class text_MinimaxH3:
                 break
         return ""
 
-    def process(self, text, delimiter="【Segment {n}】", duration_delimiter="【Duration {t}s】"):
+    @classmethod
+    def _motion_marker_pattern(cls, value):
+        marker = cls._normalize_marker(value)
+        if not marker or "\n" in str(value) or "\r" in str(value) or marker.count("{m}") != 1:
+            raise ValueError("标识必须独占一行并包含一个 {m}")
+        before, after = marker.split("{m}")
+        choices = "none|guide_22|guide_39|native_39"
+        return f"{re.escape(before)}({choices}){re.escape(after)}", re.escape(before)
+
+    def process(self, text, delimiter="【Segment {n}】", duration_delimiter="【Duration {t}s】",
+                motion_delimiter="【Motion {m}】"):
         marker_pattern, _marker_prefix = self._marker_pattern(delimiter, "{n}")
         duration_pattern, duration_prefix = self._marker_pattern(duration_delimiter, "{t}", True)
-        pattern = re.compile(rf"(?:{marker_pattern})(?:{duration_pattern})?", re.IGNORECASE)
+        motion_pattern, motion_prefix = self._motion_marker_pattern(motion_delimiter)
+        pattern = re.compile(
+            rf"(?:{marker_pattern})(?:{duration_pattern})?(?:{motion_pattern})?",
+            re.IGNORECASE,
+        )
         duration_start = re.compile(rf"(?:{marker_pattern}){duration_prefix}", re.IGNORECASE)
+        motion_start = re.compile(
+            rf"(?:{marker_pattern})(?:{duration_pattern})?{motion_prefix}", re.IGNORECASE
+        )
         segments, lines = [], []
         for line in str(text).replace("\r\n", "\n").replace("\r", "\n").split("\n"):
             normalized_line = self._normalize_marker(line)
@@ -1748,6 +1767,11 @@ class text_MinimaxH3:
                     raise ValueError(f"Duration 格式无效，最多只能有一位小数：{line.strip()}")
                 if header[1] is not None and not 2.0 <= float(header[1]) <= 15.0:
                     raise ValueError(f"Duration 必须在 2.0s 到 15.0s 之间：{line.strip()}")
+                if header[2] is None and motion_start.match(normalized_line):
+                    raise ValueError(
+                        "Motion 必须是 none、guide_22、guide_39 或 native_39："
+                        f"{line.strip()}"
+                    )
                 segment = "\n".join(lines).strip()
                 if segment:
                     segments.append(segment)
@@ -1803,8 +1827,6 @@ class text_interPrompt:
     def IS_CHANGED(cls, image, lighting_prompt="", camera_prompt="", color_prompt="", light2d_prompt="", position_prompt="", unique_id=None):
         return f"{lighting_prompt}_{camera_prompt}_{color_prompt}_{light2d_prompt}_{position_prompt}"
 text_mulAngle = text_interPrompt
-
-
 
 
 

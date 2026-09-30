@@ -59,6 +59,7 @@ from .C_flow import (
     _stage_encode_payload,
     _stage_run_dir,
     _stage_checkpoint_filename,
+    _stage_payload_candidates,
     _stage_batch_concat_image,
     _stage_batch_concat_mask,
     _stage_batch_concat_audio,
@@ -155,7 +156,7 @@ class basicIn_Seed:
     RETURN_TYPES = ("INT",)
     RETURN_NAMES = ("seed",)
     FUNCTION = "pass_seed"
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     def pass_seed(self, seed):
         return (seed,)
@@ -172,7 +173,7 @@ class basicIn_float:
     RETURN_TYPES = ("FLOAT",)
     RETURN_NAMES = ("float",)
     FUNCTION = "convert_to_float"
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     def convert_to_float(self, input):
         try:
@@ -193,7 +194,7 @@ class basicIn_Sampler:
     RETURN_TYPES = (comfy.samplers.KSampler.SAMPLERS,)
     RETURN_NAMES = ("sampler",)
     FUNCTION = "pass_sampler"
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     def pass_sampler(self, sampler):
         return (sampler,)
@@ -211,7 +212,7 @@ class basicIn_Scheduler:
     RETURN_TYPES = (comfy.samplers.KSampler.SCHEDULERS,)
     RETURN_NAMES = ("scheduler",)
     FUNCTION = "pass_scheduler"
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     def pass_scheduler(self, scheduler):
         return (scheduler,)
@@ -228,7 +229,7 @@ class basicIn_string:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("text",)
     FUNCTION = "pass_text"
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     def pass_text(self, input_text):
         return (input_text,)
@@ -251,7 +252,7 @@ class basicIn_Remap_slide:
     FUNCTION = "set_range"
     RETURN_TYPES = ("FLOAT", "FLOAT", )
     RETURN_NAMES = ("source_value", "slide_value", )
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     def set_range(self, source_min, source_max, precision, slide):
 
@@ -276,7 +277,7 @@ class basicIn_int:
     RETURN_TYPES = ("INT",)
     RETURN_NAMES = ("int",)
     FUNCTION = "convert_to_int"
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     def convert_to_int(self, input):
         try:
@@ -286,7 +287,7 @@ class basicIn_int:
 
 
 class basicIn_Boolean:
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
     INPUT_TYPES = lambda: {
         "required": {
             "boolean_value": ("BOOLEAN", {
@@ -307,7 +308,7 @@ class basicIn_Boolean:
 
 
 class basicIn_img_INOUT:
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     @classmethod
     def INPUT_TYPES(s):
@@ -524,28 +525,19 @@ class basicIn_OptionalPass:
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {
-            "optional": {
-                "any_input": (ANY_TYPE, {"lazy": True}),
-            }
-        }
+        return {}
 
     RETURN_TYPES = (ANY_TYPE,)
-    RETURN_NAMES = ("any_output",)
-    FUNCTION = "pass_through"
-    DESCRIPTION = "未连接时输出空值；连接时惰性加载并原样传递输入。下游节点需要支持空值。"
+    RETURN_NAMES = ("optional",)
+    FUNCTION = "make_optional"
+    DESCRIPTION = "连接到必选输入端口后，在没有实际数据时静默跳过依赖该端口的下游分支。"
 
     @classmethod
     def VALIDATE_INPUTS(cls, input_types):
         return True
 
-    def check_lazy_status(self, **kwargs):
-        if "any_input" in kwargs and kwargs["any_input"] is None:
-            return ["any_input"]
-        return []
-
-    def pass_through(self, any_input=None):
-        return (any_input,)
+    def make_optional(self):
+        return (ExecutionBlocker(None),)
 
 
 class basicIn_Media_Params:
@@ -557,9 +549,10 @@ class basicIn_Media_Params:
         "LTX-2",
         "CogVideoX-1.5",
         "MiniMax-H3",
-        "Flux2",
-        "SDXL",
+        "Image",
     )
+
+    IMAGE_MODES = {"Image"}
 
     TEMPORAL_RULES = {
         "Hunyuan-Video": (4, 1),
@@ -613,13 +606,16 @@ class basicIn_Media_Params:
         width = max(multiple, round(ratio_width * scale / multiple) * multiple)
         height = max(multiple, round(ratio_height * scale / multiple) * multiple)
         frame_count = max(1, round(float(time_s) * float(fps)))
-        temporal_rule = self.TEMPORAL_RULES.get(mode)
-        if temporal_rule is None:
-            length = frame_count
+        if mode in self.IMAGE_MODES:
+            length = 1
         else:
-            frame_multiple, frame_offset = temporal_rule
-            frame_count = max(frame_offset, frame_count)
-            length = frame_count + (frame_offset - frame_count % frame_multiple) % frame_multiple
+            temporal_rule = self.TEMPORAL_RULES.get(mode)
+            if temporal_rule is None:
+                length = frame_count
+            else:
+                frame_multiple, frame_offset = temporal_rule
+                frame_count = max(frame_offset, frame_count)
+                length = frame_count + (frame_offset - frame_count % frame_multiple) % frame_multiple
         return width, height, length, float(fps)
 
 
@@ -960,14 +956,6 @@ def _bridge_decode_latent(bridge_latent, vae, audio_vae, fps=24.0):
 
 # ---------- 按 ID 读取桥张量，统一交给 View_bridge_tentor 解码 ----------
 
-def _stage_persistent_payload_filename(stage_index, channel):
-    """Persistent file written by flow_stage_end once a stage commits."""
-    if channel not in ("data1", "data2"):
-        raise ValueError("flow_stage_bridge_decode_range: channel must be data1 or data2")
-    suffix = "_2" if channel == "data2" else ""
-    return f"stage_{int(stage_index):05d}{suffix}.safetensors"
-
-
 def _stage_bridge_file(run_dir, stage_index, channel):
     """Return the path to a stage's bridge payload.
 
@@ -975,9 +963,10 @@ def _stage_bridge_file(run_dir, stage_index, channel):
     in-progress checkpoint (created mid-stage and useful after an interrupt).
     Returns None if neither exists.
     """
-    payload_path = os.path.join(run_dir, _stage_persistent_payload_filename(stage_index, channel))
-    if os.path.isfile(payload_path):
-        return payload_path
+    for filename in _stage_payload_candidates(stage_index, channel):
+        payload_path = os.path.join(run_dir, filename)
+        if os.path.isfile(payload_path):
+            return payload_path
     checkpoint_path = os.path.join(run_dir, _stage_checkpoint_filename(stage_index, channel))
     if os.path.isfile(checkpoint_path):
         return checkpoint_path
@@ -1021,47 +1010,54 @@ def _stage_dispatch_bridge_payload(payload, vae, audio_vae, fps):
     return tuple(ExecutionBlocker(None) for _ in range(5))
 
 
-class flow_stage_bridge_decode_range:
-    """Read one stage or an inclusive ID range without VAE decoding."""
+class flow_stage_tentor_load:
+    """Read one stage or an inclusive stage index range without VAE decoding."""
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "run_id": ("STRING", {"default": "default"}),
-                "start_id": ("INT", {
+                "start_stage_index": ("INT", {
                     "default": 1,
                     "min": 1,
                     "max": 5000,
                     "step": 1,
                     "tooltip": "1-based, inclusive.",
                 }),
-                "end_id": ("INT", {
+                "end_stage_index": ("INT", {
                     "default": 1,
                     "min": 1,
                     "max": 5000,
                     "step": 1,
-                    "tooltip": "1-based, inclusive. Use the same start/end ID for one stage. Missing stages are skipped.",
+                    "tooltip": "1-based, inclusive. Use the same start/end stage index for one stage. Missing stages are skipped.",
+                }),
+                "index": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 5000,
+                    "step": 1,
+                    "tooltip": "1-based. Picks the single stage fed to index_data1 / index_data2 (single LATENT). Missing stage blocks that output.",
                 }),
             },
         }
 
-    RETURN_TYPES = ("LATENT", "LATENT")
-    RETURN_NAMES = ("bridge_latent_data1", "bridge_latent_data2")
-    OUTPUT_IS_LIST = (True, True)
+    RETURN_TYPES = ("LATENT", "LATENT", "LATENT", "LATENT")
+    RETURN_NAMES = ("data1", "data2", "index_data1", "index_data2")
+    OUTPUT_IS_LIST = (True, True, False, False)
     FUNCTION = "decode_range"
     CATEGORY = "Apt_Preset/flow"
-    DESCRIPTION = "Read both data1 and data2 for an inclusive stage ID range. Connect either output to View_bridge_tentor to decode and merge."
+    DESCRIPTION = "Read both data1 and data2 for an inclusive stage index range, plus a single stage picked by index. Connect any output to View_bridge_tentor to decode and merge."
 
     @classmethod
-    def IS_CHANGED(cls, run_id, start_id, end_id):
+    def IS_CHANGED(cls, run_id, start_stage_index, end_stage_index, index):
         rid = str(run_id or "").strip()
         if not rid:
             return ""
         run_dir = _stage_run_dir(rid)
         if not os.path.isdir(run_dir):
             return f"{rid}|missing"
-        lo, hi = int(start_id), int(end_id)
+        lo, hi = int(start_stage_index), int(end_stage_index)
         if hi < lo:
             lo, hi = hi, lo
         digests = []
@@ -1073,22 +1069,40 @@ class flow_stage_bridge_decode_range:
                 else:
                     st = os.stat(file_path)
                     digests.append(f"{sid}:{channel}:{os.path.basename(file_path)}:{st.st_mtime_ns}:{st.st_size}")
+        idx = int(index)
+        for channel in ("data1", "data2"):
+            file_path = _stage_bridge_file(run_dir, idx - 1, channel)
+            if file_path is None or not os.path.isfile(file_path):
+                digests.append(f"idx{idx}:{channel}:missing")
+            else:
+                st = os.stat(file_path)
+                digests.append(f"idx{idx}:{channel}:{os.path.basename(file_path)}:{st.st_mtime_ns}:{st.st_size}")
         return f"{rid}|" + ",".join(digests)
 
-    def decode_range(self, run_id, start_id, end_id):
-        lo, hi = int(start_id), int(end_id)
+    def decode_range(self, run_id, start_stage_index, end_stage_index, index):
+        lo, hi = int(start_stage_index), int(end_stage_index)
         if hi < lo:
             lo, hi = hi, lo
         run_dir = _stage_run_dir(run_id)
         payloads = ([], [])
-        if not os.path.isdir(run_dir):
-            return payloads
-        for sid in range(lo, hi + 1):
-            for channel, output in zip(("data1", "data2"), payloads):
-                path = _stage_bridge_file(run_dir, sid - 1, channel)
+        if os.path.isdir(run_dir):
+            for sid in range(lo, hi + 1):
+                for channel, output in zip(("data1", "data2"), payloads):
+                    path = _stage_bridge_file(run_dir, sid - 1, channel)
+                    if path is not None:
+                        output.append(_stage_decode_payload(path))
+        idx = int(index)
+        index_data1 = ExecutionBlocker(None)
+        index_data2 = ExecutionBlocker(None)
+        if os.path.isdir(run_dir):
+            for channel, target in (("data1", "index_data1"), ("data2", "index_data2")):
+                path = _stage_bridge_file(run_dir, idx - 1, channel)
                 if path is not None:
-                    output.append(_stage_decode_payload(path))
-        return payloads
+                    if channel == "data1":
+                        index_data1 = _stage_decode_payload(path)
+                    else:
+                        index_data2 = _stage_decode_payload(path)
+        return (*payloads, index_data1, index_data2)
 
 
 # ---------- 合并桥张量解码后的视频 ----------
@@ -1713,136 +1727,6 @@ class IO_input_any:
 
 
 
-
-
-def _resolve_io_latent_path(latent_path, clip_index=0):
-    path = (latent_path or "").strip().strip('"').strip("'")
-    if not path:
-        path = "bridge_latent"
-
-    output_directory = folder_paths.get_output_directory()
-    candidates = [path, os.path.join(output_directory, path)]
-    for candidate in candidates:
-        if os.path.isfile(candidate):
-            return candidate
-        if not os.path.isdir(candidate):
-            continue
-
-        index = int(clip_index)
-        if index > 0:
-            endings = (f"_{index:05d}.safetensors", f"_clip{index:03d}.safetensors")
-            files = [os.path.join(candidate, filename) for filename in os.listdir(candidate) if filename.endswith(endings)]
-            if not files:
-                raise FileNotFoundError(f"IO_loadLatent: no saved latent for file index {index} in {candidate}")
-        else:
-            files = [os.path.join(candidate, filename) for filename in os.listdir(candidate) if filename.endswith(".safetensors")]
-            if not files:
-                raise FileNotFoundError(f"IO_loadLatent: no saved latents in {candidate}")
-        return max(files, key=os.path.getmtime)
-
-    raise FileNotFoundError(f"IO_loadLatent: {path!r} is neither a file nor a folder")
-
-
-class IO_loadLatent:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "latent_path": ("STRING", {
-                    "default": "bridge_latent",
-                    "tooltip": "Latent file or folder. Relative paths are resolved from the ComfyUI output folder.",
-                }),
-                "clip_index": ("INT", {
-                    "default": 0,
-                    "min": 0,
-                    "max": 9999,
-                    "tooltip": "Clip number to load from a folder. 0 loads the newest safetensors file.",
-                }),
-            },
-        }
-
-    RETURN_TYPES = ("LATENT",)
-    RETURN_NAMES = ("Latent",)
-    FUNCTION = "load"
-    CATEGORY = "Apt_Preset/IO_Port"
-    DESCRIPTION = "Load a latent saved by IO_SaveLatent, flow_stage, or ComfyUI SaveLatent."
-
-    @classmethod
-    def IS_CHANGED(cls, latent_path, clip_index=0):
-        try:
-            path = _resolve_io_latent_path(latent_path, clip_index)
-            return f"{path}:{os.stat(path).st_mtime_ns}"
-        except Exception:
-            return float("NaN")
-
-    def load(self, latent_path, clip_index=0):
-        path = _resolve_io_latent_path(latent_path, clip_index)
-        data, metadata = comfy.utils.load_torch_file(path, safe_load=True, return_metadata=True)
-
-        if metadata is not None and "stage_payload" in metadata:
-            latent = _stage_decode_payload(path)
-            if not isinstance(latent, dict) or "samples" not in latent:
-                payload_type = json.loads(metadata["stage_payload"]).get("type", "unknown data")
-                raise ValueError(f"IO_loadLatent: {path} contains {payload_type}, not latent")
-            return (latent,)
-
-        if "video" in data and "audio" in data:
-            return ({"samples": comfy.nested_tensor.NestedTensor([data["video"], data["audio"]])},)
-
-        if "latent_tensor" in data:
-            multiplier = 1.0 if "latent_format_version_0" in data else 1.0 / 0.18215
-            return ({"samples": data["latent_tensor"].float() * multiplier},)
-
-        if "samples" in data:
-            return (data,)
-
-        raise ValueError(f"IO_loadLatent: {path} does not contain a supported latent")
-
-
-class IO_SaveLatent:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "latent": ("LATENT",),
-                "filename_prefix": ("STRING", {"default": "bridge_latent/clip"}),
-                "clip_index": ("INT", {
-                    "default": 0,
-                    "min": 0,
-                    "max": 9999,
-                    "tooltip": "Fixed clip number to overwrite. 0 creates a new numbered file on every run.",
-                }),
-            },
-        }
-
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("latent_path",)
-    FUNCTION = "save"
-    OUTPUT_NODE = True
-    CATEGORY = "Apt_Preset/IO_Port"
-    DESCRIPTION = "Save any ComfyUI latent while preserving its tensor and metadata fields."
-
-    def save(self, latent, filename_prefix, clip_index=0):
-        tensors, descriptor = _stage_encode_payload(latent, "latent")
-        folder, filename, counter, _, _ = folder_paths.get_save_image_path(
-            filename_prefix, folder_paths.get_output_directory()
-        )
-        if int(clip_index) > 0:
-            path = os.path.join(folder, f"{filename}_{int(clip_index):05d}.safetensors")
-        else:
-            path = os.path.join(folder, f"{filename}_{counter:05d}_.safetensors")
-        temp_path = path + ".tmp"
-        try:
-            comfy.utils.save_torch_file(
-                tensors,
-                temp_path,
-                metadata={"stage_payload": json.dumps(descriptor, ensure_ascii=False)},
-            )
-            os.replace(temp_path, path)
-        finally:
-            if os.path.isfile(temp_path):
-                os.remove(temp_path)
-        return (path,)
 
 
 class IO_load_anyimage:
@@ -3210,7 +3094,33 @@ import folder_paths
 import node_helpers
 
 def tensor_to_hash(tensor):
-    return hash(tuple(tensor.cpu().numpy().ravel()[:1000]))
+    tensor = tensor.detach().cpu().contiguous()
+    digest = hashlib.sha256()
+    digest.update(str(tuple(tensor.shape)).encode("utf-8"))
+    digest.update(str(tensor.dtype).encode("utf-8"))
+    digest.update(tensor.numpy().tobytes())
+    return digest.hexdigest()
+
+def normalize_view_bridge_mask(mask, batch_size, height, width):
+    if mask is None:
+        return None
+    if mask.dim() == 2:
+        mask = mask.unsqueeze(0)
+    elif mask.dim() == 4 and mask.shape[1] == 1:
+        mask = mask.squeeze(1)
+
+    if mask.shape[-2:] != (height, width):
+        mask = torch.nn.functional.interpolate(mask.unsqueeze(1), size=(height, width), mode="bilinear", align_corners=False).squeeze(1)
+
+    if mask.shape[0] != batch_size:
+        if mask.shape[0] == 1:
+            mask = mask.expand(batch_size, -1, -1)
+        elif mask.shape[0] < batch_size:
+            repeat_count = (batch_size + mask.shape[0] - 1) // mask.shape[0]
+            mask = mask.repeat(repeat_count, 1, 1)[:batch_size]
+        else:
+            mask = mask[:batch_size]
+    return mask
 
 def tensor2pil(image):
     img_np = np.clip(255. * image.cpu().numpy(), 0, 255).astype(np.uint8)
@@ -3233,7 +3143,8 @@ def create_temp_file(image):
 class view_bridge_image:   
     def __init__(self):
         self.image_id = None
-        self.cached_mask = None  
+        self.cached_mask = None
+        self.cached_mask_source = None
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -3258,17 +3169,17 @@ class view_bridge_image:
     NAME = "view_bridge_image"
 
     def edit(self, image, mask=None, operation="None", image_update=None, output_mask=False):
+        image_id = tensor_to_hash(image)
         if self.image_id is None:
-            self.image_id = tensor_to_hash(image)
+            self.image_id = image_id
+        elif image_id != self.image_id:
             image_update = None
-        else:
-            image_id = tensor_to_hash(image)
-            if image_id != self.image_id:
-                image_update = None
-                self.image_id = image_id
-                # 图像ID变化时重置缓存遮罩
-                if not output_mask:
-                    self.cached_mask = None
+            self.image_id = image_id
+            self.cached_mask = None
+            self.cached_mask_source = None
+
+        batch_size, height, width = image.shape[:3]
+        mask = normalize_view_bridge_mask(mask, batch_size, height, width)
 
         # 优先使用 image_update 中的图像
         if image_update is not None and 'images' in image_update:
@@ -3291,7 +3202,8 @@ class view_bridge_image:
             # 否则使用 preview_image
             if mask is not None:
                 try:
-                    masked_result = generate_masked_black_image(image, mask)
+                    preview_mask = mask.to(device=image.device, dtype=image.dtype)
+                    masked_result = generate_masked_black_image(image, preview_mask)
                     preview_image = masked_result["result"][0]
                 except Exception as e:
                     print(f"[Error] Failed to apply mask for preview: {e}")
@@ -3335,12 +3247,13 @@ class view_bridge_image:
 
         # 新增 Mask 运算逻辑
         mask1 = mask
-        mask2 = output_mask_val
+        mask2 = normalize_view_bridge_mask(output_mask_val, batch_size, height, width)
 
         # 计算当前运算结果
         if mask1 is None or operation == "None":
             current_result = mask2
         else:
+            mask2 = mask2.to(device=mask1.device, dtype=mask1.dtype)
             invert_mask1 = False
             invert_mask2 = False
 
@@ -3348,17 +3261,6 @@ class view_bridge_image:
                 mask1 = 1 - mask1
             if invert_mask2:
                 mask2 = 1 - mask2
-
-            if mask1.dim() == 2:
-                mask1 = mask1.unsqueeze(0)
-            if mask2.dim() == 2:
-                mask2 = mask2.unsqueeze(0)
-
-            b, h, w = image.shape[0], image.shape[1], image.shape[2]
-            if mask1.shape != (b, h, w):
-                mask1 = torch.zeros((b, h, w), dtype=mask1.dtype, device=mask1.device)
-            if mask2.shape != (b, h, w):
-                mask2 = torch.zeros((b, h, w), dtype=mask2.dtype, device=mask2.device)
 
             algorithm = "torch"  # 简化逻辑，直接使用torch
 
@@ -3374,17 +3276,20 @@ class view_bridge_image:
                 else:
                     current_result = mask2  # 默认操作为 mask2
 
+        mask_source = None
+        if image_update is not None and image_update.get('images'):
+            image_ref = image_update['images'][0]
+            mask_source = (image_ref.get('type'), image_ref.get('subfolder'), image_ref.get('filename'))
+
         # 根据output_mask控制是否保留遮罩
         if output_mask:
-            # 如果是第一次启用启用保留，缓存当前结果
-            if self.cached_mask is None:
-                # 为避免显存问题，只在需要时保存缓存，并将其移至CPU
+            if self.cached_mask is None or mask_source != self.cached_mask_source:
                 self.cached_mask = current_result.detach().cpu()
-            # 使用缓存的遮罩作为结果（需要时移回GPU）
+                self.cached_mask_source = mask_source
             final_mask = self.cached_mask.to(current_result.device) if self.cached_mask.device != current_result.device else self.cached_mask
         else:
-            # 不保留时更新缓存为当前结果
-            self.cached_mask = current_result.detach().cpu()  # 移至CPU以节省GPU显存
+            self.cached_mask = current_result.detach().cpu()
+            self.cached_mask_source = mask_source
             final_mask = current_result
 
         # 返回结果
@@ -3706,7 +3611,8 @@ class IO_store_image:
 
     @classmethod
     def IS_CHANGED(cls, image: Optional[torch.Tensor] = None, 
-                   release_total: float = 0, image_output: str = None) -> str:
+                   release_total: float = 0, image_output: str = None,
+                   prompt: Any = None, extra_pnginfo: Any = None, **kwargs) -> str:
         img_id = f"{image.shape}-{id(image)}" if isinstance(image, torch.Tensor) else "none"
         return json.dumps({
             "image_id": img_id, 
@@ -5382,8 +5288,8 @@ class view_node_Script:
 
 # ==================== 节点1：尺寸帧率传递 ====================
 class basicIn_Vedio:
-    CATEGORY = "Apt_Preset/IO_Port"
-    
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
+
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -5419,7 +5325,7 @@ class basicIn_clip:
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("positive", "negative")
     FUNCTION = "encode"
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
 
     def encode(self, clip, positive, negative):
         if clip is not None:
@@ -5430,13 +5336,6 @@ class basicIn_clip:
             negative = None       
 
         return (positive, negative)
-
-
-
-
-
-
-
 
 
 

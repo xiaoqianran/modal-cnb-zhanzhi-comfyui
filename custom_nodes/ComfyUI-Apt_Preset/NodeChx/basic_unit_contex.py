@@ -1,3 +1,6 @@
+import hashlib
+import math
+
 import comfy.model_management
 import comfy.samplers
 import comfy.utils
@@ -7,26 +10,32 @@ import torch
 from PIL import Image
 from comfy.patcher_extension import WrappersMP
 from comfy_extras.nodes_audio import vae_decode_audio
+from comfy_extras.nodes_lt import LTXVConcatAVLatent, LTXVSeparateAVLatent
 from nodes import (
     CheckpointLoaderSimple, CLIPLoader, CLIPTextEncode, DualCLIPLoader,
     UNETLoader, VAEDecode, VAEEncode, VAELoader, common_ksampler,
 )
 
 from ..main_unit import CLIP_TYPE, apply_lora_stack, load_upscale_model, new_context, pil2tensor, read_ratios, upscale_with_model
-from ..NodeBasic.C_AD import _AD_H3_LATENT_TILE_PRESETS
-from ..NodeBasic.minimaxH3 import _ad_h3_aligned_tile_regions, _ad_h3_core_halo_window
+from .main_nodes import _apt_cache_evict_tag, _apt_cache_get, _apt_cache_set
+from ..NodeBasic.C_AD import (
+    _AD_H3_LATENT_TILE_PRESETS,
+    _AD_H3_SAMPLE_LATENT_TILE_CHOICES,
+    _AD_H3_SAMPLE_LATENT_TILE_PRESETS,
+)
+from ..NodeBasic.minimaxH3 import _ad_h3_aligned_tile_regions, _ad_h3_bridge_window, _ad_h3_core_halo_window
 
 try:
-    from .load_GGUF.nodes import CLIPLoaderGGUF2, DualCLIPLoaderGGUF2, UnetLoaderGGUF2
+    from .load_GGUF.nodes import CLIPLoaderGGUF2, DualCLIPLoaderGGUF, UnetLoaderGGUF2
     GGUF_AVAILABLE = True
 except (ImportError, RuntimeError):
     CLIPLoaderGGUF2 = None
-    DualCLIPLoaderGGUF2 = None
+    DualCLIPLoaderGGUF = None
     UnetLoaderGGUF2 = None
     GGUF_AVAILABLE = False
 
 
-_UC_NO_LATENT_TILE = next(iter(_AD_H3_LATENT_TILE_PRESETS))
+_UC_NO_LATENT_TILE = _AD_H3_SAMPLE_LATENT_TILE_CHOICES[0]
 _UC_TILED_APPLY_MODEL_KEY = "apt_uc_tiled_apply_model"
 
 
@@ -59,10 +68,57 @@ def _uc_crop_scaled(value, axis, start, end, full_size):
     return _uc_crop_spatial(value, axis, cond_start, cond_end)
 
 
+def _uc_restore_alpha(image, alpha):
+    if alpha is None:
+        return image
+    if alpha.shape[1:3] != image.shape[1:3]:
+        alpha = comfy.utils.common_upscale(
+            alpha.movedim(-1, 1), image.shape[2], image.shape[1], "bilinear", "disabled"
+        ).movedim(1, -1)
+    alpha = alpha.to(device=image.device, dtype=image.dtype)
+    return torch.cat((image[..., :3], alpha), dim=-1)
+
+
+def _uc_resolve_tile_preset(preset, width, height):
+    if preset in _AD_H3_SAMPLE_LATENT_TILE_PRESETS:
+        tile_count, overlap_pixels, bridge_seams = _AD_H3_SAMPLE_LATENT_TILE_PRESETS[preset]
+    elif preset in _AD_H3_LATENT_TILE_PRESETS:
+        tile_count, overlap_pixels = _AD_H3_LATENT_TILE_PRESETS[preset]
+        bridge_seams = False
+    else:
+        raise ValueError(f"UC sampler: unknown tile preset: {preset}")
+
+    if overlap_pixels == "auto":
+        long_edge = max(int(width), int(height))
+        short_edge = max(1, min(int(width), int(height)))
+        aspect = long_edge / short_edge
+        if aspect <= 1.35:
+            aspect_overlap = 192
+        elif aspect < 1.9:
+            aspect_overlap = 256
+        elif aspect < 2.2:
+            aspect_overlap = 288
+        else:
+            aspect_overlap = 320
+
+        if long_edge <= 1024:
+            length_overlap = 192
+        elif long_edge <= 1344:
+            length_overlap = 256
+        elif long_edge <= 1536:
+            length_overlap = 288
+        else:
+            length_overlap = 320
+        overlap_pixels = max(aspect_overlap, length_overlap)
+
+    return int(tile_count), int(overlap_pixels), bool(bridge_seams)
+
+
 class _UCTiledApplyModel:
-    def __init__(self, tile_count, overlap_pixels):
+    def __init__(self, tile_count, overlap_pixels, bridge_seams=False):
         self.tile_count = int(tile_count)
         self.overlap_pixels = int(overlap_pixels)
+        self.bridge_seams = bool(bridge_seams)
 
     def apply_model_wrapper(self, executor, x, t, c_concat=None, c_crossattn=None,
                             control=None, transformer_options={}, **kwargs):
@@ -77,16 +133,34 @@ class _UCTiledApplyModel:
         if len(regions) <= 1 or any(start == 0 and end == full_size for start, end, _, _ in regions):
             return executor(x, t, c_concat, c_crossattn, control, transformer_options, **kwargs)
 
+        weighted_regions = []
+        for start, end, core_start, core_end in regions:
+            window = _ad_h3_core_halo_window(start, end, core_start, core_end, x.device)
+            weighted_regions.append((start, end, window))
+        if self.bridge_seams and len(regions) > 1 and halo > 0:
+            context_half = max(2, int(math.ceil((halo * 1.5) / 2.0)) * 2)
+            for index in range(len(regions) - 1):
+                boundary = int(regions[index][3])
+                start = max(0, boundary - context_half)
+                end = min(full_size, boundary + context_half)
+                if end - start < 2:
+                    continue
+                window = _ad_h3_bridge_window(start, end, boundary, halo, x.device)
+                weighted_regions.append((start, end, window))
+
         output = torch.zeros_like(x, dtype=torch.float32)
         weight_shape = (1, 1, full_size, 1) if axis == "H" else (1, 1, 1, full_size)
         weights = torch.zeros(weight_shape, dtype=torch.float32, device=x.device)
-        for start, end, core_start, core_end in regions:
-            window = _ad_h3_core_halo_window(start, end, core_start, core_end, x.device)
+        tiled_transformer_options = dict(transformer_options or {})
+        qwen_cache_options = dict(tiled_transformer_options.get("qwen_image21_cache", {}))
+        qwen_cache_options["device"] = "off"
+        tiled_transformer_options["qwen_image21_cache"] = qwen_cache_options
+        for start, end, window in weighted_regions:
             window = window.view(1, 1, -1, 1) if axis == "H" else window.view(1, 1, 1, -1)
             prediction = executor(
                 _uc_crop_spatial(x, axis, start, end), t,
                 _uc_crop_scaled(c_concat, axis, start, end, full_size),
-                c_crossattn, control, transformer_options, **kwargs,
+                c_crossattn, control, tiled_transformer_options, **kwargs,
             )
             if axis == "H":
                 output[:, :, start:end, :] += prediction.float() * window
@@ -97,9 +171,9 @@ class _UCTiledApplyModel:
         return (output / weights.clamp_min(1e-8)).to(dtype=x.dtype)
 
 
-def _uc_tiled_model(model, tile_count, overlap_pixels):
+def _uc_tiled_model(model, tile_count, overlap_pixels, bridge_seams=False):
     tiled_model = model.clone()
-    state = _UCTiledApplyModel(tile_count, overlap_pixels)
+    state = _UCTiledApplyModel(tile_count, overlap_pixels, bridge_seams)
     tiled_model.add_wrapper_with_key(
         WrappersMP.APPLY_MODEL, _UC_TILED_APPLY_MODEL_KEY, state.apply_model_wrapper
     )
@@ -153,6 +227,7 @@ class UC_create_context:
 
 class UC_ksampler:
     ratio_sizes, ratio_dict = read_ratios()
+    custom_ratio = "自定义宽和高"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -171,6 +246,10 @@ class UC_ksampler:
                     "step": 0.01,
                 }),
                 "VAE_Decode": ("BOOLEAN", {"default": True, "tooltip": "关闭后不生成图片和音频，速度提升",},),
+                "tile_size": (
+                    list(_AD_H3_SAMPLE_LATENT_TILE_CHOICES),
+                    {"default": _UC_NO_LATENT_TILE, "tooltip": "图像 latent 分块采样，与 UC_Ksampler_refine 使用相同算法；不改变 VAE 编解码。"},
+                ),
                 "sample_parameters": ("BOOLEAN", {
                     "default": False,
                     "label_on": "自定义",
@@ -181,13 +260,13 @@ class UC_ksampler:
                     "default": 8,
                     "min": 0,
                     "max": 10000,
-          
+
                 }),
                 "cfg": ("FLOAT", {
                     "default": 1.0,
                     "min": 0.0,
                     "max": 100.0,
-  
+
                 }),
                 "sampler": (["None"] + comfy.samplers.KSampler.SAMPLERS, {"default": "euler"}),
                 "scheduler": (["None"] + comfy.samplers.KSampler.SCHEDULERS, {"default": "simple"}),
@@ -198,7 +277,7 @@ class UC_ksampler:
                     "label_off": "继承context",
                     "tooltip": "继承context时优先使用上游latent尺寸",
                 }),
-                "ratio_selected": (["None", "customer_WxH"] + cls.ratio_sizes, {"default": "None"}),
+                "ratio_selected": ([cls.custom_ratio] + cls.ratio_sizes, {"default": cls.custom_ratio}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 300}),
                 "width": ("INT", {"default": 512, "min": 8, "max": 16384}),
                 "height": ("INT", {"default": 512, "min": 8, "max": 16384}),
@@ -230,8 +309,8 @@ class UC_ksampler:
     def sample(self, context, seed, denoise, steps, cfg, sampler, scheduler,
                VAE_Decode, model=None, positive=None, negative=None, latent=None,
                latent_image=None, latent_mask=None, sample_parameters=False,
-               latent_size=False, ratio_selected="None", batch_size=1,
-               width=512, height=512):
+               latent_size=False, ratio_selected="自定义宽和高", batch_size=1,
+               width=512, height=512, tile_size=_UC_NO_LATENT_TILE):
         model = model if model is not None else context.get("model")
         positive = positive if positive is not None else context.get("positive")
         negative = negative if negative is not None else context.get("negative")
@@ -266,7 +345,12 @@ class UC_ksampler:
         if latent_image is not None:
             if vae is None:
                 raise ValueError("UC_ksampler needs VAE in context to encode latent_image")
+            source_latent = latent if latent is not None else context.get("latent")
             latent = VAEEncode().encode(vae, latent_image)[0]
+            source_samples = source_latent.get("samples") if isinstance(source_latent, dict) else None
+            if getattr(source_samples, "is_nested", False) and len(source_samples.unbind()) > 1:
+                _source_video, source_audio = LTXVSeparateAVLatent.execute(source_latent).result
+                latent = LTXVConcatAVLatent.execute(latent, source_audio).result[0]
         elif latent is None and latent_size is False:
             latent = context.get("latent")
 
@@ -278,7 +362,7 @@ class UC_ksampler:
                 batch_size = 1
                 width = 512
                 height = 512
-            if ratio_selected not in ("None", "customer_WxH"):
+            if ratio_selected not in ("None", "customer_WxH", self.custom_ratio):
                 width = self.ratio_dict[ratio_selected]["width"]
                 height = self.ratio_dict[ratio_selected]["height"]
             width = max(int(width / 8) * 8, 64)
@@ -292,8 +376,19 @@ class UC_ksampler:
         if latent is not None and latent_mask is not None:
             latent = self.set_latent_mask2(latent, latent_mask)
 
+        sample_model = model
+        if tile_size != _UC_NO_LATENT_TILE:
+            samples = latent["samples"]
+            if not torch.is_tensor(samples) or samples.is_nested or samples.ndim != 4:
+                raise ValueError("UC_ksampler: tile_size requires a 4D image latent; disable tiling for video/audio latents")
+            tile_count, overlap_pixels, bridge_seams = _uc_resolve_tile_preset(
+                tile_size, int(samples.shape[-1]) * 8, int(samples.shape[-2]) * 8
+            )
+            if tile_count > 1:
+                sample_model = _uc_tiled_model(model, tile_count, overlap_pixels, bridge_seams)
+
         latent = common_ksampler(
-            model, seed, steps, cfg, sampler, scheduler,
+            sample_model, seed, steps, cfg, sampler, scheduler,
             positive, negative, latent, denoise=denoise,
         )[0]
 
@@ -342,7 +437,7 @@ class UC_Ksampler_refine:
                     "step": 0.01,
                 }),
                 "tile_size": (
-                    list(_AD_H3_LATENT_TILE_PRESETS),
+                    list(_AD_H3_SAMPLE_LATENT_TILE_CHOICES),
                     {"default": _UC_NO_LATENT_TILE, "tooltip": "按分块数量和重叠像素进行 latent 分块采样。"},
                 ),
                 "sample_parameters": ("BOOLEAN", {
@@ -395,6 +490,10 @@ class UC_Ksampler_refine:
         if image is None:
             raise ValueError("UC_Ksampler_refine needs an image or latent in context")
 
+        alpha = image[..., 3:4] if image.shape[-1] == 4 else None
+        if alpha is not None:
+            image = image[..., :3]
+
         if sample_parameters is False:
             steps = context.get("steps")
             cfg = context.get("cfg")
@@ -408,9 +507,6 @@ class UC_Ksampler_refine:
             sampler = "euler"
         if scheduler in (None, "None"):
             scheduler = "simple"
-        if tile_size not in _AD_H3_LATENT_TILE_PRESETS:
-            raise ValueError(f"UC_Ksampler_refine: unknown tile preset: {tile_size}")
-
         upscale_model = load_upscale_model(model_name)
         image = upscale_with_model(upscale_model, image)
         image_height, image_width = image.shape[1:3]
@@ -422,13 +518,19 @@ class UC_Ksampler_refine:
             ).movedim(1, -1)
         latent = VAEEncode().encode(vae, image)[0]
 
-        tile_count, overlap_pixels = _AD_H3_LATENT_TILE_PRESETS[tile_size]
-        sample_model = _uc_tiled_model(model, tile_count, overlap_pixels) if tile_count > 1 else model
+        tile_count, overlap_pixels, bridge_seams = _uc_resolve_tile_preset(
+            tile_size, target_width, target_height
+        )
+        sample_model = (
+            _uc_tiled_model(model, tile_count, overlap_pixels, bridge_seams)
+            if tile_count > 1 else model
+        )
         latent = common_ksampler(
             sample_model, int(seed), int(steps), float(cfg), sampler, scheduler,
             positive, negative, latent, denoise=float(denoise),
         )[0]
         output_image = VAEDecode().decode(vae, latent)[0]
+        output_image = _uc_restore_alpha(output_image, alpha)
         output_context = new_context(
             context, model=model, positive=positive, negative=negative, latent=latent,
             images=output_image, steps=steps, cfg=cfg, sampler=sampler, scheduler=scheduler,
@@ -438,6 +540,13 @@ class UC_Ksampler_refine:
 
 class UC_load_model:
     CATEGORY = "Apt_Preset/unit_context"
+    _apt_cache_tag = "UC_load_model"
+    # Keep the active assets alive across executions.  The shared Apt cache is
+    # intentionally weak-reference based, so changing only sampling controls
+    # can otherwise release the previous node output before this node gets a
+    # chance to reuse it and cause an unnecessary model reload.
+    _active_cache_key = None
+    _active_cache_payload = None
     @classmethod
     def INPUT_TYPES(cls):
         available_ckpt = folder_paths.get_filename_list("checkpoints")
@@ -507,10 +616,71 @@ class UC_load_model:
                 return CLIPLoaderGGUF2().load_clip(clip1, clip_type)[0]
             return CLIPLoader().load_clip(clip1, clip_type, "default")[0]
         if clip1.endswith(".gguf"):
-            if not GGUF_AVAILABLE or DualCLIPLoaderGGUF2 is None:
+            if not GGUF_AVAILABLE or DualCLIPLoaderGGUF is None:
                 raise RuntimeError("GGUF not installed. Please install gguf and protobuf")
-            return DualCLIPLoaderGGUF2().load_clip(clip1, clip2, clip_type)[0]
+            return DualCLIPLoaderGGUF().load_clip(clip1, clip2, clip_type)[0]
         return DualCLIPLoader().load_clip(clip1, clip2, clip_type, "default")[0]
+
+    @classmethod
+    def _compute_cache_key(cls, ckpt_name, unet_name, weight_dtype, clip_type,
+                           clip1, clip2, vae, audio_vae, lora_stack,
+                           over_model, over_clip):
+        key_data = (
+            f"{cls._apt_cache_tag}|{ckpt_name}|{unet_name}|{weight_dtype}|"
+            f"{clip_type}|{clip1}|{clip2}|{vae}|{audio_vae}|{lora_stack}|"
+            f"{over_model}|{over_clip}"
+        )
+        return hashlib.md5(key_data.encode()).hexdigest()
+
+    @classmethod
+    def _load_assets_cached(cls, ckpt_name, unet_name, weight_dtype, clip_type,
+                            clip1, clip2, vae, audio_vae, lora_stack,
+                            over_model, over_clip):
+        cache_key = cls._compute_cache_key(
+            ckpt_name, unet_name, weight_dtype, clip_type, clip1, clip2,
+            vae, audio_vae, lora_stack, over_model, over_clip,
+        )
+        if cls._active_cache_key == cache_key and cls._active_cache_payload is not None:
+            return cls._active_cache_payload
+
+        cached = _apt_cache_get(cache_key)
+        if cached is not None:
+            cls._active_cache_key = cache_key
+            cls._active_cache_payload = cached
+            return cached
+
+        # A different asset selection replaces the one retained by this loader.
+        # Sampling-only inputs are deliberately absent from cache_key.
+        cls._active_cache_key = None
+        cls._active_cache_payload = None
+        _apt_cache_evict_tag(cls._apt_cache_tag, keep_key=cache_key)
+        model = over_model
+        clip = over_clip
+        checkpoint_vae = None
+        if model is None and ckpt_name != "None":
+            model, checkpoint_clip, checkpoint_vae = CheckpointLoaderSimple().load_checkpoint(ckpt_name)
+            if clip is None:
+                clip = checkpoint_clip
+        elif model is None:
+            model = cls._load_unet(unet_name, weight_dtype)
+
+        if over_clip is None and (clip1 != "None" or clip2 != "None"):
+            clip = cls._load_clip(clip1, clip2, clip_type)
+        if lora_stack is not None:
+            model, clip = apply_lora_stack(model, clip, lora_stack)
+
+        vae_obj = checkpoint_vae
+        if isinstance(vae, str) and vae != "None":
+            vae_obj = VAELoader().load_vae(vae)[0]
+        audio_vae_obj = None
+        if isinstance(audio_vae, str) and audio_vae != "None":
+            audio_vae_obj = VAELoader().load_vae(audio_vae)[0]
+
+        payload = (model, clip, vae_obj, audio_vae_obj)
+        _apt_cache_set(cache_key, payload, tag=cls._apt_cache_tag)
+        cls._active_cache_key = cache_key
+        cls._active_cache_payload = payload
+        return payload
 
     def process_settings(self, node_id=None, steps=20, cfg=8.0,
                          sampler="euler", scheduler="normal",
@@ -528,20 +698,10 @@ class UC_load_model:
         if ckpt_name != "None" and unet_name != "None":
             raise ValueError("ckpt_name and unet_name cannot be used at the same time")
 
-        model = over_model
-        clip = over_clip
-        checkpoint_vae = None
-        if model is None and ckpt_name != "None":
-            model, checkpoint_clip, checkpoint_vae = CheckpointLoaderSimple().load_checkpoint(ckpt_name)
-            if clip is None:
-                clip = checkpoint_clip
-        elif model is None:
-            model = self._load_unet(unet_name, unet_Weight_Dtype)
-
-        if over_clip is None and (clip1 != "None" or clip2 != "None"):
-            clip = self._load_clip(clip1, clip2, clip_type)
-        if lora_stack is not None:
-            model, clip = apply_lora_stack(model, clip, lora_stack)
+        model, clip, vae_obj, audio_vae_obj = self._load_assets_cached(
+            ckpt_name, unet_name, unet_Weight_Dtype, clip_type,
+            clip1, clip2, vae, audio_vae, lora_stack, over_model, over_clip,
+        )
 
         positive = None
         negative = None
@@ -550,13 +710,6 @@ class UC_load_model:
             negative = CLIPTextEncode().encode(clip, "worst quality, low quality")[0]
             if clip1 != "None" and clip2 != "None":
                 positive = node_helpers.conditioning_set_values(positive, {"guidance": 3.5})
-
-        vae_obj = checkpoint_vae
-        if isinstance(vae, str) and vae != "None":
-            vae_obj = VAELoader().load_vae(vae)[0]
-        audio_vae_obj = None
-        if isinstance(audio_vae, str) and audio_vae != "None":
-            audio_vae_obj = VAELoader().load_vae(audio_vae)[0]
 
         if clip_type == "flux2":
             latent = torch.zeros(
@@ -591,3 +744,33 @@ class UC_load_model:
             "batch": 1,
         })
         return (context, model, clip)
+
+
+
+
+import collections.abc
+
+class UC_ContextCache:
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "context": ("RUN_CONTEXT",),
+                "cache_images": ( "BOOLEAN", { "default": False, }, ),
+            },
+        }
+
+    RETURN_TYPES = ("RUN_CONTEXT",)
+    RETURN_NAMES = ("context",)
+    FUNCTION = "checkpoint"
+    CATEGORY = "Apt_Preset/AD"
+    CATEGORY = "Apt_Preset/unit_context"
+
+    def checkpoint(self, context, cache_images=False):
+        if not isinstance(context, collections.abc.Mapping):
+            raise ValueError("AD_Ref2_ContextCache needs a RUN_CONTEXT mapping")
+        checkpoint_context = dict(context)
+        if not cache_images:
+            checkpoint_context["images"] = None
+        return (checkpoint_context,)

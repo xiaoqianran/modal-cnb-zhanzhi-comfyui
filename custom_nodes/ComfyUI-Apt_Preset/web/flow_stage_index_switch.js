@@ -2,6 +2,7 @@ import { app } from "../../../scripts/app.js";
 
 const STAGE_BEGIN = "flow_stage_begin";
 const STAGE_END = "flow_stage_end";
+const STAGE_UNPACK = "flow_stage_unpack";
 const STAGE_SWITCH = "flow_stage_index_switch";
 
 function nodeClass(node) {
@@ -29,10 +30,15 @@ function migrateStageBridgeNode(node) {
         if (klass === STAGE_BEGIN && input.name === "current_index") input.name = "stage_index";
         if (klass === STAGE_END && input.name === "data") input.name = "data_1";
     }
+    if (klass === STAGE_UNPACK) {
+        for (let index = (node.outputs?.length || 0) - 1; index >= 0; index -= 1) {
+            if (String(node.outputs[index]?.name || "") === "stage_index") node.removeOutput?.(index);
+        }
+    }
 }
 
 function installStageBridgeMigration(nodeType, nodeData) {
-    if (![STAGE_BEGIN, STAGE_END].includes(nodeData?.name)) return;
+    if (![STAGE_BEGIN, STAGE_END, STAGE_UNPACK].includes(nodeData?.name)) return;
     const originalCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function onNodeCreatedStageBridge() {
         const result = originalCreated?.apply(this, arguments);
@@ -73,14 +79,15 @@ function inlineStageIndexes(promptData) {
     }
 
     const currentIndex = Number(widget(stageBegins[0], "stage_index")?.value);
-    if (!Number.isInteger(currentIndex) || currentIndex < 1) {
+    if (!Number.isInteger(currentIndex) || currentIndex < 0) {
         throw new Error("flow_阶段编号开关：无法读取 flow_阶段开始 的 stage_index。");
     }
 
+    const zeroBasedIndex = currentIndex === 0 ? 0 : currentIndex - 1;
     for (const node of inlineSwitches) {
         const promptNode = output[String(node.id)];
         promptNode.inputs ||= {};
-        promptNode.inputs.stage_index = currentIndex;
+        promptNode.inputs.stage_index = zeroBasedIndex;
     }
 }
 

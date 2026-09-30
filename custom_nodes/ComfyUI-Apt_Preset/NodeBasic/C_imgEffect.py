@@ -943,27 +943,35 @@ class img_effect_Liquify:
 
 class lay_ImageGrid:
     @classmethod
-    def INPUT_TYPES(cls): return {"required": {"batch_img": ("IMAGE",), "rows": ("INT", {"default": 2, "min": 1, "max": 16, "step": 1}), "cols": ("INT", {"default": 2, "min": 1, "max": 16, "step": 1})}}
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "batch_img": ("IMAGE",),
+                "rows": ("INT", {"default": 2, "min": 1, "max": 16, "step": 1}),
+                "cols": ("INT", {"default": 2, "min": 1, "max": 16, "step": 1}),
+            }
+        }
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
-    FUNCTION = "grid_images"
+    FUNCTION = "split_images"
     CATEGORY = "Apt_Preset/imgEffect"
-    def grid_images(self, batch_img, rows, cols):
-        batch_img = batch_img.cpu().numpy()
-        batch_size, height, width, channels = batch_img.shape
-        grid_width = width * cols
-        grid_height = height * rows
-        grid_image = Image.new('RGB', (grid_width, grid_height))
-        for i in range(min(rows * cols, batch_size)):
-            row = i // cols
-            col = i % cols
-            img = Image.fromarray((batch_img[i] * 255).astype(np.uint8))
-            x = col * width
-            y = row * height
-            grid_image.paste(img, (x, y))
-        grid_image = np.array(grid_image).astype(np.float32) / 255.0
-        grid_image = torch.from_numpy(grid_image)[None,]
-        return (grid_image,)
+    DESCRIPTION = "把每张输入图按 rows×cols 切成 batch；输入 N 张输出 N×rows×cols 张。边长除不尽时右侧/底部像素丢弃。"
+
+    def split_images(self, batch_img, rows, cols):
+        if batch_img.ndim == 3:
+            batch_img = batch_img.unsqueeze(0)
+        arr = batch_img.cpu().numpy()
+        batch_size, height, width, _ = arr.shape
+        cell_h = max(1, height // rows)
+        cell_w = max(1, width // cols)
+        cells = []
+        for i in range(batch_size):
+            for r in range(rows):
+                for c in range(cols):
+                    top = r * cell_h
+                    left = c * cell_w
+                    cells.append(arr[i, top:top + cell_h, left:left + cell_w, :])
+        return (torch.from_numpy(np.stack(cells, axis=0).astype(np.float32)),)
 
 
 def auto_crop_image(image, threshold=30, tolerance=0.95):

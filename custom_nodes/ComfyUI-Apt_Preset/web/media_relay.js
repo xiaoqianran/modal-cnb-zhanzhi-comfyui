@@ -7,8 +7,8 @@ const MEDIA_UNION = "IMAGE,VIDEO,AUDIO,LATENT,STRING,ARRAY";
 const MEDIA_UNPACK_MAX_INPUTS = 64;
 const LINKS_PROP = "apt_media_hub_links";
 const STAGE_PROMPT_DOCS_PROP = "ad_minimax_guide_stage_prompt_docs";
+const CACHED_ITEMS_PROP = "ad_media_editor_cached_items";
 const CHANGE_EVENT = "apt-media-relay-change";
-const LINK_BORDER = "rgba(0, 0, 0, 0.72)";
 const BATCH_IMAGE_NODE_CLASS = "BatchImagesNode";
 
 function nodeClass(node) {
@@ -16,6 +16,10 @@ function nodeClass(node) {
 }
 
 function isMediaRelay(node) {
+    return [MEDIA_RELAY_CLASS, MEDIA_EDITOR_CLASS].includes(nodeClass(node));
+}
+
+function storesCachedMedia(node) {
     return [MEDIA_RELAY_CLASS, MEDIA_EDITOR_CLASS].includes(nodeClass(node));
 }
 
@@ -69,7 +73,7 @@ function notifyChanged(node, removed = false) {
 
 function refreshNode(node) {
     const count = ensureLinks(node).length;
-    if (nodeClass(node) === MEDIA_RELAY_CLASS) node.title = count ? `Media (${count})` : "Media";
+    if (nodeClass(node) === MEDIA_RELAY_CLASS) node.title = MEDIA_RELAY_CLASS;
     const input = node.inputs?.[0];
     if (input) {
         input.name = "media";
@@ -89,7 +93,15 @@ function refreshNode(node) {
 function removeLink(node, index) {
     const links = ensureLinks(node);
     if (index < 0 || index >= links.length) return false;
-    links.splice(index, 1);
+    const [removed] = links.splice(index, 1);
+    if (removed?.cached && storesCachedMedia(node)) {
+        const cacheId = String(removed.cache_id || "");
+        node.properties[CACHED_ITEMS_PROP] = (Array.isArray(node.properties[CACHED_ITEMS_PROP]) ? node.properties[CACHED_ITEMS_PROP] : [])
+            .filter((item) => String(item?.id || "") !== cacheId);
+        const widget = node.widgets?.find?.((item) => item?.name === "cached_media");
+        if (widget) widget.value = JSON.stringify(node.properties[CACHED_ITEMS_PROP]);
+    }
+    node.__aptMediaRelayDeleteIndex = -1;
     refreshNode(node);
     app.graph?.change?.();
     notifyChanged(node);
@@ -140,22 +152,18 @@ function connectionPosition(node, isInput, slot) {
     return [Number(node?.pos?.[0] || 0) + (isInput ? 0 : Number(node?.size?.[0] || 160)), Number(node?.pos?.[1] || 0) + 40 + slot * 20];
 }
 
-function curveMidpoint(source, target) {
-    const cp1 = [source[0] + 80, source[1]];
-    const cp2 = [target[0] - 80, target[1]];
-    return [
-        0.125 * source[0] + 0.375 * cp1[0] + 0.375 * cp2[0] + 0.125 * target[0],
-        0.125 * source[1] + 0.375 * cp1[1] + 0.375 * cp2[1] + 0.125 * target[1],
-    ];
+function officialLinkMidpoint(canvas, source, target) {
+    const point = canvas?.computeConnectionPoint?.(source, target, 0.5, globalThis.LiteGraph?.RIGHT, globalThis.LiteGraph?.LEFT);
+    return point && Number.isFinite(point[0]) && Number.isFinite(point[1]) ? point : [(source[0] + target[0]) / 2, (source[1] + target[1]) / 2];
 }
 
-function linkGeometry(hub, link) {
+function linkGeometry(hub, link, canvas = app.canvas) {
     const graph = hub.graph || app.graph;
     const sourceNode = graph?.getNodeById?.(Number(link.source_id));
     if (!sourceNode) return null;
     const source = connectionPosition(sourceNode, false, Number(link.source_slot) || 0);
     const target = connectionPosition(hub, true, 0);
-    return { sourceNode, source, target, mid: curveMidpoint(source, target) };
+    return { sourceNode, source, target, mid: officialLinkMidpoint(canvas, source, target) };
 }
 
 function linkColor(canvas, link) {
@@ -165,6 +173,8 @@ function linkColor(canvas, link) {
 }
 
 function mediaType(link, sourceNode) {
+    const declared = String(link?.media_type || "").toLowerCase();
+    if (["image", "video", "audio", "latent", "text", "batch", "image_batch"].includes(declared)) return declared;
     const type = String(link?.source_type || "").toUpperCase();
     const sourceClass = nodeClass(sourceNode);
     if (type.includes("IMAGE") && sourceClass === BATCH_IMAGE_NODE_CLASS) return "image_batch";
@@ -189,10 +199,10 @@ function editorPromptTexts(node) {
     if (nodeClass(node) !== MEDIA_EDITOR_CLASS) return [];
     const docs = node?.properties?.[STAGE_PROMPT_DOCS_PROP];
     if (!Array.isArray(docs)) return [];
+    const prefix = String(node?.widgets?.find?.((widget) => widget?.name === "common_prefix")?.value || "").trim();
     const names = { image: "Picture", video: "Video", audio: "Audio" };
     return docs.map((doc) => {
-        if (!Array.isArray(doc?.parts)) return String(doc?.text || "");
-        return doc.parts.map((part) => {
+        const text = !Array.isArray(doc?.parts) ? String(doc?.text || "") : doc.parts.map((part) => {
             if (part?.type === "dialogue") return `<d>${String(part.text || "")}</d>`;
             if (part?.type !== "mention") return String(part?.text || "");
             if (part.textTag) return String(part.token || part.label || "");
@@ -200,6 +210,7 @@ function editorPromptTexts(node) {
             const ordinal = Math.max(1, Number(part.ordinal) || 1);
             return names[kind] ? `<${names[kind]} ${ordinal}>` : String(part.token || "");
         }).join("");
+        return prefix ? `${prefix}${text ? `\n${text}` : ""}` : text;
     });
 }
 
@@ -286,47 +297,28 @@ function drawRelayLinks(canvas, ctx) {
         if (!isMediaRelay(hub)) continue;
         normalizeLinks(hub);
         const counts = { image: 0, video: 0, audio: 0, latent: 0, text: 0, batch: 0, image_batch: 0 };
-        ensureLinks(hub).forEach((link) => {
-            const geometry = linkGeometry(hub, link);
+        ensureLinks(hub).forEach((link, index) => {
+            if (link?.cached) return;
+            const geometry = linkGeometry(hub, link, canvas);
             if (!geometry) return;
             const type = mediaType(link, geometry.sourceNode);
             counts[type] = (counts[type] || 0) + 1;
-            const width = canvas.connections_width || 3;
             ctx.save();
-            ctx.beginPath();
-            ctx.moveTo(geometry.source[0], geometry.source[1]);
-            ctx.bezierCurveTo(geometry.source[0] + 80, geometry.source[1], geometry.target[0] - 80, geometry.target[1], geometry.target[0], geometry.target[1]);
-            ctx.lineWidth = width + 4;
-            ctx.strokeStyle = LINK_BORDER;
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(geometry.source[0], geometry.source[1]);
-            ctx.bezierCurveTo(geometry.source[0] + 80, geometry.source[1], geometry.target[0] - 80, geometry.target[1], geometry.target[0], geometry.target[1]);
-            ctx.lineWidth = width;
-            ctx.strokeStyle = linkColor(canvas, link);
-            ctx.stroke();
+            const color = linkColor(canvas, link);
+            canvas.renderLink(ctx, geometry.source, geometry.target, null, false, false, color, globalThis.LiteGraph?.RIGHT, globalThis.LiteGraph?.LEFT);
+            const deleting = Number(hub.__aptMediaRelayDeleteIndex) === index;
             ctx.beginPath();
             ctx.arc(geometry.mid[0], geometry.mid[1], 9, 0, Math.PI * 2);
-            ctx.fillStyle = "#e53935";
+            ctx.fillStyle = deleting ? "#e53935" : "rgba(24,24,24,.96)";
             ctx.fill();
-            const textLink = type === "text";
-            if (textLink) {
-                ctx.beginPath();
-                ctx.moveTo(geometry.mid[0] - 3.5, geometry.mid[1] - 3.5);
-                ctx.lineTo(geometry.mid[0] + 3.5, geometry.mid[1] + 3.5);
-                ctx.moveTo(geometry.mid[0] + 3.5, geometry.mid[1] - 3.5);
-                ctx.lineTo(geometry.mid[0] - 3.5, geometry.mid[1] + 3.5);
-                ctx.lineWidth = 2;
-                ctx.lineCap = "round";
-                ctx.strokeStyle = "#ffffff";
-                ctx.stroke();
-            } else {
-                ctx.fillStyle = "#ffffff";
-                ctx.font = "bold 11px system-ui, sans-serif";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(String(counts[type]), geometry.mid[0], geometry.mid[1] + 0.5);
-            }
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = deleting ? "#ffb3ad" : color;
+            ctx.stroke();
+            ctx.fillStyle = "#ffffff";
+            ctx.font = deleting ? "bold 15px system-ui, sans-serif" : "bold 11px system-ui, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(deleting ? "×" : String(counts[type]), geometry.mid[0], geometry.mid[1] + (deleting ? 0 : 0.5));
             ctx.restore();
         });
     }
@@ -349,32 +341,14 @@ function hitTest(graph, x, y) {
     for (const hub of graph?._nodes || []) {
         if (!isMediaRelay(hub)) continue;
         ensureLinks(hub).forEach((link, index) => {
-            const geometry = linkGeometry(hub, link);
+            if (link?.cached) return;
+            const geometry = linkGeometry(hub, link, app.canvas);
             if (!geometry) return;
             const distance = Math.hypot(x - geometry.mid[0], y - geometry.mid[1]);
             if (distance <= 18 && (!best || distance < best.distance)) best = { hub, index, point: geometry.mid, distance };
         });
     }
     return best;
-}
-
-function openDeleteMenu(canvas, hit, event) {
-    const rect = canvas?.canvas?.getBoundingClientRect?.();
-    const scale = Number(canvas?.ds?.scale || 1);
-    const offset = canvas?.ds?.offset || [0, 0];
-    const clientX = Number(rect?.left || 0) + (hit.point[0] + Number(offset[0] || 0)) * scale;
-    const clientY = Number(rect?.top || 0) + (hit.point[1] + Number(offset[1] || 0)) * scale;
-    const menuEvent = typeof PointerEvent === "function"
-        ? new PointerEvent("pointerdown", { clientX: clientX + 8, clientY: clientY + 8, bubbles: true, cancelable: true })
-        : new MouseEvent("mousedown", { clientX: clientX + 8, clientY: clientY + 8, bubbles: true, cancelable: true });
-    if (globalThis.LiteGraph?.ContextMenu) {
-        new globalThis.LiteGraph.ContextMenu([
-            { content: "删除", callback: () => removeLink(hit.hub, hit.index) },
-        ], { event: menuEvent });
-    }
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    event?.stopImmediatePropagation?.();
 }
 
 function patchCanvas() {
@@ -392,7 +366,22 @@ function patchCanvas() {
     canvas.canvas?.addEventListener?.("pointerdown", (event) => {
         const [x, y] = graphPosition(canvas, event);
         const hit = hitTest(canvas.graph || app.graph, x, y);
-        if (hit) openDeleteMenu(canvas, hit, event);
+        if (hit) {
+            if (Number(hit.hub.__aptMediaRelayDeleteIndex) === hit.index) removeLink(hit.hub, hit.index);
+            else {
+                hit.hub.__aptMediaRelayDeleteIndex = hit.index;
+                hit.hub.setDirtyCanvas?.(true, true);
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation?.();
+            return;
+        }
+        for (const node of canvas.graph?._nodes || []) {
+            if (!isMediaRelay(node) || Number(node.__aptMediaRelayDeleteIndex) < 0) continue;
+            node.__aptMediaRelayDeleteIndex = -1;
+            node.setDirtyCanvas?.(true, true);
+        }
     }, true);
 }
 
@@ -456,6 +445,11 @@ app.registerExtension({
                     content: "清空 Media 素材",
                     callback: () => {
                         this.properties[LINKS_PROP] = [];
+                        if (storesCachedMedia(this)) {
+                            this.properties[CACHED_ITEMS_PROP] = [];
+                            const widget = this.widgets?.find?.((item) => item?.name === "cached_media");
+                            if (widget) widget.value = "[]";
+                        }
                         refreshNode(this);
                         app.graph?.change?.();
                         notifyChanged(this);

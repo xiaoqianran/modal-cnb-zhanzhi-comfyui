@@ -124,6 +124,23 @@ def _ad_h3_core_halo_window(start, end, core_start, core_end, device):
     return window
 
 
+def _ad_h3_bridge_window(start, end, boundary, blend_half, device):
+    """Cosine bridge mask: full at the seam and zero before crop edges."""
+    positions = torch.arange(start, end, dtype=torch.float32, device=device)
+    distance = (positions - float(boundary)).abs()
+    blend_half = max(1.0, float(blend_half))
+    plateau = blend_half * 0.5
+    window = torch.zeros_like(distance)
+    window[distance <= plateau] = 1.0
+    fade = (distance > plateau) & (distance < blend_half)
+    if fade.any():
+        phase = (distance[fade] - plateau) / max(1e-6, blend_half - plateau)
+        window[fade] = 0.5 + 0.5 * torch.cos(phase * math.pi)
+    # Give the bridge prediction priority over the two ordinary tiles while
+    # retaining a normalized, feathered transition at both sides.
+    return window * 4.0
+
+
 def _ad_h3_crop_spatial(tensor, axis, start, end):
     if tensor is None:
         return None
@@ -144,7 +161,7 @@ def _ad_h3_noise_masks(latent):
 
 
 def h3_sample_tiled_euler(noise, guider, sigmas, latent, tile_count=2,
-                          overlap_pixels=128):
+                          overlap_pixels=128, bridge_seams=False):
     """Run H3 video refinement with synchronized long-edge Euler tiles.
 
     The long edge is partitioned into even, patch-aligned core regions. Each
@@ -192,15 +209,32 @@ def h3_sample_tiled_euler(noise, guider, sigmas, latent, tile_count=2,
             window_1d.view(1, 1, 1, -1, 1)
             if axis == "H" else window_1d.view(1, 1, 1, 1, -1)
         )
-        weighted_regions.append((start, end, core_start, core_end, window))
+        weighted_regions.append((start, end, core_start, core_end, window, False))
+    if bridge_seams and len(regions) > 1 and halo > 0:
+        context_half = max(2, int(math.ceil((halo * 1.5) / 2.0)) * 2)
+        for index in range(len(regions) - 1):
+            boundary = int(regions[index][3])
+            start = max(0, boundary - context_half)
+            end = min(axis_total, boundary + context_half)
+            if end - start < 2:
+                continue
+            window_1d = _ad_h3_bridge_window(
+                start, end, boundary, halo, device
+            )
+            window = (
+                window_1d.view(1, 1, 1, -1, 1)
+                if axis == "H" else window_1d.view(1, 1, 1, 1, -1)
+            )
+            weighted_regions.append((start, end, boundary, boundary, window, True))
     regions = weighted_regions
+    base_region_count = sum(1 for region in regions if not region[5])
 
     weight_shape = (
         (1, 1, 1, axis_total, 1)
         if axis == "H" else (1, 1, 1, 1, axis_total)
     )
     weights = torch.zeros(weight_shape, dtype=torch.float32, device=device)
-    for start, end, _core_start, _core_end, window in regions:
+    for start, end, _core_start, _core_end, window, _is_bridge in regions:
         if axis == "H":
             weights[:, :, :, start:end, :] += window
         else:
@@ -354,7 +388,7 @@ def h3_sample_tiled_euler(noise, guider, sigmas, latent, tile_count=2,
                     if audio_x is not None else None
                 )
 
-                for start, end, _core_start, _core_end, window in regions:
+                for start, end, _core_start, _core_end, window, is_bridge in regions:
                     video_tile = _ad_h3_crop_spatial(video_x, axis, start, end)
                     tile_streams = [video_tile] + ([audio_x] if audio_x is not None else [])
                     tile_x, tile_shapes = comfy.utils.pack_latents(tile_streams)
@@ -399,13 +433,13 @@ def h3_sample_tiled_euler(noise, guider, sigmas, latent, tile_count=2,
                         video_denoised[:, :, :, start:end, :] += predictions[0].float() * window
                     else:
                         video_denoised[:, :, :, :, start:end] += predictions[0].float() * window
-                    if audio_denoised is not None:
+                    if audio_denoised is not None and not is_bridge:
                         audio_denoised += predictions[1].float()
 
                 video_denoised /= weights
                 merged = [video_denoised.to(dtype=video_x.dtype)]
                 if audio_denoised is not None:
-                    audio_denoised /= float(len(regions))
+                    audio_denoised /= float(base_region_count)
                     merged.append(audio_denoised.to(dtype=audio_x.dtype))
                 denoised, _ = comfy.utils.pack_latents(merged)
                 prepared_model.latent_shapes = full_shapes

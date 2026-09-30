@@ -77,7 +77,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -237,7 +237,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -264,7 +264,7 @@
     "display_name": "sum_编辑器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "model": {
         "name": "模型"
@@ -329,7 +329,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -378,7 +378,7 @@
       "lora_stack": { "name": "LoRA堆栈" }
     },
     "outputs": {
-      "0": { "name": "上下文" },
+      "0": { "name": "context" },
       "1": { "name": "模型" },
       "2": { "name": "clip" }
     }
@@ -397,7 +397,7 @@
   "UC_Ksampler_refine": {
     "display_name": "UC_高清修复采样",
     "inputs": {
-      "context": { "name": "上下文" },
+      "context": { "name": "context" },
       "model_name": { "name": "放大模型" },
       "upscale_output_scale": { "name": "输出缩放系数" },
       "seed": { "name": "随机种子" },
@@ -411,7 +411,7 @@
       "scheduler": { "name": "调度器" }
     },
     "outputs": {
-      "0": { "name": "上下文" },
+      "0": { "name": "context" },
       "1": { "name": "图像" }
     }
   },
@@ -419,7 +419,7 @@
     "display_name": "sum_采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "seed": {
         "name": "随机种子"
@@ -454,7 +454,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -527,7 +527,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -621,7 +621,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -645,7 +645,7 @@
     }
   },
   "UC_create_context": {
-    "display_name": "UC_创建上下文",
+    "display_name": "UC_创建context",
     "inputs": {
       "model": {
         "name": "模型"
@@ -680,7 +680,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -774,7 +774,7 @@
     "display_name": "Data_基础数据",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "model": {
         "name": "模型"
@@ -803,7 +803,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -835,7 +835,7 @@
     "display_name": "Data_数据选择",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "type": {
         "name": "类型"
@@ -851,7 +851,7 @@
     "display_name": "Data_通道合并",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "chx1": {
         "name": "通道1"
@@ -862,7 +862,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       }
     }
   },
@@ -885,7 +885,7 @@
     "display_name": "sum_latent",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "latent": {
         "name": "latent"
@@ -917,7 +917,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "latent"
@@ -931,7 +931,7 @@
     "display_name": "sum_LoRA",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "lora_01": {
         "name": "LoRA_01"
@@ -969,7 +969,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "正向条件"
@@ -983,7 +983,7 @@
     "display_name": "sum_图像堆",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "model": {
         "name": "模型"
@@ -1015,7 +1015,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -1046,7 +1046,7 @@
     "display_name": "sum_QwenEditPlus堆",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "model": {
         "name": "模型"
@@ -1096,7 +1096,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -1189,7 +1189,7 @@
     "display_name": "basic_简单采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "seed": {
         "name": "随机种子"
@@ -1206,7 +1206,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -1238,7 +1238,7 @@
         "name": "图像输出"
       },
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "model": {
         "name": "模型"
@@ -1264,7 +1264,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -1293,7 +1293,7 @@
     "display_name": "chx_重绘采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "latent_image": {
         "name": "latent图像"
@@ -1337,7 +1337,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -1564,7 +1564,7 @@
         "name": "图像输出"
       },
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "model": {
         "name": "模型"
@@ -1590,7 +1590,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -1619,7 +1619,7 @@
     "display_name": "basic_自定义采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "model": {
         "name": "模型"
@@ -1660,7 +1660,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -1689,7 +1689,7 @@
     "display_name": "basic_高级采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "add_noise": {
         "name": "添加噪声"
@@ -1718,7 +1718,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文 "
+        "name": "context "
       },
       "1": {
         "name": "图像"
@@ -1729,7 +1729,7 @@
     "display_name": "basic_低GPU采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "seed": {
         "name": "随机种子"
@@ -1758,7 +1758,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -1769,7 +1769,7 @@
     "display_name": "chx_refine采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "upscale_model": {
         "name": "放大模型"
@@ -1798,7 +1798,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -1809,7 +1809,7 @@
     "display_name": "chx_tile采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "model_name": {
         "name": "模型名称"
@@ -1843,7 +1843,7 @@
     "display_name": "chx_Deforum调度采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "seed": {
         "name": "随机种子"
@@ -1949,7 +1949,7 @@
     "display_name": "pre_Zimage重绘补丁",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "image": {
         "name": "图像"
@@ -1979,7 +1979,7 @@
     "display_name": "pre_ControlNet",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "image1": {
         "name": "图像1"
@@ -2029,7 +2029,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "正向条件"
@@ -2043,7 +2043,7 @@
     "display_name": "pre_ControlNet联合",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "image1": {
         "name": "图像1"
@@ -2099,7 +2099,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "正向条件"
@@ -2113,7 +2113,7 @@
     "display_name": "pre_重绘总控",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "control_net": {
         "name": "ControlNet"
@@ -2142,7 +2142,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "正向条件"
@@ -2159,7 +2159,7 @@
     "display_name": "pre_多条件",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "pos1": {
         "name": "正向提示1"
@@ -2209,7 +2209,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "正向条件"
@@ -2263,7 +2263,7 @@
     "display_name": "pre_latent光照",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "weigh": {
         "name": "权重"
@@ -2277,7 +2277,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -2560,7 +2560,7 @@
     "display_name": "chx_IPA区域组合",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "image_weight": {
         "name": "图像权重"
@@ -2606,7 +2606,7 @@
     "display_name": "chx_IPA应用组合",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "preset": {
         "name": "预设"
@@ -2626,7 +2626,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型"
@@ -3580,7 +3580,7 @@
     "display_name": "AD_高级调度提示词",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "text1": {
         "name": "文本1"
@@ -4569,7 +4569,7 @@
     "display_name": "IO_视频编码",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "samples": {
         "name": "样本"
@@ -4592,7 +4592,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -4832,7 +4832,7 @@
     "display_name": "sum_文本编码(支持权重)",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "main_prompt_ratio": {
         "name": "整体prompt占比"
@@ -4849,7 +4849,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "正条件"
@@ -5586,7 +5586,7 @@
         "name": "高通强度"
       },
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "latent": {
         "name": "latent"
@@ -5594,7 +5594,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "latent"
@@ -8139,7 +8139,7 @@
     "display_name": "texture_采样器",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "seed": {
         "name": "随机种子"
@@ -10330,8 +10330,11 @@
       "stage_index": {
         "name": "当前阶段编号"
       },
-      "open_stage_index": {
-        "name": "开启阶段编号"
+      "index_mode": {
+        "name": "编号模式"
+      },
+      "multi_index": {
+        "name": "多选编号"
       }
     },
     "outputs": {
@@ -10432,7 +10435,7 @@
     "display_name": "type_基础管道",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       }
     },
     "outputs": {
@@ -10510,7 +10513,7 @@
     "display_name": "chx_采样器Kontext",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "seed": {
         "name": "随机种子"
@@ -10548,7 +10551,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -10562,7 +10565,7 @@
     "display_name": "chx_采样器Kontext高级",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "add_noise": {
         "name": "添加噪点"
@@ -10612,7 +10615,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -10626,7 +10629,7 @@
     "display_name": "chx_采样器Kontext重绘",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "image": {
         "name": "图像"
@@ -10676,7 +10679,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -10730,7 +10733,7 @@
     "display_name": "Data_采样数据",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "steps": {
         "name": "步数"
@@ -10747,7 +10750,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       }
     }
   },
@@ -10755,12 +10758,12 @@
     "display_name": "Data_预设数据",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       }
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "模型权重文件名"
@@ -10948,7 +10951,7 @@
     "display_name": "pre_QwenEdit",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "image": {
         "name": "图像"
@@ -10974,7 +10977,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "正向"
@@ -11010,7 +11013,7 @@
     "display_name": "chx_采样器_视觉风格",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "reference_image": {
         "name": "参考图像"
@@ -11045,7 +11048,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -11056,7 +11059,7 @@
     "display_name": "chx_采样器_双区域",
     "inputs": {
       "context": {
-        "name": "上下文"
+        "name": "context"
       },
       "seed": {
         "name": "随机种子"
@@ -11103,7 +11106,7 @@
     },
     "outputs": {
       "0": {
-        "name": "上下文"
+        "name": "context"
       },
       "1": {
         "name": "图像"
@@ -12469,7 +12472,7 @@
     "display_name": "AD_创建视频",
     "inputs": {
         "context": {
-            "name": "运行上下文"
+            "name": "context"
         },
         "images": {
             "name": "图像序列"
@@ -12728,6 +12731,113 @@
 },
 "outputs": {
 }
+},
+
+
+"AD_MinMax_Ref2_sample": {
+    "display_name": "AD_MinMax_Ref2采样",
+    "inputs": {
+        "context": {
+            "name": "context"
+        },
+        "fps": {
+            "name": "帧率"
+        },
+        "seed": {
+            "name": "种子"
+        },
+        "VAE_TILE": {
+            "name": "vae分块"
+        },        
+        "sample_mode": {
+            "name": "采样模式"
+        },
+        "latent_sample_tile": {
+            "name": "latent分块"
+        },
+        "create_video": {
+            "name": "生成视频"
+        }
+    },
+    "outputs": {
+
+    }
+},
+
+
+
+"flow_workflow_save_gate": {
+    "display_name": "flow_工作流保存",
+    "inputs": {
+      "anydata": {
+        "name": "任意数据"
+      },
+      "save_workflow": {
+        "name": "保存工作流"
+      },
+      "save_directory": {
+        "name": "保存目录"
+      },
+      "workflow_name": {
+        "name": "工作流名称"
+      }
+    },
+    "outputs": {}
+  },
+  
+  "flow_stage_tentor_load": {
+    "display_name": "flow_阶段张量加载",
+    "inputs": {
+      "run_id": {
+        "name": "运行ID"
+      },
+      "start_stage_index": {
+        "name": "起始stage_index"
+      },
+      "end_stage_index": {
+        "name": "结束stage_index"
+      }
+    },
+    "outputs": {
+
+    }
+  },
+  "flow_stage_odd_even_hold": {
+    "display_name": "flow_阶段奇偶保持",
+    "inputs": {
+      "stage_info": {
+        "name": "阶段信息"
+      },
+      "odd_data_1": {
+        "name": "奇数data1"
+      },
+      "even_data_2": {
+        "name": "偶数data2"
+      }
+    },
+    "outputs": {
+ 
+    }
+  },
+
+
+"sum_QwenImage2": {
+    "display_name": "sum_QwenImage2",
+    "inputs": {
+        "ref_size_mode": {
+            "name": "参考图尺寸"
+        },
+        "resolution": {
+            "name": "基准分辨率"
+        },
+        "output_size": {
+            "name": "输出尺寸"
+        }
+
+    },
+    "outputs": {
+      
+    }
 },
 
   "csv_write_data": {

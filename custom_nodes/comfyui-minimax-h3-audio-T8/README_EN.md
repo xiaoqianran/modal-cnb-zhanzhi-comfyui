@@ -2,7 +2,7 @@
 
 MiniMax H3 video/audio nodes for ComfyUI: reference control, two-pass and long-video workflows, speech and singing, camera editing, and optional enhancement.
 
-[简体中文](README.md) | English · Current version: **1.85.0** · [Changelog](CHANGELOG.md)
+[简体中文](README.md) | English · Current version: **1.86.0** · [Changelog](CHANGELOG.md)
 
 ## Install
 
@@ -42,6 +42,7 @@ Read each repository's setup and licenses. Do not overwrite different architectu
 |TAEH3 temporal / 2D previews|[Taeh3-Comfy](https://huggingface.co/t8star/Taeh3-Comfy) → `models/vae_approx/`; the 2D file has a separate name|
 |Meridian ConvRot INT8 + Omega1B512|[Meridian-Comfy](https://huggingface.co/t8star/Meridian-Comfy) → `models/meridian/`; Omega in `vggt-omega/checkpoints/`; code/assets and H3 VAE are separate|
 |Semantic Bridge|[Semantic-Bridge-Comfy](https://huggingface.co/t8star/Semantic-Bridge-Comfy) → `models/semantic_bridge/t8_compat/`|
+|T8 comic-combat Semantic Bridge|[Model](https://huggingface.co/t8star/semantic_bridge_T8-comic-combat) → `models/semantic_bridge/t8_compat/`; use the latest GitHub source and follow the [Bridge guide](docs/SEMANTIC_BRIDGE_EXP.md)|
 |OpenVDN bundle|[Vdn-Minimax-H3-Comfy](https://huggingface.co/t8star/Vdn-Minimax-H3-Comfy); retain the repository layout|
 |H3-World action LoRA|[Minimax-H3-World-Comfy](https://huggingface.co/t8star/Minimax-H3-World-Comfy); [setup](examples/workflows/26-h3-world)|
 

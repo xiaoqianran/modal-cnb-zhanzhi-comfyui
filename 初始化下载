@@ -13,7 +13,7 @@ aria2c -x 4 -s 4 -c -d "/models/llm/qwenimage-pe" -o "Qwen-Image-2.1-PE-I2I.Q4_K
 
 # MiniMax H3
 aria2c -x 4 -s 4 -c -d "/models/vae_approx" -o "taeh3.safetensors" "https://cnb.cool/zhan_zhi/Models/-/lfs/f0f60fa072089997f817402098c2fd90777cb2660dd79cf5df42fc1e3e08e527"
-aria2c -x 4 -s 4 -c -d "/models/latent_upscale_models" -o "minimax_h3_latent_upscaler_3d_bf16.safetensors" "https://cnb.cool/comfyui114514/model/LBH-123-AI__Minimax_h3_latent_Upscaler/-/lfs/4f57821f5837f32f7142b67d815606dbd7550f194e5c769f7d6c3f83b146a5e6"
+aria2c -x 4 -s 4 -c -d "/models/latent_upscale_models" -o "minimax_h3_latent_upscaler_3d_bf16.safetensors" "https://cnb.cool/zhan_zhi/Models/-/lfs/7b70711ebf13051bac4b637247f2e6f0db5e1c6da88af3f28ad0165c6483c8c4"
 
 aria2c -x 4 -s 4 -c -d "/models/sams" -o "SeC-4B-fp8.safetensors" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/71b968a02c2cd818b3c81d6c80f07f4fbd439478b7aa79b02273c120e8f4b6e4"
 aria2c -x 4 -s 4 -c -d "/models/sams" -o "sam_vit_b_01ec64.pth" "https://cnb.cool/zhan_zhi/Ai-Models/-/lfs/ec2df62732614e57411cdcf32a23ffdf28910380d03139ee0f4fcbe91eb8c912"

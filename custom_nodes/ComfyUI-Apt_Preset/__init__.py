@@ -10,7 +10,7 @@ import sys; print(sys.executable)
 
 
 from .NodeChx.main_nodes import *
-from .NodeChx.basic_unit_contex import UC_Ksampler_refine, UC_create_context, UC_ksampler, UC_load_model
+from .NodeChx.basic_unit_contex import *
 from .NodeChx.main_stack import *
 from .NodeChx.IPAdapterPlus import *
 from .NodeChx.video_node import *
@@ -40,6 +40,7 @@ from .NodeBasic.C_imgEffect import Image_effect_Load
 from .NodeBasic.C_type import *
 from .NodeExcel.ExcelOP import *
 from .NodeExcel.AIagent import *
+from .NodeExcel.AI_Qwen_skill import AI_Qwen_skill
 from .NodeExcel.doubao_web_node import *
 
 from .NodeBasic.C_flow import *
@@ -52,6 +53,7 @@ from .NodeBasic.set_location import *
 from .NodeBasic.mask_human import *
 from .NodeChx.sum_text_yaml import *
 from .NodeChx.edit_imge import*
+from .NodeChx.Qwen_Image2 import sum_QwenImage2
 
 from .NodeBasic.minimaxH3 import *
 
@@ -78,6 +80,7 @@ NODE_CLASS_MAPPINGS= {
 "UC_ksampler": UC_ksampler,
 "UC_Ksampler_refine": UC_Ksampler_refine,
 "UC_create_context": UC_create_context, 
+"UC_ContextCache": UC_ContextCache,   
 #-------------------------------------------------------S
 
 "Apt_clear_cache": Apt_clear_cache,
@@ -106,6 +109,7 @@ NODE_CLASS_MAPPINGS= {
 
 
 "sum_stack_QwenEditPlus":sum_stack_QwenEditPlus,
+"sum_QwenImage2": sum_QwenImage2,
 "sum_stack_flux2_Klein": sum_stack_flux2_Klein,
 
 
@@ -241,7 +245,6 @@ NODE_CLASS_MAPPINGS= {
 "AD_pingpong_vedio":AD_pingpong_vedio,
 "AD_MaskExpandBatch": AD_MaskExpandBatch, 
 "AD_ImageExpandBatch": AD_ImageExpandBatch,
-
 "AD_frame_replace": AD_frame_replace,
 
 
@@ -253,16 +256,16 @@ NODE_CLASS_MAPPINGS= {
 
 
 
-"AD_MiniMax_guide": AD_MiniMax_guide,
-"AD_MinMax_Ref2_generate": AD_MinMax_Ref2_generate,
 "AD_MinMax_Ref2": AD_MinMax_Ref2,
 "AD_MinMax_Ref2_sample": AD_MinMax_Ref2_sample,
-"AD_MinMax_Ref2_generate_refine": AD_MinMax_Ref2_generate_refine,
-
 "AD_Media_editor": AD_Media_editor,
 "AD_scail2_generate": AD_scail2_generate,
 "AD_scail2_generate_refine": AD_scail2_generate_refine,
 
+
+"AD_MiniMax_guide": AD_MiniMax_guide,
+"AD_MinMax_Ref2_generate_refine": AD_MinMax_Ref2_generate_refine,
+"AD_MinMax_Ref2_generate": AD_MinMax_Ref2_generate,
 "AD_MinMax_FL2_generate": AD_MinMax_FL2_generate,
 
 
@@ -351,9 +354,6 @@ NODE_CLASS_MAPPINGS= {
 "IO_save_image": IO_save_image, 
 "IO_input_any": IO_input_any,
 "IO_RegexPreset": IO_RegexPreset,
-"IO_loadLatent": IO_loadLatent,
-"IO_SaveLatent": IO_SaveLatent,
-
 #"IO_video_encode": IO_video_encode,
 #"IO_ImageSaveOverwrite": IO_ImageSaveOverwrite,
 
@@ -432,6 +432,7 @@ NODE_CLASS_MAPPINGS= {
 "Image_Resize_sum_restore":Image_Resize_sum_restore,     
 "Image_Pair_Merge": Image_Pair_Merge,  
 "Image_Pair_crop": Image_Pair_crop, 
+
 
 
 
@@ -613,6 +614,7 @@ NODE_CLASS_MAPPINGS= {
 "AI_PresetSave":AI_PresetSave,
 "AI_Qwen":AI_Qwen,
 "AI_Qwen_text":AI_Qwen_text,
+"AI_Qwen_skill":AI_Qwen_skill,
 
 "AI_Ollama_image":AI_Ollama_image,
 "AI_Ollama_text": AI_Ollama_text,
@@ -642,32 +644,34 @@ NODE_CLASS_MAPPINGS= {
 "flow_switch_input":flow_switch_input,
 "flow_switch_output":flow_switch_output,
 "flow_BooleanSwitch":flow_BooleanSwitch,
-"flow_workflow_save_gate":flow_workflow_save_gate,
-"flow_workflow_save_image_no_metadata":flow_workflow_save_image_no_metadata,
 
 
-"flow_bridge_image":flow_bridge_image,
 "flow_low_gpu":flow_low_gpu,
+"flow_bridge_image":flow_bridge_image,
 "flow_case_tentor":flow_case_tentor,
-
 "flow_frame_slice":flow_frame_slice,
-"flow_stage_index_switch":flow_stage_index_switch,
+
+
 "flow_stage_begin":flow_stage_begin,
 "flow_stage_end":flow_stage_end,
+
+"IO_Load_Tensor":IO_Load_Tensor,
+"IO_Save_Tensor":IO_Save_Tensor,
+
 "flow_stage_collect_single":flow_stage_collect_single,
 "flow_stage_collect_multi":flow_stage_collect_multi,
 "flow_stage_list":flow_stage_list,
 "flow_stage_unpack":flow_stage_unpack,
-"flow_stage_bridge_decode_range":flow_stage_bridge_decode_range,
+"flow_stage_tentor_load":flow_stage_tentor_load,
+"flow_stage_index_switch":flow_stage_index_switch,
 
 
-
-
-
+"flow_workflow_save_gate":flow_workflow_save_gate,
+#"flow_workflow_save_image_no_metadata":flow_workflow_save_image_no_metadata,
+"flow_stage_odd_even_hold":flow_stage_odd_even_hold,
 "flow_forStart": flow_forStart,
 "flow_forEnd": flow_forEnd,
-
-"flow_sch_control":flow_sch_control,
+"flow_sch_control":flow_sch_control,    #    CATEGORY = "Apt_Preset/flow/other"
 "flow_whileStart": flow_whileStart,
 "flow_whileEnd": flow_whileEnd,
 
@@ -691,9 +695,6 @@ NODE_CLASS_MAPPINGS= {
 
 
 "flow_QueueTrigger":flow_QueueTrigger,
-
-
-
 
  #(Deprecated) #TITLE = "load_FLUX (Deprecated)"    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
 "Image_Resize2": Image_Resize2,#(Deprecated)
@@ -746,7 +747,11 @@ NODE_CLASS_MAPPINGS= {
 
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "view_Reference_Size": "view_Reference Size",
+    "basicIn_media": "basicIn_media",
+
+    "AD_MinMax_Ref2_generate": "AD_MinMax_Ref2_generate弃用",
+    "AD_MinMax_FL2_generate": "AD_MinMax_FL2_generate弃用",
+
 }
 
 

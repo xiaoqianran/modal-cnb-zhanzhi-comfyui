@@ -6,10 +6,12 @@ import numpy as np
 import av
 from PIL import Image
 import base64
+import copy
 import io
 import json
 import hashlib
 import asyncio
+import logging
 import re
 import math
 from datetime import datetime
@@ -132,6 +134,7 @@ from PIL import Image, PngImagePlugin
 import os
 import folder_paths
 import uuid
+import secrets
 import json
 
 lazy_options = {
@@ -516,28 +519,6 @@ async def apt_preset_flow_bridge_image_save_edit(request):
         except Exception as e:
             return web.json_response({"ok": False, "error": f"读取 image_ref 失败: {e}"}, status=400)
 
-    # #region debug-point D:save-edit-received
-    import urllib.request
-    try:
-        urllib.request.urlopen(urllib.request.Request(
-            "http://127.0.0.1:7777/event",
-            data=json.dumps({
-                "sessionId": "mask-save-lag",
-                "runId": "post-fix",
-                "hypothesisId": "D",
-                "location": "C_flow.py:apt_preset_flow_bridge_image_save_edit:received",
-                "msg": "[DEBUG] 后端收到编辑后的图片上传",
-                "data": {
-                    "node_id": node_id,
-                    "image_bytes": len(image_bytes),
-                }
-            }).encode(),
-            headers={"Content-Type": "application/json"}
-        )).read()
-    except Exception:
-        pass
-    # #endregion
-
     cache_dir = flow_bridge_image._get_node_cache_dir(node_id)
     os.makedirs(cache_dir, exist_ok=True)
 
@@ -551,31 +532,6 @@ async def apt_preset_flow_bridge_image_save_edit(request):
             else:
                 mask_array = rgba_np[:, :, :3].max(axis=2).astype(np.uint8)
             mask_array = (255 - mask_array).astype(np.uint8)
-            # #region debug-point D:save-edit-parsed
-            try:
-                urllib.request.urlopen(urllib.request.Request(
-                    "http://127.0.0.1:7777/event",
-                    data=json.dumps({
-                        "sessionId": "mask-save-lag",
-                        "runId": "post-fix",
-                        "hypothesisId": "D",
-                        "location": "C_flow.py:apt_preset_flow_bridge_image_save_edit:parsed",
-                        "msg": "[DEBUG] 后端解析上传图片完成",
-                        "data": {
-                            "node_id": node_id,
-                            "mode": pil_image.mode,
-                            "size": list(pil_image.size),
-                            "alpha_min": int(alpha.min()),
-                            "alpha_max": int(alpha.max()),
-                            "mask_min": int(mask_array.min()),
-                            "mask_max": int(mask_array.max()),
-                        }
-                    }).encode(),
-                    headers={"Content-Type": "application/json"}
-                )).read()
-            except Exception:
-                pass
-            # #endregion
             gray_image = Image.fromarray(mask_array, mode="L")
             for filename in os.listdir(cache_dir):
                 if filename.startswith("bridge_mask_edit_") and filename.endswith(".png"):
@@ -1183,7 +1139,7 @@ class flow_workflow_save_gate:
     RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("anydata",)
     FUNCTION = "save_and_pass"
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
     OUTPUT_NODE = True
 
     @classmethod
@@ -1240,8 +1196,16 @@ class flow_stage_index_switch:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "stage_index": ("INT", {"default": 1, "min": 1, "max": 10000, "step": 1}),
-                "open_stage_index": ("INT", {"default": 1, "min": 1, "max": 10000, "step": 1}),
+                "stage_index": ("INT", {"default": 0, "min": 0, "max": 9999, "step": 1}),
+                "index_mode": (["multi_index", "1N", "2N", "3N", "4N", "5N", "6N"], {
+                    "default": "multi_index",
+                    "tooltip": "multi_index：按 multi_index 文本（如 1|3|4）中的编号匹配；1N：奇数阶段；2N～6N：对应倍数阶段。",
+                }),
+                "multi_index": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "当 index_mode 为 multi_index 时生效；填写 \"1|3|4\" 或 \"1,3,4\"，匹配阶段编号为 1、3、4 的阶段；留空则全部不开启。",
+                }),
             },
             "optional": {
                 "any_input": (any_type, {"lazy": True}),
@@ -1257,13 +1221,48 @@ class flow_stage_index_switch:
     def VALIDATE_INPUTS(cls, input_types):
         return True
 
-    def check_lazy_status(self, stage_index, open_stage_index, any_input=None):
-        if stage_index == open_stage_index and any_input is None:
+    @staticmethod
+    def _parse_multi_index(text):
+        """解析多选文本 '1|3|4' 或 '1,3,4'。返回整数集合,非法或空返回空集合。"""
+        if text is None:
+            return set()
+        text = str(text).strip()
+        if not text:
+            return set()
+        result = set()
+        for part in re.split(r'[|,]', text):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                result.add(int(part))
+            except ValueError:
+                continue
+        return result
+
+    @classmethod
+    def _matches(cls, stage_index, index_mode, multi_index):
+        try:
+            idx = int(stage_index)
+        except (TypeError, ValueError):
+            return False
+        if idx < 0:
+            return False
+        stage_number = idx + 1
+        if index_mode == "multi_index":
+            return stage_number in cls._parse_multi_index(multi_index)
+        if index_mode == "1N":
+            return stage_number % 2 == 1
+        divisor = {"2N": 2, "3N": 3, "4N": 4, "5N": 5, "6N": 6}.get(index_mode)
+        return divisor is not None and stage_number % divisor == 0
+
+    def check_lazy_status(self, stage_index, index_mode="multi_index", multi_index="", any_input=None):
+        if self._matches(stage_index, index_mode, multi_index) and any_input is None:
             return ["any_input"]
         return []
 
-    def process(self, stage_index, open_stage_index, any_input=None):
-        if stage_index == open_stage_index and any_input is not None:
+    def process(self, stage_index, index_mode="multi_index", multi_index="", any_input=None):
+        if self._matches(stage_index, index_mode, multi_index) and any_input is not None:
             return (any_input,)
 
         if ExecutionBlocker is not None:
@@ -1695,7 +1694,7 @@ def _stage_restore_json_value(value, tensors):
 def _stage_cpu_tensor(value):
     if not isinstance(value, torch.Tensor):
         raise TypeError(f"flow_stage: expected a tensor, got {type(value).__name__}")
-    return value.detach().to(device="cpu").contiguous()
+    return value.detach().to(device="cpu", copy=True).contiguous()
 
 
 def _stage_detect_type(data, requested):
@@ -1849,9 +1848,333 @@ def _stage_decode_payload(path):
     raise ValueError(f"flow_stage: unsupported checkpoint type {payload_type}")
 
 
+def _bridge_tensor_folder(fold_name, create=False):
+    root = os.path.abspath(os.path.join(folder_paths.get_output_directory(), "Apt_brigeTensor"))
+    folder = os.path.abspath(os.path.join(root, (fold_name or "").strip().strip('"').strip("'")))
+    try:
+        contained = os.path.commonpath((root, folder)) == root
+    except ValueError:
+        contained = False
+    if not contained:
+        raise ValueError("flow_BridgeTensor: fold_name must stay inside output/Apt_brigeTensor")
+    if create:
+        os.makedirs(folder, exist_ok=True)
+    return folder
+
+
+def _resolve_bridge_tensor_path(fold_name, index=0):
+    folder = _bridge_tensor_folder(fold_name)
+    if not os.path.isdir(folder):
+        raise FileNotFoundError(f"IO_Load_Tensor: folder not found: {folder}")
+
+    index = int(index)
+    if index > 0:
+        endings = (
+            f"_{index:05d}_.safetensors",
+            f"_{index:05d}.safetensors",
+            f"_clip{index:03d}.safetensors",
+        )
+        files = [os.path.join(folder, filename) for filename in os.listdir(folder) if filename.endswith(endings)]
+        if not files:
+            raise FileNotFoundError(f"IO_Load_Tensor: no saved data for file index {index} in {folder}")
+    else:
+        files = [os.path.join(folder, filename) for filename in os.listdir(folder) if filename.endswith(".safetensors")]
+        if not files:
+            raise FileNotFoundError(f"IO_Load_Tensor: no saved data in {folder}")
+    return max(files, key=os.path.getmtime)
+
+
+class IO_Load_Tensor:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "fold_name": ("STRING", {
+                    "default": "",
+                    "tooltip": "文件夹路径在 output/Apt_brigeTensor/。",
+                }),
+                "index": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 9999,
+                    "tooltip": "index = 0：读取最新修改的文件；index > 0：寻找指定编号的文件。",
+                }),
+            },
+        }
+
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("data",)
+    FUNCTION = "load"
+    CATEGORY = "Apt_Preset/IO_Port"
+    DESCRIPTION = "Load data saved by IO_Save_Tensor, flow_stage, or ComfyUI SaveLatent."
+
+    @classmethod
+    def IS_CHANGED(cls, fold_name, index=0):
+        try:
+            resolved_path = _resolve_bridge_tensor_path(fold_name, index)
+            return f"{resolved_path}:{os.stat(resolved_path).st_mtime_ns}"
+        except Exception:
+            return float("NaN")
+
+    def load(self, fold_name, index=0):
+        resolved_path = _resolve_bridge_tensor_path(fold_name, index)
+        data, metadata = comfy.utils.load_torch_file(resolved_path, safe_load=True, return_metadata=True)
+
+        if metadata is not None and "stage_payload" in metadata:
+            return (_stage_decode_payload(resolved_path),)
+
+        if "video" in data and "audio" in data:
+            return ({"samples": comfy.nested_tensor.NestedTensor([data["video"], data["audio"]])},)
+
+        if "latent_tensor" in data:
+            multiplier = 1.0 if "latent_format_version_0" in data else 1.0 / 0.18215
+            return ({"samples": data["latent_tensor"].float() * multiplier},)
+
+        if "samples" in data:
+            return (data,)
+
+        raise ValueError(f"IO_Load_Tensor: {resolved_path} does not contain supported bridge data")
+
+
+class IO_Save_Tensor:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "data": (any_type, {"lazy": True}),
+                "fold_name": ("STRING", {
+                    "default": "",
+                    "tooltip": "文件夹路径在 output/Apt_brigeTensor/。保存文件以 clip 为固定前缀并自动递增命名。",
+                }),
+                "unload_models": ("BOOLEAN", {"default": False}),
+                "free_memory": ("BOOLEAN", {"default": True}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("bridge_path",)
+    FUNCTION = "save"
+    OUTPUT_NODE = True
+    CATEGORY = "Apt_Preset/IO_Port"
+    DESCRIPTION = "Save bridge data while preserving its tensors and metadata."
+
+    def check_lazy_status(self, data, **kwargs):
+        return ["data"] if data is None else []
+
+    def save(self, data, fold_name, unload_models=False, free_memory=True):
+        tensors, descriptor = _stage_encode_payload(data, "auto")
+        bridge_folder = _bridge_tensor_folder(fold_name, create=True)
+        relative_folder = os.path.relpath(bridge_folder, folder_paths.get_output_directory())
+        path_prefix = os.path.join(relative_folder, "clip")
+        folder, filename, counter, _, _ = folder_paths.get_save_image_path(
+            path_prefix, folder_paths.get_output_directory()
+        )
+        path = os.path.join(folder, f"{filename}_{counter:05d}_.safetensors")
+        temp_path = path + ".tmp"
+        try:
+            comfy.utils.save_torch_file(
+                tensors,
+                temp_path,
+                metadata={"stage_payload": json.dumps(descriptor, ensure_ascii=False)},
+            )
+            os.replace(temp_path, path)
+        finally:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+
+        PromptServer.instance.prompt_queue.set_flag("unload_models", bool(unload_models))
+        PromptServer.instance.prompt_queue.set_flag("free_memory", bool(free_memory))
+        return (path,)
+
+
 def _stage_checkpoint_filename(stage_index, channel):
-    suffix = "1" if channel == "data1" else "2"
+    if channel not in ("data1", "data2", "data3"):
+        raise ValueError("flow_stage: channel must be data1, data2, or data3")
+    suffix = channel[-1]
     return f"stage_{int(stage_index):05d}_checkpoint_{suffix}.safetensors"
+
+
+def _stage_payload_filename(stage_index, channel):
+    if channel not in ("data1", "data2", "data3"):
+        raise ValueError("flow_stage: channel must be data1, data2, or data3")
+    return f"{channel}_{int(stage_index) + 1:05d}.safetensors"
+
+
+def _stage_payload_candidates(stage_index, channel):
+    if channel == "data3":
+        return (_stage_payload_filename(stage_index, channel),)
+    action = "new" if (int(stage_index) % 2 == 0) == (channel == "data1") else "hold"
+    legacy_suffix = "_2" if channel == "data2" else ""
+    return (
+        _stage_payload_filename(stage_index, channel),
+        f"{channel}_{int(stage_index) + 1:04d}_{action}.safetensors",
+        f"stage_{int(stage_index):05d}{legacy_suffix}.safetensors",
+    )
+
+
+def _stage_find_payload_filename(run_dir, stage_index, channel):
+    for filename in _stage_payload_candidates(stage_index, channel):
+        if os.path.isfile(os.path.join(run_dir, filename)):
+            return filename
+    return None
+
+
+def _stage_seed_bounds(class_type, input_name):
+    class_def = nodes.NODE_CLASS_MAPPINGS.get(class_type)
+    if class_def is None:
+        return 0, 0xffffffffffffffff
+    try:
+        input_types = class_def.INPUT_TYPES()
+    except Exception:
+        return 0, 0xffffffffffffffff
+    for group in ("required", "optional"):
+        spec = input_types.get(group, {}).get(input_name)
+        if isinstance(spec, tuple) and len(spec) > 1 and isinstance(spec[1], Mapping):
+            return int(spec[1].get("min", 0)), int(spec[1].get("max", 0xffffffffffffffff))
+    return 0, 0xffffffffffffffff
+
+
+def _stage_next_seed(value, mode, minimum, maximum):
+    if mode == "increment":
+        return minimum if value >= maximum else value + 1
+    if mode == "decrement":
+        return maximum if value <= minimum else value - 1
+    if mode == "randomize":
+        size = maximum - minimum + 1
+        new_value = minimum + secrets.randbelow(size)
+        if size > 1 and new_value == value:
+            new_value = minimum + (new_value - minimum + 1) % size
+        return new_value
+    return value
+
+
+def _stage_advance_prompt_seeds(prompt, extra_data):
+    extra_pnginfo = extra_data.get("extra_pnginfo") if isinstance(extra_data, Mapping) else None
+    workflow = extra_pnginfo.get("workflow") if isinstance(extra_pnginfo, Mapping) else None
+    workflow_nodes = workflow.get("nodes") if isinstance(workflow, Mapping) else None
+    if not isinstance(workflow_nodes, list):
+        return
+    workflow_by_id = {
+        str(node.get("id")): node
+        for node in workflow_nodes
+        if isinstance(node, Mapping) and node.get("id") is not None
+    }
+    modes = {"fixed", "increment", "decrement", "randomize"}
+
+    for node_id, prompt_node in prompt.items():
+        if not isinstance(prompt_node, Mapping):
+            continue
+        if prompt_node.get("class_type") in {
+            "AD_MinMax_Ref2_sample",
+            "AD_MinMax_Ref2_generate_refine",
+        }:
+            continue
+        inputs = prompt_node.get("inputs")
+        workflow_node = workflow_by_id.get(str(node_id))
+        if not isinstance(inputs, dict) or not isinstance(workflow_node, Mapping):
+            continue
+        widget_values = workflow_node.get("widgets_values")
+        named_values = workflow_node.get("widgets_values_named")
+
+        for input_name, value in tuple(inputs.items()):
+            if isinstance(value, bool) or not isinstance(value, int):
+                continue
+            if input_name != "seed" and not input_name.endswith("_seed"):
+                continue
+
+            mode = None
+            if isinstance(named_values, Mapping):
+                mode = named_values.get(f"{input_name}_control_after_generate")
+                if mode is None:
+                    mode = named_values.get("control_after_generate")
+            if str(mode).lower() not in modes and isinstance(widget_values, list):
+                for index in range(1, len(widget_values)):
+                    candidate = str(widget_values[index]).lower()
+                    if candidate in modes and widget_values[index - 1] == value:
+                        mode = candidate
+                        break
+            mode = str(mode).lower()
+            if mode not in modes or mode == "fixed":
+                continue
+
+            minimum, maximum = _stage_seed_bounds(prompt_node.get("class_type"), input_name)
+            next_value = _stage_next_seed(value, mode, minimum, maximum)
+            inputs[input_name] = next_value
+            if isinstance(named_values, dict):
+                named_values[input_name] = next_value
+            if isinstance(widget_values, list):
+                for index in range(1, len(widget_values)):
+                    if str(widget_values[index]).lower() == mode and widget_values[index - 1] == value:
+                        widget_values[index - 1] = next_value
+                        break
+            _stage_feedback(node_id, input_name, next_value)
+
+
+def _stage_remove_queued_initial_tasks(server, begin_node_id):
+    def is_duplicate(item):
+        prompt = item[2]
+        begin_node = prompt.get(str(begin_node_id)) if isinstance(prompt, Mapping) else None
+        if not isinstance(begin_node, Mapping) or begin_node.get("class_type") != "flow_stage_begin":
+            return False
+        inputs = begin_node.get("inputs")
+        return isinstance(inputs, Mapping) and int(inputs.get("stage_index", 0)) == 0
+
+    removed = 0
+    while server.prompt_queue.delete_queue_item(is_duplicate):
+        removed += 1
+    if removed:
+        logging.info("flow_stage_begin: removed %s duplicate initial task(s)", removed)
+
+
+def _stage_enqueue_next_prompt(server, begin_node_id, run_id, next_stage, advance_seeds=False):
+    current_prompt_id = getattr(server, "last_prompt_id", None)
+    current_item = None
+    with server.prompt_queue.mutex:
+        for item in server.prompt_queue.currently_running.values():
+            if item[1] == current_prompt_id:
+                current_item = copy.deepcopy(item)
+                break
+    if current_item is None:
+        raise RuntimeError("flow_stage_end: cannot queue the next stage because the current server prompt is unavailable")
+
+    prompt = current_item[2]
+    begin_node = prompt.get(str(begin_node_id))
+    if not isinstance(begin_node, Mapping) or begin_node.get("class_type") != "flow_stage_begin":
+        raise RuntimeError("flow_stage_end: cannot find the matching flow_stage_begin in the current prompt")
+    inputs = begin_node.get("inputs")
+    if not isinstance(inputs, dict):
+        raise RuntimeError("flow_stage_end: flow_stage_begin inputs are unavailable")
+    inputs["run_id"] = str(run_id)
+    inputs["stage_index"] = int(next_stage)
+    for prompt_node in prompt.values():
+        if not isinstance(prompt_node, Mapping):
+            continue
+        switch_inputs = prompt_node.get("inputs")
+        if not isinstance(switch_inputs, dict) or isinstance(switch_inputs.get("stage_index"), (list, tuple)):
+            continue
+        if prompt_node.get("class_type") in {"flow_stage_index_switch", "AD_MinMax_Ref2"}:
+            switch_inputs["stage_index"] = int(next_stage) - 1
+
+    next_prompt_id = str(uuid.uuid4())
+    extra_data = current_item[3]
+    outputs_to_execute = current_item[4]
+    sensitive = current_item[5]
+    if advance_seeds:
+        _stage_advance_prompt_seeds(prompt, extra_data)
+
+    def enqueue():
+        number = server.number
+        server.number += 1
+        server.prompt_queue.put((
+            number, next_prompt_id, prompt, extra_data, outputs_to_execute, sensitive,
+        ))
+        logging.info(
+            "flow_stage_end: queued stage %s on the server as prompt %s",
+            next_stage, next_prompt_id,
+        )
+
+    server.loop.call_soon_threadsafe(enqueue)
+    return next_prompt_id
 
 
 def _stage_load_checkpoint(run_dir, stage_index, channel):
@@ -1863,21 +2186,6 @@ def _stage_checkpoint_paths(run_dir, stage_index):
     return tuple(
         os.path.join(run_dir, _stage_checkpoint_filename(stage_index, channel))
         for channel in ("data1", "data2")
-    )
-
-
-def _stage_can_resume_first_stage(run_id, total):
-    if not run_id or run_id == "default":
-        return False
-    run_dir = _stage_run_path(run_id)
-    state = _stage_load_state(run_dir)
-    if state is None or int(state.get("total", -1)) != int(total):
-        return False
-    checkpoint_stage = int(state.get("checkpoint_stage", -1))
-    checkpoint_phase = state.get("checkpoint_phase")
-    checkpoint_1, checkpoint_2 = _stage_checkpoint_paths(run_dir, 0)
-    return checkpoint_stage == 0 and checkpoint_phase in ("refine_pending", "complete_pending") and (
-        os.path.isfile(checkpoint_1) or os.path.isfile(checkpoint_2)
     )
 
 
@@ -1924,23 +2232,33 @@ def _stage_prepare_checkpoints(run_dir, state, stage_index):
 class flow_stage_begin:
     @classmethod
     def INPUT_TYPES(cls):
-        return {
+        input_types = {
             "required": {
                 "run_id": ("STRING", {"default": "default"}),
-                "total": ("INT", {"default": 3, "min": 1, "max": 5000}),
+                "total": ("INT", {"default": 3, "min": 1}),
+                "take_over_tasks": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "开启后由阶段循环接管总任务，忽略顶部 Run 重复提交的初始任务，并按 control after generate 更新种子。",
+                }),
                 "stage_index": ("INT", {
-                    "default": 1,
-                    "min": 1,
-                    "max": 5000,
+                    "default": 0,
+                    "min": 0,
                     "tooltip": "当前阶段（1～总阶段数）；可手动选择断点阶段，完成后自动回到1",
                 }),
             },
             "optional": {
                 "initial_data_1": (any_type,),
                 "initial_data_2": (any_type,),
+                "initial_data_3": (any_type,),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
+        required = input_types["required"]
+        required["stage_index"][1]["tooltip"] = "0 新建任务；1～total 精确重跑对应阶段。全部完成后自动归 0。"
+        required["stage_index"][1]["tooltip"] = "0 新建任务；1～total 精确重跑对应阶段。"
+        required.pop("take_over_tasks")
+        required["stage_index"] = required.pop("stage_index")
+        return input_types
 
     RETURN_TYPES = (_STAGE_INFO_TYPE, "INT")
     RETURN_NAMES = ("stage_info", "stage_index")
@@ -1948,13 +2266,14 @@ class flow_stage_begin:
     CATEGORY = "Apt_Preset/flow"
 
     @classmethod
-    def IS_CHANGED(cls, run_id, total, stage_index=1, unique_id=None, **kwargs):
+    def IS_CHANGED(cls, run_id, total, stage_index=0, unique_id=None, **kwargs):
         node_key = str(unique_id or "")
         effective_run_id = str(run_id or "").strip()
-        single_stage = int(total) == 1 and int(stage_index) == 1
+        requested_index = int(stage_index)
+        single_stage = int(total) == 1
         if single_stage:
             effective_run_id = "default"
-        elif int(stage_index) == 1 and not _stage_can_resume_first_stage(effective_run_id, total):
+        elif requested_index == 0:
             effective_run_id = ""
         elif (not effective_run_id or effective_run_id == "default") and node_key:
             effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "")
@@ -1968,15 +2287,16 @@ class flow_stage_begin:
                 files.append((os.path.basename(state_path), state_stat.st_mtime_ns, state_stat.st_size))
                 state = _stage_load_state(run_dir)
                 if state is not None:
-                    requested_stage = int(stage_index) - 1
+                    requested_stage = 0 if requested_index == 0 else requested_index - 1
                     if requested_stage > 0:
-                        for suffix in ("", "_2"):
-                            payload_path = os.path.join(run_dir, f"stage_{requested_stage - 1:05d}{suffix}.safetensors")
-                            if os.path.isfile(payload_path):
+                        for channel in ("data1", "data2", "data3"):
+                            filename = _stage_find_payload_filename(run_dir, requested_stage - 1, channel)
+                            if filename is not None:
+                                payload_path = os.path.join(run_dir, filename)
                                 payload_stat = os.stat(payload_path)
-                                files.append((os.path.basename(payload_path), payload_stat.st_mtime_ns, payload_stat.st_size))
-            requested_stage = int(stage_index) - 1
-            for channel in ("data1", "data2"):
+                                files.append((filename, payload_stat.st_mtime_ns, payload_stat.st_size))
+            requested_stage = 0 if requested_index == 0 else requested_index - 1
+            for channel in ("data1", "data2", "data3"):
                 checkpoint_path = os.path.join(run_dir, _stage_checkpoint_filename(requested_stage, channel))
                 if os.path.isfile(checkpoint_path):
                     checkpoint_stat = os.stat(checkpoint_path)
@@ -1987,19 +2307,22 @@ class flow_stage_begin:
             separators=(",", ":"),
         )
 
-    def begin(self, run_id, total, stage_index=1,
-              initial_data_1=None, initial_data_2=None, unique_id=None):
+    def begin(self, run_id, total, stage_index=0,
+              initial_data_1=None, initial_data_2=None, initial_data_3=None, unique_id=None):
         total = int(total)
         requested_index = int(stage_index)
-        if requested_index < 1 or requested_index > total:
-            raise ValueError(f"flow_stage_begin: stage_index must be between 1 and {total}")
+        if requested_index < 0 or requested_index > total:
+            raise ValueError(f"flow_stage_begin: stage_index must be between 0 and {total}")
 
         node_key = str(unique_id or "")
         effective_run_id = str(run_id or "").strip()
-        single_stage = total == 1 and requested_index == 1
+        new_run = requested_index == 0
+        single_stage = total == 1
+        if not single_stage and new_run and node_key:
+            _stage_remove_queued_initial_tasks(PromptServer.instance, node_key)
         if single_stage:
             effective_run_id = "default"
-        elif requested_index == 1 and not _stage_can_resume_first_stage(effective_run_id, total):
+        elif new_run:
             effective_run_id = ""
         elif (not effective_run_id or effective_run_id == "default") and node_key:
             effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "")
@@ -2010,7 +2333,7 @@ class flow_stage_begin:
             run_dir = _stage_run_dir(effective_run_id)
             state = _stage_load_state(run_dir)
 
-        stage_index = requested_index - 1
+        stage_index = 0 if new_run else requested_index - 1
         total_changed = False
         if stage_index == 0:
             if not single_stage and not effective_run_id:
@@ -2019,6 +2342,26 @@ class flow_stage_begin:
                 state = None
             data_1 = initial_data_1
             data_2 = initial_data_2
+            data_3 = initial_data_3
+            if not new_run and not single_stage:
+                state = {
+                    "version": _STAGE_BRIDGE_VERSION,
+                    "run_id": effective_run_id,
+                    "total": total,
+                    "completed_stage": -1,
+                    "next_stage": 0,
+                    "payload": None,
+                    "payload_2": None,
+                    "payload_3": None,
+                    "payload_type": None,
+                    "control_only": True,
+                    "control_only_1": True,
+                    "control_only_2": True,
+                    "control_only_3": True,
+                    "complete": False,
+                    "restart_pending": True,
+                }
+                _stage_write_json(_stage_state_path(run_dir), state)
         else:
             if not effective_run_id or state is None:
                 raise ValueError(
@@ -2029,7 +2372,7 @@ class flow_stage_begin:
             if not state.get("complete", False) and int(state["next_stage"]) == stage_index:
                 filename = state.get("payload")
             else:
-                filename = f"stage_{stage_index - 1:05d}.safetensors"
+                filename = _stage_find_payload_filename(run_dir, stage_index - 1, "data1")
             if filename is None:
                 if not state.get("control_only_1", state.get("control_only", False)):
                     raise ValueError("flow_stage_begin: previous stage checkpoint is missing")
@@ -2048,7 +2391,7 @@ class flow_stage_begin:
             if not state.get("complete", False) and int(state["next_stage"]) == stage_index:
                 filename_2 = state.get("payload_2")
             else:
-                filename_2 = f"stage_{stage_index - 1:05d}_2.safetensors"
+                filename_2 = _stage_find_payload_filename(run_dir, stage_index - 1, "data2")
             if filename_2 is None:
                 data_2 = None
             else:
@@ -2056,6 +2399,17 @@ class flow_stage_begin:
                     raise ValueError("flow_stage_begin: invalid bridge 2 checkpoint filename")
                 payload_path_2 = os.path.join(run_dir, filename_2)
                 data_2 = _stage_decode_payload(payload_path_2) if os.path.isfile(payload_path_2) else None
+            if not state.get("complete", False) and int(state["next_stage"]) == stage_index:
+                filename_3 = state.get("payload_3")
+            else:
+                filename_3 = _stage_find_payload_filename(run_dir, stage_index - 1, "data3")
+            if filename_3 is None:
+                data_3 = None
+            else:
+                if not filename_3 or os.path.basename(filename_3) != filename_3:
+                    raise ValueError("flow_stage_begin: invalid bridge 3 checkpoint filename")
+                payload_path_3 = os.path.join(run_dir, filename_3)
+                data_3 = _stage_decode_payload(payload_path_3) if os.path.isfile(payload_path_3) else None
             if total_changed or state.get("complete", False) or int(state["next_stage"]) != stage_index:
                 state = {
                     "version": _STAGE_BRIDGE_VERSION,
@@ -2065,10 +2419,12 @@ class flow_stage_begin:
                     "next_stage": stage_index,
                     "payload": filename,
                     "payload_2": filename_2,
+                    "payload_3": filename_3,
                     "payload_type": "auto" if filename is not None else None,
-                    "control_only": filename is None and filename_2 is None,
+                    "control_only": filename is None and filename_2 is None and filename_3 is None,
                     "control_only_1": filename is None,
                     "control_only_2": filename_2 is None,
+                    "control_only_3": filename_3 is None,
                     "complete": False,
                     "restart_pending": True,
                 }
@@ -2077,6 +2433,7 @@ class flow_stage_begin:
         _stage_prepare_checkpoints(run_dir, state, stage_index)
         checkpoint_data_1 = _stage_load_checkpoint(run_dir, stage_index, "data1")
         checkpoint_data_2 = _stage_load_checkpoint(run_dir, stage_index, "data2")
+        checkpoint_data_3 = _stage_load_checkpoint(run_dir, stage_index, "data3")
 
         if node_key:
             _STAGE_ACTIVE_RUN_IDS[node_key] = effective_run_id
@@ -2094,12 +2451,15 @@ class flow_stage_begin:
             "stage_data": data_1,
             "stage_data_1": data_1,
             "stage_data_2": data_2,
+            "stage_data_3": data_3,
             "checkpoint_data_1": checkpoint_data_1,
             "checkpoint_data_2": checkpoint_data_2,
+            "checkpoint_data_3": checkpoint_data_3,
             "checkpoint_saved_data1": checkpoint_data_1 is not None,
             "checkpoint_saved_data2": checkpoint_data_2 is not None,
+            "checkpoint_saved_data3": checkpoint_data_3 is not None,
         }
-        return stage_info, stage_index + 1
+        return stage_info, stage_index
 
 
 def _stage_validate_info(stage_info):
@@ -2130,9 +2490,15 @@ class flow_stage_unpack:
             },
         }
 
-    RETURN_TYPES = (any_type, any_type, "INT", "INT", "BOOLEAN", "BOOLEAN")
+    RETURN_TYPES = (
+        _STAGE_INFO_TYPE,                          # stage_info 过桥：原样返回输入，方便后续节点直接拿 stage_info
+        any_type, any_type, any_type, "INT", "BOOLEAN", "BOOLEAN",
+        _STAGE_INFO_TYPE, _STAGE_INFO_TYPE, _STAGE_INFO_TYPE, _STAGE_INFO_TYPE,
+    )
     RETURN_NAMES = (
-        "data_1", "data_2", "total", "stage_index", "is_first", "is_last",
+        "stage_info",
+        "data_1", "data_2", "data_3", "total", "is_first", "is_last",
+        "stage_info_mix", "stage_info_data1", "stage_info_data2", "stage_info_data3",
     )
     FUNCTION = "unpack"
     CATEGORY = "Apt_Preset/flow"
@@ -2145,21 +2511,116 @@ class flow_stage_unpack:
         _, stage_index, total = _stage_validate_info(stage_info)
         stage_data_1 = stage_info.get("stage_data_1", stage_info.get("stage_data"))
         stage_data_2 = stage_info.get("stage_data_2")
+        stage_data_3 = stage_info.get("stage_data_3")
         data_1 = _stage_clean_data(stage_data_1)
         data_2 = _stage_clean_data(stage_data_2)
+        data_3 = _stage_clean_data(stage_data_3)
+        mix_stage_index = stage_index // 2
+        mix_total = (total + 1) // 2
+        stage_info_mix = dict(stage_info)
+        stage_info_mix.update({
+            "stage_index": mix_stage_index,
+            "total": mix_total,
+            "is_first": mix_stage_index == 0,
+            "is_last": mix_stage_index == mix_total - 1,
+        })
+        stage_info_data1 = dict(stage_info)
+        stage_info_data1["stage_data"] = stage_data_1
+        stage_info_data1["stage_info_channel"] = "data1"
+        stage_info_data2 = dict(stage_info)
+        stage_info_data2["stage_data"] = stage_data_2
+        stage_info_data2["stage_info_channel"] = "data2"
+        stage_info_data3 = dict(stage_info)
+        stage_info_data3["stage_data"] = stage_data_3
+        stage_info_data3["stage_info_channel"] = "data3"
         return (
+            stage_info,                              # stage_info 过桥：直接原样返回输入
             data_1 if data_1 is not None else ExecutionBlocker(None),
             data_2 if data_2 is not None else ExecutionBlocker(None),
+            data_3 if data_3 is not None else ExecutionBlocker(None),
             total,
-            stage_index + 1,
             stage_index == 0,
             stage_index == total - 1,
+            stage_info_mix,
+            stage_info_data1,
+            stage_info_data2,
+            stage_info_data3,
+        )
+
+
+class _StageOddEvenValue:
+    __slots__ = ("data", "channel", "action")
+
+    def __init__(self, data, channel, action):
+        self.data = data
+        self.channel = channel
+        self.action = action
+
+
+def _stage_odd_even_value(value):
+    if isinstance(value, _StageOddEvenValue):
+        return value.data, value.channel, value.action
+    return value, None, None
+
+
+class flow_stage_odd_even_hold:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "stage_info": (_STAGE_INFO_TYPE,),
+            },
+            "optional": {
+                "odd_data_1": (any_type, {"lazy": True}),
+                "even_data_2": (any_type, {"lazy": True}),
+            },
+        }
+
+    RETURN_TYPES = (any_type, any_type)
+    RETURN_NAMES = ("data_1", "data_2")
+    FUNCTION = "hold"
+    CATEGORY = "Apt_Preset/flow/other"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
+    def check_lazy_status(self, stage_info, odd_data_1=None, even_data_2=None):
+        _, stage_index, _ = _stage_validate_info(stage_info)
+        if stage_index % 2 == 0 and odd_data_1 is None:
+            return ["odd_data_1"]
+        if stage_index % 2 == 1 and even_data_2 is None:
+            return ["even_data_2"]
+        return []
+
+    def hold(self, stage_info, odd_data_1=None, even_data_2=None):
+        _, stage_index, _ = _stage_validate_info(stage_info)
+        previous_data_1 = stage_info.get("stage_data_1", stage_info.get("stage_data"))
+        previous_data_2 = stage_info.get("stage_data_2")
+
+        if stage_index % 2 == 0:
+            if odd_data_1 is None:
+                raise ValueError("flow_stage_odd_even_hold: odd stage requires odd_data_1")
+            data_1 = _StageOddEvenValue(odd_data_1, "data1", "new")
+            data_2 = (
+                _StageOddEvenValue(previous_data_2, "data2", "hold")
+                if previous_data_2 is not None else None
+            )
+            return data_1, data_2
+
+        if even_data_2 is None:
+            raise ValueError("flow_stage_odd_even_hold: even stage requires even_data_2")
+        if previous_data_1 is None:
+            raise ValueError("flow_stage_odd_even_hold: even stage is missing the previous data_1")
+        return (
+            _StageOddEvenValue(previous_data_1, "data1", "hold"),
+            _StageOddEvenValue(even_data_2, "data2", "new"),
         )
 
 
 def _stage_save_checkpoint_data(stage_info, data, bridge):
     run_id, stage_index, total = _stage_validate_info(stage_info)
-    if bridge not in ("data1", "data2"):
+    if bridge not in ("data1", "data2", "data3"):
         raise ValueError(f"flow_stage_end: invalid bridge: {bridge}")
 
     run_dir = _stage_run_dir(run_id)
@@ -2176,6 +2637,9 @@ def _stage_save_checkpoint_data(stage_info, data, bridge):
     if stage_info.get(saved_key, False) and os.path.isfile(path) and not restart_single_stage:
         return
 
+    data, channel, _action = _stage_odd_even_value(data)
+    if channel is not None and channel != bridge:
+        raise ValueError(f"flow_stage_end: {channel} cannot be saved as {bridge}")
     tensors, descriptor = _stage_encode_payload(data, "auto")
     temp_path = path + ".tmp"
     try:
@@ -2200,10 +2664,12 @@ def _stage_save_checkpoint_data(stage_info, data, bridge):
             "next_stage": 0,
             "payload": None,
             "payload_2": None,
+            "payload_3": None,
             "payload_type": None,
             "control_only": False,
             "control_only_1": False,
             "control_only_2": False,
+            "control_only_3": False,
             "complete": False,
             "restart_pending": True,
         }
@@ -2221,11 +2687,12 @@ def _stage_save_checkpoint_data(stage_info, data, bridge):
     stage_info[saved_key] = True
 
 
-def _stage_list_collect(run_dir, total, suffix=""):
+def _stage_list_collect(run_dir, total, channel="data1"):
     items = []
     for i in range(total):
-        path = os.path.join(run_dir, f"stage_{i:05d}{suffix}.safetensors")
-        if os.path.isfile(path):
+        filename = _stage_find_payload_filename(run_dir, i, channel)
+        if filename is not None:
+            path = os.path.join(run_dir, filename)
             items.append(_stage_decode_payload(path))
     return items
 
@@ -2243,13 +2710,15 @@ class flow_stage_end:
             "optional": {
                 "data_1": (any_type, {"lazy": True}),
                 "data_2": (any_type, {"lazy": True}),
+                "data_3": (any_type, {"lazy": True}),
+                "blank": (any_type, {"lazy": True}),
             },
             "hidden": {"unique_id": "UNIQUE_ID", "workflow_prompt": "PROMPT"},
         }
 
-    RETURN_TYPES = (any_type, any_type)
-    RETURN_NAMES = ("list_data1", "list_data2")
-    OUTPUT_IS_LIST = (True, True)
+    RETURN_TYPES = (any_type, any_type, any_type)
+    RETURN_NAMES = ("list_data1", "list_data2", "list_data3")
+    OUTPUT_IS_LIST = (True, True, True)
     FUNCTION = "commit"
     CATEGORY = "Apt_Preset/flow"
     OUTPUT_NODE = True
@@ -2267,20 +2736,36 @@ class flow_stage_end:
             return ["data_2"]
         if "data_2" in kwargs and kwargs["data_2"] is not None:
             _stage_save_checkpoint_data(stage_info, kwargs["data_2"], "data2")
+        if "data_3" in kwargs and kwargs["data_3"] is None:
+            return ["data_3"]
+        if "data_3" in kwargs and kwargs["data_3"] is not None:
+            _stage_save_checkpoint_data(stage_info, kwargs["data_3"], "data3")
+        if "blank" in kwargs and kwargs["blank"] is None:
+            return ["blank"]
         return []
 
-    def commit(self, data_1=None, data_2=None, stage_info=None, unload_models=False, free_memory=True,
+    def commit(self, data_1=None, data_2=None, data_3=None, blank=None, stage_info=None, unload_models=False, free_memory=True,
                free_memory_interval=1, unique_id=None, workflow_prompt=None):
         run_id, stage_index, total = _stage_validate_info(stage_info)
 
+        data_1, wrapped_channel_1, _action_1 = _stage_odd_even_value(data_1)
+        data_2, wrapped_channel_2, _action_2 = _stage_odd_even_value(data_2)
+        data_3, wrapped_channel_3, _action_3 = _stage_odd_even_value(data_3)
+        if (wrapped_channel_1 not in (None, "data1") or wrapped_channel_2 not in (None, "data2")
+                or wrapped_channel_3 not in (None, "data3")):
+            raise ValueError("flow_stage_end: odd/even bridge outputs are connected to the wrong channels")
         channel_1 = data_1.get("apt_h3_bridge_channel") if isinstance(data_1, Mapping) else None
         channel_2 = data_2.get("apt_h3_bridge_channel") if isinstance(data_2, Mapping) else None
-        if channel_2 == "data2" and channel_1 != "data1":
-            raise ValueError(
-                "flow_stage_end: H3 data_1 is missing or invalid; connect "
-                "the first-pass generate context to Data_basic.context, then connect "
-                "Data_basic.latent to flow_stage_end.data_1"
-            )
+        channel_3 = data_3.get("apt_h3_bridge_channel") if isinstance(data_3, Mapping) else None
+        bridge_channels = ("data1", "data2", "data3")
+        if channel_1 in bridge_channels and channel_1 != "data1":
+            raise ValueError(f"flow_stage_end: data_1 received an H3 {channel_1} latent")
+        if channel_2 in bridge_channels and channel_2 != "data2":
+            raise ValueError(f"flow_stage_end: data_2 received an H3 {channel_2} latent")
+        if channel_3 in bridge_channels and channel_3 != "data3":
+            raise ValueError(f"flow_stage_end: data_3 received an H3 {channel_3} latent")
+        # 链式依赖（data_2→data_1 / data_3→data_2）已放宽：上游 input 可以空，下游 input 连了的话桥通道仍然按上面三行做精确校验。
+        # 这样可以接 "data_1 + data_3" 跳过 data_2，或 "data_2 + data_3" 跳过 data_1 等组合。
 
         run_dir = _stage_run_dir(run_id)
         state = _stage_load_state(run_dir)
@@ -2298,11 +2783,11 @@ class flow_stage_end:
             if int(state["total"]) != total or int(state["next_stage"]) != stage_index:
                 raise ValueError("flow_stage_end: stage order does not match the saved state")
 
-        def write_bridge(data, suffix):
+        def write_bridge(data, channel):
             if data is None:
                 return None, None, None
             tensors, descriptor = _stage_encode_payload(data, "auto")
-            filename = f"stage_{stage_index:05d}{suffix}.safetensors"
+            filename = _stage_payload_filename(stage_index, channel)
             temp_path = os.path.join(run_dir, filename + ".tmp")
             try:
                 comfy.utils.save_torch_file(
@@ -2318,15 +2803,19 @@ class flow_stage_end:
 
         temp_path_1 = None
         temp_path_2 = None
+        temp_path_3 = None
         try:
-            filename, payload_type, temp_path_1 = write_bridge(data_1, "")
-            filename_2, payload_type_2, temp_path_2 = write_bridge(data_2, "_2")
+            filename, payload_type, temp_path_1 = write_bridge(data_1, "data1")
+            filename_2, payload_type_2, temp_path_2 = write_bridge(data_2, "data2")
+            filename_3, payload_type_3, temp_path_3 = write_bridge(data_3, "data3")
             if temp_path_1 is not None:
                 os.replace(temp_path_1, os.path.join(run_dir, filename))
             if temp_path_2 is not None:
                 os.replace(temp_path_2, os.path.join(run_dir, filename_2))
+            if temp_path_3 is not None:
+                os.replace(temp_path_3, os.path.join(run_dir, filename_3))
         finally:
-            for temp_path in (temp_path_1, temp_path_2):
+            for temp_path in (temp_path_1, temp_path_2, temp_path_3):
                 if temp_path is not None and os.path.isfile(temp_path):
                     os.remove(temp_path)
 
@@ -2339,21 +2828,24 @@ class flow_stage_end:
             "next_stage": stage_index + 1,
             "payload": filename,
             "payload_2": filename_2,
+            "payload_3": filename_3,
             "payload_type": payload_type,
             "payload_type_2": payload_type_2,
-            "control_only": data_1 is None and data_2 is None,
+            "payload_type_3": payload_type_3,
+            "control_only": data_1 is None and data_2 is None and data_3 is None,
             "control_only_1": data_1 is None,
             "control_only_2": data_2 is None,
+            "control_only_3": data_3 is None,
             "complete": complete,
         }
         _stage_write_json(_stage_state_path(run_dir), next_state)
-        for channel in ("data1", "data2"):
+        for channel in ("data1", "data2", "data3"):
             checkpoint_path = os.path.join(run_dir, _stage_checkpoint_filename(stage_index, channel))
             if os.path.isfile(checkpoint_path):
                 os.remove(checkpoint_path)
 
         begin_node_id = _STAGE_BEGIN_NODE_IDS.get(run_id)
-        _stage_feedback(begin_node_id, "stage_index", 1 if complete else stage_index + 2)
+        _stage_feedback(begin_node_id, "stage_index", 0 if complete else stage_index + 2)
         if complete:
             _STAGE_BEGIN_NODE_IDS.pop(run_id, None)
 
@@ -2363,6 +2855,7 @@ class flow_stage_end:
 
         list_data1 = ExecutionBlocker(None)
         list_data2 = ExecutionBlocker(None)
+        list_data3 = ExecutionBlocker(None)
         connected_outputs = None
         if isinstance(workflow_prompt, Mapping) and unique_id is not None:
             node_id = str(unique_id)
@@ -2376,24 +2869,39 @@ class flow_stage_end:
                 for value in inputs.values():
                     if isinstance(value, (list, tuple)) and len(value) == 2 and str(value[0]) == node_id:
                         output_slot = int(value[1])
-                        if output_slot in (0, 1):
+                        if output_slot in (0, 1, 2):
                             connected_outputs.add(output_slot)
         if complete:
             if connected_outputs is None or 0 in connected_outputs:
                 list_data1 = _stage_list_collect(run_dir, total)
             if connected_outputs is None or 1 in connected_outputs:
-                list_data2 = _stage_list_collect(run_dir, total, "_2")
+                list_data2 = _stage_list_collect(run_dir, total, "data2")
+            if connected_outputs is None or 2 in connected_outputs:
+                list_data3 = _stage_list_collect(run_dir, total, "data3")
 
+        next_prompt_id = None
         if not complete:
+            if begin_node_id is None:
+                raise RuntimeError("flow_stage_end: cannot queue the next stage because flow_stage_begin is unavailable")
             server = PromptServer.instance
-            server.send_sync("add-queue", {}, server.client_id)
+            next_prompt_id = _stage_enqueue_next_prompt(
+                server,
+                begin_node_id,
+                run_id,
+                stage_index + 2,
+                advance_seeds=True,
+            )
+            next_state["queued_prompt_id"] = next_prompt_id
+            _stage_write_json(_stage_state_path(run_dir), next_state)
 
-        if filename is None and filename_2 is None:
+        if filename is None and filename_2 is None and filename_3 is None:
             message = f"stage {stage_index + 1}/{total} completed (control only)"
         else:
-            saved = ", ".join(name for name in (filename, filename_2) if name is not None)
+            saved = ", ".join(name for name in (filename, filename_2, filename_3) if name is not None)
             message = f"stage {stage_index + 1}/{total} saved: {saved}"
-        return {"ui": {"text": [message]}, "result": (list_data1, list_data2)}
+        if next_prompt_id is not None:
+            message += f"; next stage queued on server ({next_prompt_id})"
+        return {"ui": {"text": [message]}, "result": (list_data1, list_data2, list_data3)}
 
 
 def _stage_color_number(value, name, minimum, maximum, integer=False):
@@ -3109,10 +3617,8 @@ class flow_stage_collect_single:
     @classmethod
     def INPUT_TYPES(cls):
         return {
-            "required": {
-                "stage_info": (_STAGE_INFO_TYPE,),
-            },
             "optional": {
+                "stage_info": (_STAGE_INFO_TYPE,),
                 "image": ("IMAGE",),
                 "mask": ("MASK",),
                 "latent": ("LATENT",),
@@ -3134,7 +3640,11 @@ class flow_stage_collect_single:
     def IS_CHANGED(cls, **kwargs):
         return float("nan")
 
-    def accumulate(self, stage_info, image=None, mask=None, latent=None, video=None, audio=None, unique_id=None):
+    def accumulate(self, stage_info=None, image=None, mask=None, latent=None, video=None, audio=None, unique_id=None):
+        if stage_info is None:
+            values = (image, mask, latent, video, audio)
+            return tuple(value if value is not None else ExecutionBlocker(None) for value in values)
+
         run_id, stage_index, total = _stage_validate_info(stage_info)
         batch_dir = os.path.join(_stage_batch_dir(run_id), _stage_safe_name(f"single_{unique_id}"))
         os.makedirs(batch_dir, exist_ok=True)
@@ -3443,7 +3953,7 @@ class flow_forStart:
     RETURN_TYPES = ByPassTypeTuple(tuple(["FLOW_CL", "INT"] + [any_type] * (MAX_FLOW_NUM - 1)))
     RETURN_NAMES = ByPassTypeTuple(tuple(["flow", "index"] + ["value_%d" % i for i in range(1, MAX_FLOW_NUM)]))
     FUNCTION = "loop_start"
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
 
     def loop_start(self, total, **kwargs):
         graph = GraphBuilder()
@@ -3492,7 +4002,7 @@ class flow_forEnd:
     RETURN_TYPES = ByPassTypeTuple(tuple([any_type] * (MAX_FLOW_NUM - 1)))
     RETURN_NAMES = ByPassTypeTuple(tuple(["value_%d" % i for i in range(1, MAX_FLOW_NUM)]))
     FUNCTION = "loop_end"
-    CATEGORY = "Apt_Preset/flow"
+    CATEGORY = "Apt_Preset/flow/other"
 
     def loop_end(self, flow, batch_output=True, dynprompt=None, unique_id=None, **kwargs):
         
@@ -3793,11 +4303,6 @@ class flow_ChangeDetector:
 
     
 #endregion---------------loop team-------------
-
-
-
-
-
 
 
 

@@ -562,16 +562,6 @@
             "description": "ComfyUI utility nodes including SamplerPipeIn, SamplerPipeOut, and VAENames for workflow management. (Description by CC)"
         },
         {
-            "author": "pollockjj",
-            "title": "JAXTools",
-            "reference": "https://github.com/pollockjj/ComfyUI-JAXTools",
-            "files": [
-                "https://github.com/pollockjj/ComfyUI-JAXTools"
-            ],
-            "install_type": "git-clone",
-            "description": "JAX-accelerated image processing nodes for ComfyUI via dm_pix sealed worker isolation"
-        },
-        {
             "author": "ptmff",
             "title": "ComfyUI-Nodes8734",
             "reference": "https://github.com/ptmff/ComfyUI-Nodes8734",
@@ -1180,16 +1170,6 @@
             ],
             "install_type": "git-clone",
             "description": "Image selector node for ComfyUI.\nNOTE: The files in the repo are not organized."
-        },
-        {
-            "author": "saganaki22",
-            "title": "Kitten-TTS [NAME CONFLICT]",
-            "reference": "https://github.com/Saganaki22/ComfyUI-KittenTTS",
-            "files": [
-                "https://github.com/Saganaki22/ComfyUI-KittenTTS"
-            ],
-            "install_type": "git-clone",
-            "description": "ComfyUI custom node for KittenTTS - Ultra-lightweight text-to-speech (CUDA / CPU)"
         },
         {
             "author": "opj161",
@@ -1914,16 +1894,6 @@
             "description": "NODES: CLIPModelSelectionNode, CLIPVisionModelSelectionNode, CheckpointSelectionNode, DiffusionModelSelectionNode, FilteredCLIPModelsNode, ... (13 total)"
         },
         {
-            "author": "pollockjj",
-            "title": "ComfyUI-StabilityTest",
-            "reference": "https://github.com/pollockjj/ComfyUI-StabilityTest",
-            "files": [
-                "https://github.com/pollockjj/ComfyUI-StabilityTest"
-            ],
-            "install_type": "git-clone",
-            "description": "ComfyUI stability testing node. (Description by CC)"
-        },
-        {
             "author": "Tr1dae",
             "title": "ComfyUI-MobileSAM [WIP]",
             "reference": "https://github.com/Tr1dae/ComfyUI-MobileSAM",
@@ -1992,16 +1962,6 @@
             ],
             "install_type": "git-clone",
             "description": "Custom ComfyUI nodes for Google Gemini AI with text generation and image generation capabilities using the Python SDK."
-        },
-        {
-            "author": "Saganaki22",
-            "title": "ComfyUI-NovaSR",
-            "reference": "https://github.com/Saganaki22/ComfyUI-NovaSR",
-            "files": [
-                "https://github.com/Saganaki22/ComfyUI-NovaSR"
-            ],
-            "install_type": "git-clone",
-            "description": "ComfyUI node for NovaSR - Ultra-fast audio super resolution (3600x realtime, 50KB model)"
         },
         {
             "author": "GokuHiki",
@@ -2242,16 +2202,6 @@
             ],
             "install_type": "git-clone",
             "description": "NODES: GetSimilarity, LPIPSSimilarity"
-        },
-        {
-            "author": "StevenBaby",
-            "title": "comfyui-tools",
-            "reference": "https://github.com/StevenBaby/comfyui-tools",
-            "files": [
-                "https://github.com/StevenBaby/comfyui-tools"
-            ],
-            "install_type": "git-clone",
-            "description": "IntParameterNode: A Node contain 4 int parameters to quick switch input to other nodes."
         },
         {
             "author": "zhu798542746",
@@ -2932,16 +2882,6 @@
             ],
             "install_type": "git-clone",
             "description": "ComfyUI custom node providing customizable prompt generation capabilities. (Description by CC)"
-        },
-        {
-            "author": "JBKing514",
-            "title": "map_comfyui [WIP]",
-            "reference": "https://github.com/JBKing514/map_comfyui",
-            "files": [
-                "https://github.com/JBKing514/map_comfyui"
-            ],
-            "install_type": "git-clone",
-            "description": "A custom node implementing the Manifold Alignment Protocol (MAP) within ComfyUI, transforming diffusion sampling into a measurable and visualizable geometric process. (Description by CC)\nNOTE: The files in the repo are not organized."
         },
         {
             "author": "binarystatic",
@@ -5098,16 +5038,6 @@
             "description": "NODES: INT Constant, Simple Int Math Handle, Simple Json Array Handle, Simple Json Object Handle,  Select Image Size, Video Time & FPS, Video Frame Size, Wan22 Step Handle, Prompt Selector String, Prompt Example Node, Prompt Join or List, Prompt List, CRD Audio Length Node, ..."
         },
         {
-            "author": "Saganaki22",
-            "title": "ComfyUI YTDL Nodes [WIP]",
-            "reference": "https://github.com/Saganaki22/ComfyUI-ytdl_nodes",
-            "files": [
-                "https://github.com/Saganaki22/ComfyUI-ytdl_nodes"
-            ],
-            "install_type": "git-clone",
-            "description": "Custom ComfyUI nodes for downloading, converting, and previewing audio/video from YouTube and 1,000+ other platforms"
-        },
-        {
             "author": "comfyscript",
             "title": "ComfyUI-CloudClient",
             "reference": "https://github.com/comfyscript/ComfyUI-CloudClient",
@@ -5907,16 +5837,6 @@
             ],
             "install_type": "git-clone",
             "description": "This is a text translation node using a local SLM (Microsoft Phi-4) for ComfyUI."
-        },
-        {
-            "author": "DenRakEiw",
-            "title": "Denrakeiw Nodes [WIP]",
-            "reference": "https://github.com/DenRakEiw/DenRakEiw_Nodes",
-            "files": [
-                "https://github.com/DenRakEiw/DenRakEiw_Nodes"
-            ],
-            "install_type": "git-clone",
-            "description": "A custom nodepack for ComfyUI that provides utility nodes for image generation and manipulation.\nNOTE: The files in the repo are not organized."
         },
         {
             "author": "ahmedbana",
@@ -10835,16 +10755,6 @@
             ],
             "install_type": "git-clone",
             "description": "A powerful debugging tool designed to provide in-depth analysis of your environment and dependencies by exposing API endpoints. This tool allows you to inspect environment variables, pip packages, python info and dependency trees, making it easier to diagnose and resolve issues in your ComfyUI setup.[w/This tool may expose sensitive system information if used on a public server]"
-        },
-        {
-            "author": "denislov",
-            "title": "Comfyui_AutoSurvey",
-            "reference": "https://github.com/denislov/Comfyui_AutoSurvey",
-            "files": [
-                "https://github.com/denislov/Comfyui_AutoSurvey"
-            ],
-            "install_type": "git-clone",
-            "description": "Nodes:AutoSurvey, WriteOutline, WriteSection, ChatModel, QueryKnowledge, ManageDatabase, AddDoc2Knowledge"
         },
         {
             "author": "leoleelxh",
