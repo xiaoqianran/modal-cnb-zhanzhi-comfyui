@@ -1,8 +1,19 @@
 # ComfyUI-FeiHou-Toolbox
 
+## 花果山Ai灵境坊
+
+- Website / API service: [api.fei-hou.net](https://api.fei-hou.net/)
+- Windows client download: [GitHub releases](https://github.com/FX-FeiHou/FeiHou-Ai-Studio/releases/latest) · [Quark](https://pan.quark.cn/s/327190b9484c). First-time users should select `FeiHou-Ai-Studio-Win-1.1.4-full.zip`, not the update ZIP or GitHub's Source code archives. Existing users should use the client updater.
+
+### FeiHou API media nodes
+
+`FeiHou-API Images` and `FeiHou-API Video` use `https://api.fei-hou.net`. The separate `FeiHou-API Media` uses Easy-H3's gallery styles for 9 images, 3 videos and 3 audio files, including replacement, deletion, same-type drag reordering and audio trimming. Connect its media output to an API node, then type `@` in that node's prompt to choose a loaded reference. Gallery records and prompt references survive node duplication and workflow saves; the actual files remain in the ComfyUI input directory.
+
+The media socket also accepts native IMAGE batches, VIDEO or AUDIO; use the Media Loader for the visual reference menu. Provider limits still apply: choose a Seedance `-multi` model for mixed references; image models cannot consume audio/video. Clear the API key before sharing a workflow. The combined example is [FeiHou_API_Image&Video_example.json](workflows/FeiHou_API_Image%26Video_example.json). Its optional text display and group bypass controls require ComfyUI-Custom-Scripts and rgthree-comfy; the API nodes themselves do not depend on them.
+
 A ComfyUI custom node toolbox focused on multi-image references, SAM3/SAM3.1 person cutouts, SCAIL-2 mask workflows, image batch utilities, boolean routing, and group-based workflow switching.
 
-Current version: **v2.9.4**.
+Current version: **v2.10.3**.
 The latest version of **ManualRefCollage** is **v2.2.2**.
 
 <p align="right">
@@ -44,6 +55,15 @@ Node display titles follow the current ComfyUI language setting. This English RE
 | Fast Groups Bypass Switch | `FastGroupsBypassSwitch` | v2.0 |
 | Random Seed Noise | `RandomSeedNoise` | v2.8 |
 | Video Combine 🎥🅥🅗🅢 V2 | `VideoCombineV2` | v2.9 |
+| FeiHou-Video Preview | `FeiHouVideoPreview` | v2.9.5 |
+| FeiHou-API Images | `FeiHouApiImage` | v2.10.0 |
+| FeiHou-API Video | `FeiHouApiVideo` | v2.10.0 |
+| FeiHou-API Media | `FeiHouApiMediaLoader` | v2.10.0 |
+
+- **FeiHou-Video Preview**: preview generated or uploaded videos with looping playback and preview controls.
+- **FeiHou-API Images**: API image generation with model selection, resolution, aspect ratio and media references.
+- **FeiHou-API Video**: API video generation with model-specific parameters; outputs VIDEO, a video URL and a last-frame IMAGE.
+- **FeiHou-API Media**: standalone gallery for up to 9 images, 3 videos and 3 audio files, with linked prompt `@` references.
 
 ### Create SCAIL-2 Colored Mask V2
 
@@ -87,6 +107,29 @@ A group bypass and switch node that binds two ComfyUI Groups, switches which gro
 ---
 
 ## Changelog
+
+### v2.10.3
+
+- Restored the missing `frame_rate` widget when older `Video Combine 🎥🅥🅗🅢 V2` workflows are loaded by newer ComfyUI frontends.
+- Preserved the saved frame-rate value from both named and legacy positional widget data.
+
+### v2.10.2
+
+- Local video drops onto FeiHou-Video Preview now open a browser-only blob preview instead of importing embedded workflow metadata. No upload is performed. Drops outside the node retain ComfyUI's normal behavior; local media must be selected again after reloading the page.
+
+### v2.10.1
+
+- Fixed toolbox import failure on ComfyUI 0.33.1 by bundling API video preview handling instead of importing the newer core helper. The fallback uses the older save interface without `preset`.
+- Seven local tests passed; the user's cloud instance has not yet been tested.
+
+### v2.10.0
+
+- API Video now outputs a last-frame IMAGE, preferring the API tail image and falling back to the final decoded video frame. No extra PNG is saved. This output also works with Request last frame disabled.
+
+- Added FeiHou-API Images, FeiHou-API Video and the standalone FeiHou-API Media for api.fei-hou.net.
+- Model discovery, model parameters, 9-image/3-video/3-audio loading, native prompt @ references and audio trimming.
+- Easy-H3 gallery styles with balanced responsive spacing, hidden record serialization, lower-corner resizing and legacy workflow migration.
+- Updated English/Chinese i18n and example workflows.
 
 ### v2.9.4
 

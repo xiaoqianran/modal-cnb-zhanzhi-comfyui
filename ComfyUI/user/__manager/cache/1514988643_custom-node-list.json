@@ -15813,6 +15813,16 @@
             "title": "comfyui-image-resize-plus"
         },
         {
+            "author": "BetaDoggo",
+            "description": "Block-sparse (SLA) attention for MiniMax-H3 -- the inference path the lightx2v SLA turbo LoRA was distilled against.",
+            "files": [
+                "https://github.com/BetaDoggo/Comfyui-Sparse-SLA-Attention"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/BetaDoggo/Comfyui-Sparse-SLA-Attention",
+            "title": "Comfyui-Sparse-Attention"
+        },
+        {
             "author": "WX-NPS1598",
             "description": "A very useful automatic cropping tool! It can realize cropping, expansion and rotation functions in the form of a slider. ",
             "files": [
@@ -54807,16 +54817,6 @@
             "title": "ComfyUI Latent Presets"
         },
         {
-            "author": "TK22-26",
-            "description": "ComfyUI node that opens generated images in a fullscreen inspector overlay.",
-            "files": [
-                "https://github.com/TK22-26/comfyui-inspect-image-overlay"
-            ],
-            "install_type": "git-clone",
-            "reference": "https://github.com/TK22-26/comfyui-inspect-image-overlay",
-            "title": "Inspect Image Overlay"
-        },
-        {
             "author": "kevinsun",
             "description": "A streamlined latent size node for ComfyUI with resolution presets, scale control, and batch output.",
             "files": [
@@ -60518,6 +60518,16 @@
             "title": "ComfyUI MiniMax H3 Hybrid"
         },
         {
+            "author": "ANe5s",
+            "description": "ComfyUI nodes for generating Krea 2 prompts, applying moodboard styles and prompt harnesses, and selecting Krea 2 Turbo resolutions.",
+            "files": [
+                "https://github.com/ANe5s/ComfyUI-Krea2-Harness"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/ANe5s/ComfyUI-Krea2-Harness",
+            "title": "Krea2 Harness"
+        },
+        {
             "author": "wcde",
             "description": "A standalone ComfyUI node that bridges Ideogram 4 model latents to the connected Flux.2 VAE normalization.",
             "files": [
@@ -61178,6 +61188,16 @@
             "title": "MiniMax H3 Edit"
         },
         {
+            "author": "ethanfel",
+            "description": "Timed and untimed Qwen-only image and video references for ComfyUI's core MiniMax H3 Ref2VA node.",
+            "files": [
+                "https://github.com/ethanfel/ComfyUI-MiniMaxH3-Timed-References"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/ethanfel/ComfyUI-MiniMaxH3-Timed-References",
+            "title": "MiniMax H3 Timed References"
+        },
+        {
             "author": "pixelpainter",
             "description": "A full prompt-writing studio in a single node: AI prompt enhance, variations, aesthetic inverter, and natural-language instruct editing driven by your local Ollama models. Includes style targeting with sliders, image to prompt and video to prompt captioning, a built-in browser for Civitai and Genur.art prompts and workflows, favorites and snippets, and wireless prompt injection into any text widget with no wires.",
             "files": [
@@ -61762,6 +61782,26 @@
             "install_type": "git-clone",
             "reference": "https://github.com/zzczzcx1/ComfyUI-BatchAnimeTimm",
             "title": "ComfyUI-BatchAnimeTimm"
+        },
+        {
+            "author": "zjkhurry",
+            "description": "TRELLIS.2 image-to-3D generation for ComfyUI, running natively on Apple Silicon (MPS/Metal).",
+            "files": [
+                "https://github.com/zjkhurry/ComfyUI-TRELLIS.2-mac"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/zjkhurry/ComfyUI-TRELLIS.2-mac",
+            "title": "ComfyUI TRELLIS.2 mac"
+        },
+        {
+            "author": "vctrprzvfx",
+            "description": "Build VFX-compliant filename prefixes (SHOW_SEQ_SHOT_task_ven_v###) for Save Image and video saver nodes.",
+            "files": [
+                "https://github.com/vctrprzvfx/ComfyUI-VFX-Naming"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/vctrprzvfx/ComfyUI-VFX-Naming",
+            "title": "VFX Naming Convention"
         },
         {
             "author": "ntdviet",

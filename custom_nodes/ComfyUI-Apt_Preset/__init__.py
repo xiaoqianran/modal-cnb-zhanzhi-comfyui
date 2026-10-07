@@ -144,8 +144,8 @@ NODE_CLASS_MAPPINGS= {
 #---------control tool------------------------------------------#
 
 
-"pre_ZImageInpaint_patch": pre_ZImageInpaint_patch,
-"pre_qwen_controlnet": pre_qwen_controlnet,    
+"model_patch_controlnet": model_patch_controlnet,
+#"pre_qwen_controlnet": pre_qwen_controlnet,    
 
 
 "pre_controlnet": pre_controlnet,      

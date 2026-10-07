@@ -144,6 +144,19 @@ class ImageCaption {
             }
         }
 
+        // --- 补充检测: Vue Node 2.0 DOM 检测 ---
+        if (!result.hasValidImage && nodeMountService.isVueNodesMode()) {
+            const nodeContainer = document.querySelector(`[data-node-id="${node.id}"]`);
+            if (nodeContainer) {
+                const imgElement = nodeContainer.querySelector('img');
+                if (imgElement && imgElement.src && !imgElement.src.includes('error')) {
+                    // logger.debugSample(() => `[图像小助手] 通过 DOM 检测到图像 | ID: ${node.id}`);
+                    result.hasValidImage = true;
+                    result.isValid = true;
+                }
+            }
+        }
+
         return result;
     }
 
@@ -298,9 +311,7 @@ class ImageCaption {
         // 检查节点是否已被删除（只有在删除时才清理实例）
         if (!app.canvas || !app.canvas.graph || !app.canvas.graph._nodes_by_id[node.id]) {
             // 节点已被删除，清理实例
-            if (ImageCaption.hasInstance(node.id)) {
-                this.cleanup(node.id);
-            }
+            this.cleanup(node.id);
             return;
         }
 
@@ -320,7 +331,14 @@ class ImageCaption {
 
         // 验证现有实例是否有效
         const existingInstance = ImageCaption.getInstance(node.id);
-        if (existingInstance && existingInstance.element && document.body.contains(existingInstance.element)) {
+        const isElementValid = existingInstance && existingInstance.element && document.body.contains(existingInstance.element);
+        const isVueMode = nodeMountService.isVueNodesMode();
+
+        // 在 Vue 模式下，element 可能挂载在节点容器内而不是 body
+        const isVueElementValid = isVueMode && existingInstance && existingInstance.element &&
+            document.querySelector(`[data-node-id="${node.id}"]`)?.contains(existingInstance.element);
+
+        if (existingInstance && (isElementValid || isVueElementValid)) {
             // 实例有效，更新其显示状态（内部会处理图片检测）
             this.updateAssistantVisibility(existingInstance);
         } else {
@@ -427,9 +445,16 @@ class ImageCaption {
 
         try {
             // 获取位置设置
-            const locationSetting = app.ui.settings.getSettingValue(
+            let locationSetting = app.ui.settings.getSettingValue(
                 "ImageCaption.Location"
             );
+
+            // 根据不同的渲染模式自动分配互不冲突的最佳位置
+            if (nodeMountService.isVueNodesMode()) {
+                locationSetting = ANCHOR_POSITION.BOTTOM_RIGHT_H; // Vue模式右下角避开ID
+            } else {
+                locationSetting = ANCHOR_POSITION.BOTTOM_LEFT_H; // LiteGraph模式保持左下角
+            }
 
             // Create AssistantContainer instance
             const container = new AssistantContainer({
@@ -1678,6 +1703,23 @@ class ImageCaption {
             return;
         }
 
+        // 检查节点是否已被删除
+        if (!node) {
+            this.cleanup(assistant.nodeId);
+            return;
+        }
+
+        // --- 修复：LiteGraph 子图“幽灵”图标问题 ---
+        // 检查节点所属的 graph 是否为当前激活的 graph
+        // 如果当前处在子图中，而节点在父图，则应隐藏
+        // 注意：app.canvas.graph 是当前视图显示的 graph
+        if (app.canvas && app.canvas.graph && node.graph && node.graph !== app.canvas.graph) {
+            // 节点不在当前显示的 graph 中，强制隐藏
+            // logger.debugSample(() => `[图像小助手] 节点不在当前视图中，强制隐藏 | ID: ${assistant.nodeId}`);
+            this.hideAssistantUI(assistant);
+            return;
+        }
+
         // 使用统一的状态检测方法
         const nodeState = this._checkNodeAndCanvasState(assistant.node);
 
@@ -1712,17 +1754,30 @@ class ImageCaption {
             // 如果节点是支持的类型但暂时没图，启动一个内部轻量级探测器
             if (!assistant._imageDetectionTimer) {
                 const detectImage = () => {
-                    if (!assistant.node) return;
+                    // 检查实例是否已被清理或节点是否已不再图中
+                    if (assistant.isDestroyed || !assistant.node) {
+                        assistant._imageDetectionTimer = null;
+                        return;
+                    }
+
                     const currentState = this._checkNodeAndCanvasState(assistant.node);
                     if (currentState.hasValidImage) {
                         logger.debug(() => `[图像小助手] 异步图像加载成功 | ID: ${assistant.nodeId}`);
                         assistant._imageDetectionTimer = null;
-                        this.updateAssistantVisibility(assistant);
-                    } else if (document.body.contains(assistant.element)) {
+
+                        // 额外检查：如果 element 已经丢失（可能是 Vue 重新渲染），重新初始化
+                        const isVueMode = nodeMountService.isVueNodesMode();
+                        const nodeContainer = isVueMode ? document.querySelector(`[data-node-id="${assistant.nodeId}"]`) : null;
+                        const isElementPresent = isVueMode ? nodeContainer?.contains(assistant.element) : document.body.contains(assistant.element);
+
+                        if (!assistant.element || !isElementPresent) {
+                            this.checkAndSetupNode(assistant.node);
+                        } else {
+                            this.updateAssistantVisibility(assistant);
+                        }
+                    } else {
                         // 继续等待，每秒检测一次 (开销极低)
                         assistant._imageDetectionTimer = setTimeout(detectImage, 1000);
-                    } else {
-                        assistant._imageDetectionTimer = null;
                     }
                 };
                 assistant._imageDetectionTimer = setTimeout(detectImage, 1000);
@@ -1860,11 +1915,11 @@ class ImageCaption {
 
         const { container: nodeContainer } = containerInfo;
 
-        // Vue模式：使用绝对定位，挂载到节点容器内
+        // Vue模式：使用绝对定位，挂载到节点容器内（右侧对齐，无需上移避让由于左侧的ID）
         containerDiv.style.position = 'absolute';
-        containerDiv.style.left = '6px';
+        containerDiv.style.right = '6px';
         containerDiv.style.bottom = '6px';
-        containerDiv.style.right = 'auto';
+        containerDiv.style.left = 'auto';
         containerDiv.style.top = 'auto';
         containerDiv.style.zIndex = '10';
 
@@ -2301,11 +2356,17 @@ class ImageCaption {
                 }
             } else {
                 // 清理特定节点实例
-                const assistant = ImageCaption.getInstance(nodeId);
-                if (assistant) {
-                    this._cleanupSingleInstance(assistant);
-                    ImageCaption.instances.delete(String(nodeId));
-                }
+                const searchId = String(nodeId);
+                const keysToDelete = Array.from(ImageCaption.instances.keys())
+                    .filter(key => key === searchId || key.startsWith(`${searchId}_`));
+
+                keysToDelete.forEach(key => {
+                    const assistant = ImageCaption.instances.get(key);
+                    if (assistant) {
+                        this._cleanupSingleInstance(assistant);
+                        ImageCaption.instances.delete(key);
+                    }
+                });
             }
 
             return;
@@ -2325,15 +2386,21 @@ class ImageCaption {
                     }
                 }
             } else {
-                // 清理指定实例
-                const assistant = ImageCaption.getInstance(nodeId);
-                if (assistant) {
-                    this._cleanupSingleInstance(assistant);
-                    ImageCaption.instances.delete(String(nodeId));
-                    if (!silent) {
-                        logger.log(`清理图像小助手实例 | ID: ${nodeId}`);
+                // 清理指定节点的所有实例
+                const searchId = String(nodeId);
+                const keysToDelete = Array.from(ImageCaption.instances.keys())
+                    .filter(key => key === searchId || key.startsWith(`${searchId}_`));
+
+                keysToDelete.forEach(key => {
+                    const assistant = ImageCaption.instances.get(key);
+                    if (assistant) {
+                        this._cleanupSingleInstance(assistant);
+                        ImageCaption.instances.delete(key);
+                        if (!silent) {
+                            logger.log(`清理图像小助手实例 | 键: ${key}`);
+                        }
                     }
-                }
+                });
             }
         } catch (error) {
             logger.error(`清理图像小助手实例失败 | ${error.message}`);

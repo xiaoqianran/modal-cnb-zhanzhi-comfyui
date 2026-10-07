@@ -59,10 +59,7 @@ class View_video_compare:
             "required": {
                 "video_a": ("VIDEO",),
                 "video_b": ("VIDEO",),
-                "direction": (["左右", "上下"],),
-                "split_position": ("FLOAT", {"default": 50.0, "min": 0.0, "max": 100.0, "step": 1.0}),
-                "autoplay": ("BOOLEAN", {"default": False}),
-                "loop": ("BOOLEAN", {"default": True}),
+                "direction": (["左右", "上下", "双屏"],),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -72,7 +69,7 @@ class View_video_compare:
     CATEGORY = "Apt_Preset/PreView"
     OUTPUT_NODE = True
 
-    def compare(self, video_a, video_b, direction, split_position, autoplay, loop, unique_id):
+    def compare(self, video_a, video_b, direction, unique_id):
         node_id = re.sub(r"[^A-Za-z0-9_-]", "_", str(unique_id))
         return {
             "ui": {
@@ -80,9 +77,9 @@ class View_video_compare:
                     "video_a": _preview_video(video_a, node_id, "a"),
                     "video_b": _preview_video(video_b, node_id, "b"),
                     "direction": direction,
-                    "split_position": split_position,
-                    "autoplay": autoplay,
-                    "loop": loop,
+                    "split_position": 50.0,
+                    "autoplay": True,
+                    "loop": True,
                 }]
             }
         }
@@ -93,11 +90,13 @@ class View_image_compare:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image_a": ("IMAGE",),
-                "image_b": ("IMAGE",),
-                "direction": (["左右", "上下"],),
+                "direction": (["左右", "上下", "左右图平铺"],),
                 "split_position": ("FLOAT", {"default": 50.0, "min": 0.0, "max": 100.0, "step": 1.0}),
                 "opacity": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+            },
+            "optional": {
+                "image_a": ("IMAGE",),
+                "image_b": ("IMAGE",),
             },
         }
 
@@ -106,10 +105,10 @@ class View_image_compare:
     CATEGORY = "Apt_Preset/PreView"
     OUTPUT_NODE = True
 
-    def compare(self, image_a, image_b, direction, split_position, opacity):
+    def compare(self, direction, split_position, opacity, image_a=None, image_b=None):
         preview = PreviewImage()
-        image_a_info = preview.save_images(image_a[:1])["ui"]["images"][0]
-        image_b_info = preview.save_images(image_b[:1])["ui"]["images"][0]
+        image_a_info = preview.save_images(image_a[:1])["ui"]["images"][0] if image_a is not None else None
+        image_b_info = preview.save_images(image_b[:1])["ui"]["images"][0] if image_b is not None else None
         return {
             "ui": {
                 "image_compare": [{

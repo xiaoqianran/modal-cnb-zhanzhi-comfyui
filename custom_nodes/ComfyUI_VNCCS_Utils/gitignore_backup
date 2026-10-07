@@ -206,3 +206,27 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .DS_Store
+
+# img2threejs Studio runtime data (fallback paths outside ComfyUI)
+/output/vnccs_img2threejs/
+/models/LLM/img2threejs/
+
+# Runtime shallow clones used to accelerate external Pose Library sync.
+/PoseLibrary/.repository_git_cache/
+
+.worktrees/
+
+# Playwright E2E harness (tests/e2e): dependencies, run output and local evidence.
+tests/e2e/node_modules/
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+tests/e2e/evidence/
+
+# Internal planning/progress artifacts (roadmap and trackers live in GitHub Issues).
+/.superpowers/
+/docs/plans/
+/docs/superpowers/
+/docs/VNCCS_3D_FACTORY_IMPROVEMENT_PLAN.md
+/docs/UNICANVAS_REMOVE_BG_KEEP.md
+
+PoseLibrary

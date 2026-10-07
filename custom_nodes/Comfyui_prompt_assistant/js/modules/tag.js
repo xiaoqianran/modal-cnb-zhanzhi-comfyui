@@ -154,6 +154,7 @@ class TagManager {
     static searchTimeout = null;    // 搜索延迟定时器
     static currentNodeId = null;
     static currentInputId = null;
+    static currentWidgetKey = null;
     static activeTooltip = null;
     static usedTags = new Map();    // 存储已使用标签的Map: key为标签值，value为对应的DOM元素
     static currentCsvFile = null;   // 当前选中的CSV文件
@@ -180,8 +181,7 @@ class TagManager {
      * 检查标签是否已插入到输入框中
      */
     static isTagUsed(tagValue, nodeId, inputId) {
-        const mappingKey = `${nodeId}_${inputId}`;
-        const mapping = window.PromptAssistantInputWidgetMap?.[mappingKey];
+        const mapping = UIToolkit._findMapping(nodeId, inputId, this.currentWidgetKey);
         if (!mapping || !mapping.inputEl) return false;
 
         // 检查输入框内容是否包含标签的任一格式
@@ -208,8 +208,7 @@ class TagManager {
         e.stopPropagation();
 
         // 获取输入框信息
-        const mappingKey = `${this.currentNodeId}_${this.currentInputId}`;
-        const mapping = window.PromptAssistantInputWidgetMap?.[mappingKey];
+        const mapping = UIToolkit._findMapping(this.currentNodeId, this.currentInputId, this.currentWidgetKey);
         if (!mapping || !mapping.inputEl) return;
 
         const inputEl = mapping.inputEl;
@@ -288,7 +287,8 @@ class TagManager {
                 // 插入到光标位置
                 UIToolkit.insertAtCursor(insertFormat, this.currentNodeId, this.currentInputId, {
                     highlight: true,
-                    keepFocus: true
+                    keepFocus: true,
+                    widgetKey: this.currentWidgetKey
                 });
 
                 // 更新光标位置到插入内容之后
@@ -323,8 +323,7 @@ class TagManager {
      * 从输入框中移除标签
      */
     static removeTag(tagValue, nodeId, inputId, keepFocus = true) {
-        const mappingKey = `${nodeId}_${inputId}`;
-        const mapping = window.PromptAssistantInputWidgetMap?.[mappingKey];
+        const mapping = UIToolkit._findMapping(nodeId, inputId, this.currentWidgetKey);
 
         if (mapping && mapping.inputEl) {
             const inputEl = mapping.inputEl;
@@ -3258,8 +3257,7 @@ class TagManager {
         const startTime = performance.now();
 
         // 获取输入框值
-        const mappingKey = `${nodeId}_${inputId}`;
-        const mapping = window.PromptAssistantInputWidgetMap?.[mappingKey];
+        const mapping = UIToolkit._findMapping(nodeId, inputId, (nodeId === this.currentNodeId && inputId === this.currentInputId) ? this.currentWidgetKey : null);
         if (!mapping || !mapping.inputEl) return { cacheCount: 0, matchedCount: 0 };
 
         const inputValue = mapping.inputEl.value;
@@ -3697,6 +3695,7 @@ class TagManager {
         // 保存当前节点和输入框ID
         this.currentNodeId = nodeId;
         this.currentInputId = inputId;
+        this.currentWidgetKey = options.widgetKey || null;
         this.onTagSelectCallback = onTagSelect;
 
         // 清理现有事件监听
@@ -4947,8 +4946,7 @@ class TagManager {
      * 更新所有标签的状态
      */
     static updateAllTagsState(nodeId, inputId) {
-        const mappingKey = `${nodeId}_${inputId}`;
-        const mapping = window.PromptAssistantInputWidgetMap?.[mappingKey];
+        const mapping = UIToolkit._findMapping(nodeId, inputId, (nodeId === this.currentNodeId && inputId === this.currentInputId) ? this.currentWidgetKey : null);
         if (!mapping || !mapping.inputEl) return;
 
         const inputValue = mapping.inputEl.value;
@@ -5056,8 +5054,7 @@ class TagManager {
         const usedTags = new Map();
 
         // 从输入框中获取标签
-        const mappingKey = `${this.currentNodeId}_${this.currentInputId}`;
-        const mapping = window.PromptAssistantInputWidgetMap?.[mappingKey];
+        const mapping = UIToolkit._findMapping(this.currentNodeId, this.currentInputId, this.currentWidgetKey);
 
         if (mapping && mapping.inputEl) {
             // 从标签缓存中获取所有标签

@@ -1,7 +1,101 @@
 {
+  "FeiHouEasyH3FaceRefine": {
+    "display_name": "FeiHou Easy H3 Face Refine (Experimental)",
+    "inputs": {
+      "images": {
+        "name": "Images"
+      },
+      "model": {
+        "name": "Model"
+      },
+      "h3_context": {
+        "name": "H3 context"
+      },
+      "enabled": {
+        "name": "Enabled"
+      },
+      "detector": {
+        "name": "Face detector"
+      },
+      "target": {
+        "name": "Target"
+      },
+      "denoise": {
+        "name": "Denoise"
+      },
+      "steps": {
+        "name": "Steps"
+      },
+      "seed": {
+        "name": "Seed"
+      },
+      "advanced": {
+        "name": "Advanced"
+      },
+      "canvas_size": {
+        "name": "Canvas"
+      },
+      "confidence": {
+        "name": "Confidence"
+      },
+      "crop_factor": {
+        "name": "Crop factor"
+      },
+      "chunk_frames": {
+        "name": "Chunk frames"
+      },
+      "sampler_name": {
+        "name": "Sampler"
+      },
+      "scheduler": {
+        "name": "Scheduler"
+      },
+      "prompt": {
+        "name": "Refinement prompt"
+      },
+      "force_offload": {
+        "name": "Force offload"
+      },
+      "audio_lock": {
+        "name": "Original audio conditioning (experimental)"
+      },
+      "clean_second_model": {
+        "name": "Use clean second-pass model"
+      },
+      "face_mode": {
+        "name": "Face mode"
+      },
+      "max_faces": {
+        "name": "Maximum faces"
+      },
+      "reference_face": {
+        "name": "Reference face"
+      },
+      "reference_faces": {
+        "name": "Reference face batch"
+      },
+      "audio": {
+        "name": "Original audio"
+      }
+    }
+  },
+  "FeiHouEasyH3Resolution": {"display_name":"FeiHou Easy H3 Resolution","inputs":{"resolution":{"name":"Resolution"},"aspect_ratio":{"name":"Aspect ratio"},"width":{"name":"Custom width"},"height":{"name":"Custom height"}}},
+  "FeiHouEasyH3ProductionPackLoader": {
+    "display_name": "FeiHou Easy H3 Production Pack Loader",
+    "description": "Import a folder or ZIP, read the final Shotlist, and supply one shot per queued task. Enable increment after generation to advance the shot index.",
+    "inputs": {
+      "source": { "name": "Package folder / ZIP path" },
+      "shotlist_file": { "name": "Shotlist path (optional)" },
+      "audio_file": { "name": "Soundtrack path (optional)" },
+      "shot_index": { "name": "Shot index" },
+      "prompt_language": { "name": "Prompt language" },
+      "package_id": { "name": "Prepared package ID" }
+    },
+    "outputs": { "0": { "name": "Production shot" } }
+  },
   "FeiHouEasyH3LoraStack": {
-    "display_name": "Load LoRA (Bypass, Model Only) (Debug)",
-    "description": "Dynamic LoRA stack used by the FeiHou Easy H3 Loader.",
+    "display_name": "Load LoRA (Model Only)",
+    "description": "Dynamic LoRA stack used by the FeiHou Easy H3 Loader; each LoRA can independently use bypass or regular loading.",
     "inputs": {
       "optional_lora_stack": { "name": "Optional LoRA stack" }
     },
@@ -30,7 +124,7 @@
   },
   "FeiHouEasyH3RemixLoader": {
     "display_name": "FeiHou Easy H3 Remix Loader",
-    "description": "Load one MiniMax H3 Remix transformer shared by FL2VA and REF2VA, with independent first- and second-pass LoRA stacks.",
+    "description": "Load one MiniMax H3 Remix transformer shared by FL2VA and REF2VA, with independent first- and second-pass LoRA stacks; when no second-pass model is selected, the second-pass output uses the main model with the second-pass LoRA.",
     "inputs": {
       "remix_model": { "name": "Remix main model" },
       "text_encoder": { "name": "Text encoder" },
@@ -63,6 +157,7 @@
     "description": "MiniMax H3 generation with an embedded 9-image, 3-video, and 3-audio media gallery.",
     "inputs": {
       "h3_bundle": { "name": "H3 model bundle" },
+      "production_shot": { "name": "Production shot" },
       "mode": {
         "name": "Mode",
         "options": {
@@ -75,7 +170,11 @@
       "aspect_ratio": { "name": "Aspect ratio" },
       "width": { "name": "Width" },
       "height": { "name": "Height" },
-      "seconds": { "name": "Seconds" },
+      "audio_duration_auto": {
+      "name": "Automatic duration alignment",
+      "options": {"off": "Off", "audio": "Reference audio", "video": "Reference video"}
+    },
+    "seconds": { "name": "Seconds" },
       "advanced": { "name": "Advanced options" },
       "fps": { "name": "Frame rate (FPS)" },
       "keyframe_role": {

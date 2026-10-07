@@ -4,19 +4,18 @@ VLM服务 - 重构版本
 继承OpenAICompatibleService以复用通用逻辑
 """
 
-import json
 import time
 import asyncio
 from typing import Optional, Dict, Any, List, Callable
-import httpx
-from .openai_base import OpenAICompatibleService, filter_thinking_content
+from .openai_base import OpenAICompatibleService
+from .thinking_filter import postprocess_model_output
 from ..utils.common import (
     format_api_error, preprocess_image, check_multi_image_support, ProgressBar,
     log_complete, log_error,
     PREFIX, PROCESS_PREFIX, WARN_PREFIX, ERROR_PREFIX, format_elapsed_time,
     TASK_IMAGE_CAPTION, TASK_VIDEO_CAPTION
 )
-from .thinking_control import build_thinking_suppression
+from .thinking_control import build_thinking_suppression, should_append_no_thinking_instruction
 
 
 class VisionService(OpenAICompatibleService):
@@ -62,6 +61,7 @@ class VisionService(OpenAICompatibleService):
         auto_unload: bool = True,
         enable_advanced_params: bool = False,
         thinking_extra: Optional[Dict[str, Any]] = None,
+        filter_thinking_output: bool = True,
         cancel_event: Optional[Any] = None,
         task_type: str = None,
         source: str = None
@@ -186,97 +186,25 @@ class VisionService(OpenAICompatibleService):
             
             start_time = time.perf_counter()
             
-            # 获取持久化客户端以支持连接复用
-            from .core import HTTPClientPool
-            client = HTTPClientPool.get_client(
-                provider="Ollama(Vision)",
-                base_url=native_base,
-                timeout=final_read_timeout
-            )
-            
-            full_content = ""
-            
-            async def _request_core():
-                nonlocal full_content
-                async with client.stream('POST', f"{native_base}/api/chat", json=payload, follow_redirects=True) as resp:
-                    if resp.status_code != 200:
-                        error_text = await resp.aread()
-                        pbar.error(f"Ollama API 错误: {resp.status_code}")
-                        try:
-                            error_data = json.loads(error_text)
-                            return {"success": False, "error": error_data.get('error', f'HTTP {resp.status_code}')}
-                        except:
-                            return {"success": False, "error": f'HTTP {resp.status_code}'}
-                    
-                    async for line in resp.aiter_lines():
-                        if not line: continue
-                        try:
-                            chunk_data = json.loads(line)
-                            message = chunk_data.get('message')
-                            if message and isinstance(message, dict):
-                                content = message.get('content', '') or ''
-                                if not content.strip():
-                                    thinking = message.get('thinking', '') or message.get('reasoning', '')
-                                    if thinking and len(thinking.strip()) > 5:
-                                        content = thinking
-                                
-                                if content and content.strip():
-                                    full_content += content
-                                    pbar.set_generating(len(full_content))
-                                    pbar.update(len(full_content))
-                                    if stream_callback: stream_callback(content)
-                            
-                            if chunk_data.get('done', False):
-                                pbar.done(char_count=len(full_content), elapsed_ms=int((time.perf_counter() - start_time) * 1000))
-                                break
-                        except: continue
-                return {"success": True, "content": full_content.strip()}
-
-            # 定义监视器逻辑
-            async def _monitor_interrupts(target_task):
-                while not target_task.done():
-                    is_interrupted = False
-                    if cancel_event is not None and cancel_event.is_set():
-                        is_interrupted = True
-                    else:
-                        try:
-                            from server import PromptServer
-                            if hasattr(PromptServer.instance, 'execution_interrupted') and PromptServer.instance.execution_interrupted:
-                                is_interrupted = True
-                        except: pass
-                    
-                    if is_interrupted:
-                        target_task.cancel()
-                        return True
-                    await asyncio.sleep(0.1)
-                return False
-
-            # 并发执行
-            req_task = asyncio.create_task(_request_core())
-            monitor_task = asyncio.create_task(_monitor_interrupts(req_task))
-            
             try:
-                result = await req_task
-                # 兜底处理：确保失败结果时进度条已停止
-                if not result.get("success") and not getattr(pbar, '_closed', False):
-                    pbar.error(result.get("error", "未知错误"))
-                return result
-            except Exception as req_err:
-                if 'pbar' in locals() and pbar:
-                    pbar.error(f"Ollama(Vision) 请求异常: {req_err}")
-                return {"success": False, "error": f"Ollama(Vision) 请求异常: {req_err}"}
-            except asyncio.CancelledError:
-
-                # 关键修复：确保进度条在监视器取消时被正确清理
-                pbar.cancel(f"{WARN_PREFIX} 任务被中断 | 服务:Ollama(Vision)")
-                return {"success": False, "error": "任务被中断", "interrupted": True}
+                from .ollama_native import OllamaNativeAdapter
+                return await OllamaNativeAdapter.stream_chat(
+                    model=model,
+                    native_base=native_base,
+                    payload=payload,
+                    timeout=final_read_timeout,
+                    pbar=pbar,
+                    stream_callback=stream_callback,
+                    cancel_event=cancel_event,
+                    provider_label="Ollama(Vision)",
+                    include_reasoning=not filter_thinking_output,
+                )
             finally:
-                if not monitor_task.done(): monitor_task.cancel()
-                # 显存释放保证：视觉节点对显存更敏感，必须确保在所有退出路径执行
                 try:
                     from .llm import LLMService
                     await LLMService._unload_ollama_model(model, {"base_url": native_base, "auto_unload": auto_unload})
-                except: pass
+                except:
+                    pass
         
         # 关键修复：单独捕获外层 CancelledError，确保 pbar 被正确停止
         except asyncio.CancelledError:
@@ -358,19 +286,29 @@ class VisionService(OpenAICompatibleService):
 
             # 获取系统提示词
             system_prompt = prompt_content or "请详细描述这张图片的内容，包括主要对象、场景、颜色、氛围等。"
+            provider_type = service.get('type', provider) if service else provider
+            if should_append_no_thinking_instruction(provider_type, model, disable_thinking_enabled):
+                system_prompt += " 请直接输出结果，不要包含任何思考过程、推理过程或 <think> 标签。"
 
-            # Ollama走原生API (通过服务类型判断)
+            # Ollama走原生API：/v1 地址保持 OpenAI-compatible 路径
+            is_native_ollama = False
             if service and service.get('type') == 'ollama':
+                _url = base_url.rstrip('/') if base_url else ''
+                if not _url.endswith('/v1') and '/v1/' not in _url:
+                    is_native_ollama = True
+
+            if is_native_ollama:
                 # 读取 Ollama 服务的配置
                 enable_advanced_params = service.get('enable_advanced_params', False)
                 filter_thinking_output = service.get('filter_thinking_output', True)
-                _ollama_thinking_extra = build_thinking_suppression(provider, model) if disable_thinking_enabled else None
+                effective_filter_thinking_output = filter_thinking_output or disable_thinking_enabled
+                _ollama_thinking_extra = build_thinking_suppression(service.get('type', provider), model) if disable_thinking_enabled else None
                 
                 # 提取纯base64
                 b64 = processed_image.split(',')[1] if ',' in processed_image else processed_image
                 
                 # 提前计算auto_unload配置
-                native_base = base_url[:-3] if base_url.endswith('/v1') else (base_url or 'http://localhost:11434')
+                native_base = base_url[:-3] if base_url and base_url.endswith('/v1') else (base_url or 'http://localhost:11434')
                 native_base = native_base.rstrip('/')
                 _cfg = {
                     'auto_unload': custom_provider_config.get('auto_unload', True) if custom_provider_config else config.get('auto_unload', True),
@@ -392,18 +330,19 @@ class VisionService(OpenAICompatibleService):
                     auto_unload=auto_unload,
                     enable_advanced_params=enable_advanced_params,
                     thinking_extra=_ollama_thinking_extra,
+                    filter_thinking_output=effective_filter_thinking_output,
                     cancel_event=cancel_event,
                     task_type=task_type or TASK_IMAGE_CAPTION,
                     source=source
                 )
                 
                 if result["success"]:
-                    # 注：卸载已在 _call_ollama_native_vision 的 finally 块中处理
-                    
-                    # 应用思维链输出过滤
-                    content = result["content"]
-                    if filter_thinking_output:
-                        content = filter_thinking_content(content)
+                    success, content = postprocess_model_output(
+                        result["content"],
+                        filter_thinking_output=effective_filter_thinking_output,
+                    )
+                    if not success:
+                        return {"success": False, "error": "API returned empty result after filtering reasoning content (Model only output thinking process)"}
                     
                     return {
                         "success": True,
@@ -417,15 +356,19 @@ class VisionService(OpenAICompatibleService):
                 base_url = VisionService.get_provider_base_url(provider, custom_provider_config if custom_provider else None)
             
             # 构建消息（图像格式）
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": system_prompt},
-                        {"type": "image_url", "image_url": {"url": processed_image}}
-                    ]
-                }
-            ]
+            # 关键修复(BUG-01): system_prompt 独立作为 system role 发送
+            # Zhipu GLM-4V 等严格服务商要求 system/user role 严格分离
+            # user content array 仅包含简短的任务触发词和图片 URL
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Please analyze this image."},
+                    {"type": "image_url", "image_url": {"url": processed_image}}
+                ]
+            })
             
             # 检查disable_thinking、enable_advanced_params和filter_thinking_output配置
             from ..config_manager import config_manager
@@ -433,6 +376,7 @@ class VisionService(OpenAICompatibleService):
             disable_thinking_enabled = service.get('disable_thinking', True) if service else True
             enable_advanced_params = service.get('enable_advanced_params', False) if service else False
             filter_thinking_output = service.get('filter_thinking_output', True) if service else True
+            effective_filter_thinking_output = filter_thinking_output or disable_thinking_enabled
             thinking_extra = build_thinking_suppression(provider, model) if disable_thinking_enabled else None
             
             result = await VisionService._http_request_chat_completions(
@@ -450,14 +394,17 @@ class VisionService(OpenAICompatibleService):
                 provider_display_name=provider_display_name,
                 cancel_event=cancel_event,
                 task_type=task_type or TASK_IMAGE_CAPTION,
-                source=source
+                source=source,
+                filter_thinking_output=effective_filter_thinking_output
             )
 
             if result["success"]:
-                # 根据配置决定是否应用思维链输出过滤
-                content = result["content"]
-                if filter_thinking_output:
-                    content = filter_thinking_content(content)
+                success, content = postprocess_model_output(
+                    result["content"],
+                    filter_thinking_output=effective_filter_thinking_output,
+                )
+                if not success:
+                    return {"success": False, "error": "API returned empty result after filtering reasoning content (Model only output thinking process)"}
                 return {
                     "success": True,
                     "data": {"description": content}
@@ -531,14 +478,11 @@ class VisionService(OpenAICompatibleService):
             thinking_disabled = _thinking_check is not None
             model_display = format_model_with_thinking(model, thinking_disabled)
 
-            # 检查是否支持多图
-            supports_multi, max_images = check_multi_image_support(provider, model)
-            
-            if not supports_multi:
-                return {"success": False, "error": f"模型 {model} 不支持多图像分析"}
-            
+            # 智能推断上限（节点层已做截断，此处作为服务层最后防线，静默处理）
+            from ..utils.common import get_model_max_images
+            max_images = get_model_max_images(model)
             if len(images_data) > max_images:
-                return {"success": False, "error": f"图像数量 {len(images_data)} 超过模型限制 {max_images}"}
+                images_data = images_data[:max_images]
 
             # 预处理所有图像（智能压缩：根据图像数量动态调整质量）
             img_count = len(images_data)
@@ -556,16 +500,28 @@ class VisionService(OpenAICompatibleService):
 
             # 获取系统提示词
             system_prompt = prompt_content or "请详细描述这些图片，分析它们之间的关系和差异。"
+            provider_type = service.get('type', provider) if service else provider
+            if should_append_no_thinking_instruction(provider_type, model, disable_thinking_enabled):
+                system_prompt += " 请直接输出结果，不要包含任何思考过程、推理过程或 <think> 标签。"
 
-            # Ollama走原生API (通过服务类型判断)
+            # 判断是否走原生 Ollama API：必须是 ollama 类型，且 base_url 不以 /v1 结尾或包含 /v1/
+            is_native_ollama = False
             if service and service.get('type') == 'ollama':
+                # 兼容 "http://xxx:11434/v1/" 或 "http://xxx:11434/v1"
+                _url = base_url.rstrip('/')
+                if not _url.endswith('/v1') and '/v1/' not in base_url:
+                    is_native_ollama = True
+
+            # Ollama走原生API
+            if is_native_ollama:
                 # 读取 Ollama 服务的配置
                 from ..config_manager import config_manager
                 # 此处保持类型判断，不再硬编码 ID 'ollama'
                 disable_thinking_enabled = service.get('disable_thinking', True)
                 enable_advanced_params = service.get('enable_advanced_params', False)
                 filter_thinking_output = service.get('filter_thinking_output', True)
-                _ollama_thinking_extra = build_thinking_suppression(provider, model) if disable_thinking_enabled else None
+                effective_filter_thinking_output = filter_thinking_output or disable_thinking_enabled
+                _ollama_thinking_extra = build_thinking_suppression(service.get('type', provider), model) if disable_thinking_enabled else None
                 
                 # 提前计算auto_unload配置
                 native_base = base_url[:-3] if base_url.endswith('/v1') else (base_url or 'http://localhost:11434')
@@ -593,18 +549,19 @@ class VisionService(OpenAICompatibleService):
                     auto_unload=auto_unload,
                     enable_advanced_params=enable_advanced_params,
                     thinking_extra=_ollama_thinking_extra,
+                    filter_thinking_output=effective_filter_thinking_output,
                     cancel_event=cancel_event,
                     task_type=task_type or TASK_VIDEO_CAPTION,
                     source=source
                 )
                 
                 if result["success"]:
-                    # 注：卸载已在 _call_ollama_native_vision 的 finally 块中处理
-                    
-                    # 应用思维链输出过滤
-                    content = result["content"]
-                    if filter_thinking_output:
-                        content = filter_thinking_content(content)
+                    success, content = postprocess_model_output(
+                        result["content"],
+                        filter_thinking_output=effective_filter_thinking_output,
+                    )
+                    if not success:
+                        return {"success": False, "error": "API returned empty result after filtering reasoning content (Model only output thinking process)"}
                     
                     return {
                         "success": True,
@@ -618,11 +575,16 @@ class VisionService(OpenAICompatibleService):
                 base_url = VisionService.get_provider_base_url(provider, custom_provider_config if custom_provider else None)
             
             # 构建多图消息
-            content = [{"type": "text", "text": system_prompt}]
-            for img in processed_images:
-                content.append({"type": "image_url", "image_url": {"url": img}})
+            # 关键修复(BUG-01): system_prompt 独立作为 system role 发送
+            # 多图 user content array 仅包含简短指令和所有图片 URL
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
             
-            messages = [{"role": "user", "content": content}]
+            multi_content = [{"type": "text", "text": "Please analyze these images."}]
+            for img in processed_images:
+                multi_content.append({"type": "image_url", "image_url": {"url": img}})
+            messages.append({"role": "user", "content": multi_content})
             
             # 检查disable_thinking、enable_advanced_params和filter_thinking_output配置
             from ..config_manager import config_manager
@@ -630,6 +592,7 @@ class VisionService(OpenAICompatibleService):
             disable_thinking_enabled = service.get('disable_thinking', True) if service else True
             enable_advanced_params = service.get('enable_advanced_params', False) if service else False
             filter_thinking_output = service.get('filter_thinking_output', True) if service else True
+            effective_filter_thinking_output = filter_thinking_output or disable_thinking_enabled
             thinking_extra = build_thinking_suppression(provider, model) if disable_thinking_enabled else None
             
             result = await VisionService._http_request_chat_completions(
@@ -647,14 +610,17 @@ class VisionService(OpenAICompatibleService):
                 provider_display_name=provider_display_name,
                 cancel_event=cancel_event,
                 task_type=task_type or TASK_VIDEO_CAPTION,
-                source=source
+                source=source,
+                filter_thinking_output=effective_filter_thinking_output
             )
 
             if result["success"]:
-                # 根据配置决定是否应用思维链输出过滤
-                content = result["content"]
-                if filter_thinking_output:
-                    content = filter_thinking_content(content)
+                success, content = postprocess_model_output(
+                    result["content"],
+                    filter_thinking_output=effective_filter_thinking_output,
+                )
+                if not success:
+                    return {"success": False, "error": "API returned empty result after filtering reasoning content (Model only output thinking process)"}
                 return {
                     "success": True,
                     "data": {"description": content}

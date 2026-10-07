@@ -1,11 +1,19 @@
+
 <div align="center">
 
 <h1 align="center">ComfyUI Prompt Assistant✨提示词小助手V2.0</h1>
+
 
 <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/yawiii/ComfyUI-Prompt-Assistant">
 <a href="https://space.bilibili.com/520680644"><img alt="bilibili" src="https://img.shields.io/badge/详细视频教程-blue?style=flat&logo=bilibili&logoColor=2300A5DC&labelColor=%23FFFFFF&color=%2307A3D7"></a>
 <a href="https://data.xflow.cc/wechat.png"><img alt="weChat" src="https://img.shields.io/badge/欢迎加入交流群-blue?logo=wechat&logoColor=green&labelColor=%23FFFFFF&color=%2307A3D7"></a>
 <a href="https://ycn58r88iss5.feishu.cn/share/base/form/shrcnJ1AzbUJCynW9qrNJ2zPugy"><img alt="bug" src="https://img.shields.io/badge/Bug-反馈-orange"></a>
+
+</div>
+
+<div align="center">
+
+[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md) | [繁體中文](README.zh-TW.md)
 
 </div>
 
@@ -17,7 +25,56 @@
 ## **📣更新**
 
 <details open>
-<summary><strong>[2025-1-10] 🔥V2.0.2</strong></summary>
+<summary><strong>[2026-04-21] 🔥V2.0.6</strong></summary>
+
+**Changes:**
+* **V3 架构升级**：全面重构节点底层逻辑，适配 ComfyUI V3 API 标准，大幅提升响应速度与运行稳定性。
+
+**Fixes:**
+* **视频反推报错修复**：修复由于部分模型（如 Qwen3.5-Plus）被误判为不支持多图分析而导致的报错问题。现在支持根据模型名智能推断推上限并进行自动截断，不再弹出报错中断任务。
+* **Ollama 请求优化与修复**：优化 Ollama 请求逻辑，支持智能路由（`base_url` 不加 `/v1` 走原生 API，加 `/v1` 走 OpenAI 兼容 API），同时修复流式过滤逻辑导致部分模型返回空内容引发崩溃的报错问题。
+* **子图挂载优化**：修复子图（Subgraph）节点在 Node 2.0 (Vue) 和 LiteGraph 模式下无法创建小助手或挂载不稳定的问题，支持子图中多个同名输入框的精确匹配。
+
+</details>
+
+<details>
+<summary><strong>V2.0.5</strong></summary>
+
+**Changes:**
+
+* **节点随机种子**：为所有节点添加了统一的随机种子实现节点重复执行，移除通过触发词“[R]”机制实现可重复执行的机制；
+  
+  
+* **前端UI新增多语言支持**：感谢@rafek1241
+添加了 ui-i18n 功能，目前支持（中、英、日、韩、法、西、俄、德等）；
+
+**Fixes:**
+* **节点宽度被锁死**：修复 node2.0 下导致节点无法修改宽度问题。
+
+* **置灰内置服务商 baseUrl输入框**：避免误修改导致请求出现移除。
+
+* **网络异常报错**：修复因为强制直连机制，导致 xflow 等中转站请求出现网络异常报错。
+* **图像节点✨图标移至右侧**:避免node2.0 下与节点 id 信息重叠。
+
+</details>
+<details>
+<summary><strong>V2.0.4</strong></summary>
+
+
+* **bug修复**：修复标签和历史功能无法使用的问题；
+
+</details>
+<details>
+<summary><strong>V2.0.3</strong></summary>
+
+
+* **小助手UI**：修复子图节小助手创建不稳定的情况，图像节点丢失图像的情况下无法创建小助手的情况；
+  
+* **Ollama**：修复因为代理原因导致HTTP502错误
+
+</details>
+<details>
+<summary><strong>V2.0.2</strong></summary>
 
 * **标签模块**：修复格式问题，现在可以在自由新建分类和管理标签了。修复预设创建和迁移出错问题；
   
@@ -31,16 +88,15 @@
   
 * **API请求**：修复gemimi-3-pro无法请求的问题；修复ollama404问题；
   
-* **节点优化**：完善视频反推节点、所有节点加入“[R]”触发词，用于强制节点始终可被执行；
+* **节点优化**：完善视频反推节点；
   
 * **控制台日志**：优化日志输出，修复进度日志无限输出的bug；
  
 * **依赖更新**：避免缺少依赖无法启动问题；
 
 </details>
-
 <details>
-<summary><strong>[2025-12-21] V2.0.0</strong></summary>
+<summary><strong>V2.0.0</strong></summary>
 
 * **调用优化**：全面重构小助手，提升API、Ollama调用和稳定度、响应速度；
   
@@ -56,7 +112,9 @@
 </details>
 
 <details>
+<summary><strong>V1.x.x</strong></summary>
 
+<details>
 <summary><strong>V1.2.x </strong></summary>
 
 <details>
@@ -216,6 +274,8 @@
 
 </details>
 
+</details>
+
 ## **✨ 功能介绍**
 #### 💡提示词优化+翻译
 
@@ -294,9 +354,7 @@
 
 
 
-> 💡在任意节点输入框中输入[R],在节点输入和参数没有发生变化的情况下，每次都被执行（类似随机种子）
->
-> 
+
 
 ## **📦 安装方法**
 
@@ -390,6 +448,8 @@
 ## **🎀特别感谢以下朋友！**
 
 感谢群友为V2.0.0版本提供规则模板：阿丹、CJL、诺曼底
+
+
 
 
 

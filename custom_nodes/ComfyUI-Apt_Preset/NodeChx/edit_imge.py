@@ -559,7 +559,7 @@ class ZImageFun(QwenImageDiffsynthControlnet):
 
 
 
-class pre_ZImageInpaint_patch:
+class model_patch_controlnet:
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -572,15 +572,14 @@ class pre_ZImageInpaint_patch:
                 "latent_image": ("IMAGE", ),
                 "latent_mask": ("MASK", ),
                 "diffDiffusion": ("BOOLEAN", {"default": True}),
-                "smoothness": ("INT", {"default": 0, "min": 0, "max": 1000, "step": 1, }),
 
             },
 
         }
 
-    RETURN_TYPES = ("RUN_CONTEXT","MODEL","CONDITIONING","CONDITIONING","LATENT" )
-    RETURN_NAMES = ("context","model","positive","negative","latent" )
-    CATEGORY = "Apt_Preset/chx_tool/controlnet"
+    RETURN_TYPES = ("RUN_CONTEXT","MODEL",)
+    RETURN_NAMES = ("context","model", )
+    CATEGORY = "Apt_Preset/chx_tool"
     FUNCTION = "load_controlnet"
 
 
@@ -636,7 +635,7 @@ class pre_ZImageInpaint_patch:
     def load_controlnet(self, 
                         strength,  
                         context=None, 
-                        controlnet=None,  smoothness=0, diffDiffusion=True,
+                        controlnet=None,  diffDiffusion=True,
                         image=None, vae=None,latent_image=None, latent_mask=None,):
 
 
@@ -646,10 +645,7 @@ class pre_ZImageInpaint_patch:
         negative = context.get("negative", None)
         latent = context.get("latent", None)
 
-        if latent_mask is not None:
-            if smoothness > 0:
-               latent_mask = smoothness_mask(latent_mask, smoothness)
-            latent = set_mask(latent, latent_mask)[0]
+
 
         if controlnet != "None":
             cn1=ModelPatchLoader().load_model_patch(controlnet)[0]
@@ -666,8 +662,8 @@ class pre_ZImageInpaint_patch:
             model = DifferentialDiffusion().apply(model)[0]
 
 
-        context = new_context(context, model=model, positive=positive, negative=negative, latent=latent)
-        return (context, model, positive, negative, latent)
+        context = new_context(context, model=model, )
+        return (context, model,)
 
 
 

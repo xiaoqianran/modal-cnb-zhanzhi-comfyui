@@ -60,6 +60,11 @@ uirements.txt -i https://pypi.org/simple（官方源）
 -   pip uninstall Torchao
 -   pip uninstall pynvml
 -   pip install nvidia-ml-py
+
+    pip install "comfyui-workflow-templates==0.11.77" \
+    -i https://pypi.org/simple
+
+    pip install "comfyui-frontend-package==1.55.14" -i https://pypi.org/simple/
     
 ### 软链接命令
 -   ln -s /workspace/ComfyUI/models/prompt_generator/Qwen3-VL-8B-Instruct /workspace/ComfyUI/models/LLM/Qwen-VL

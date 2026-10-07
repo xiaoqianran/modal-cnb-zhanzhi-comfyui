@@ -1,4 +1,6 @@
 from comfy_execution.graph import ExecutionBlocker
+import json
+import re
 
 class AnyType(str):
     """A special type that compares equal to any other type."""
@@ -33,8 +35,23 @@ class AnySwitch:
         return True
 
     def check(self, 优先输入=None, 备用输入=None):
-        # 如果优先输入不为空，则认为激活（使用优先输入）
-        is_active = 优先输入 is not None
+        # 调试打印，后续稳定后可删除
+        # print(f"DEBUG AnySwitch: 优先输入 type={type(优先输入)}, value={优先输入}")
+        
+        # 1. 基础判断：非 None 且非 ExecutionBlocker
+        is_active = 优先输入 is not None and not isinstance(优先输入, ExecutionBlocker)
+        
+        # 2. 增强判断：如果是 Latent 且全为 0，视为无效（通常是 Bypass 透传的空 Latent）
+        if is_active and isinstance(优先输入, dict) and 'samples' in 优先输入:
+            try:
+                samples = 优先输入['samples']
+                # 检查是否为 Tensor 且全为 0 (使用 .any() 判断是否存在非0值)
+                if hasattr(samples, 'any') and not samples.any():
+                    is_active = False
+                    print("DEBUG AnySwitch: 检测到全0 Latent，视为无效输入，切换至备用输入")
+            except Exception as e:
+                print(f"DEBUG AnySwitch: Latent 检查出错: {e}")
+
         output_data = 优先输入 if is_active else 备用输入
         return (is_active, output_data)
 
@@ -96,3 +113,90 @@ class AnyIsEmpty:
             pass
             
         return (False,)
+
+class AnyJsonGet:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "json输入": (ANY,),
+                "路径": ("STRING", {"default": "", "tooltip": "支持：results / results[0] / results[0].file_token / results[0].data.name"}),
+            },
+            "optional": {
+                "默认值": (ANY,),
+            }
+        }
+
+    RETURN_TYPES = ("BOOLEAN", ANY, "STRING")
+    RETURN_NAMES = ("是否找到", "值", "值(JSON)")
+    FUNCTION = "get"
+    CATEGORY = "maoyu/utils"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
+    def _parse_path(self, path_text: str):
+        s = str(path_text or "").strip()
+        if not s:
+            return []
+        parts = s.split(".")
+        tokens = []
+        for p in parts:
+            p = p.strip()
+            if not p:
+                continue
+            m = re.match(r"^([^\[\]]+)(.*)$", p)
+            if not m:
+                continue
+            key = m.group(1).strip()
+            rest = m.group(2) or ""
+            if key:
+                tokens.append(("key", key))
+            for mi in re.finditer(r"\[(\d+)\]", rest):
+                tokens.append(("index", int(mi.group(1))))
+        return tokens
+
+    def _to_obj(self, v):
+        if isinstance(v, (dict, list)):
+            return v, True, ""
+        if isinstance(v, str):
+            t = v.strip()
+            if t == "":
+                return None, False, "json输入 为空字符串"
+            try:
+                return json.loads(t), True, ""
+            except Exception as e:
+                return None, False, f"json 解析失败: {str(e)}"
+        return v, True, ""
+
+    def get(self, 路径, json输入=None, 默认值=None):
+        obj, ok, msg = self._to_obj(json输入)
+        if not ok:
+            return (False, 默认值, "",)
+
+        tokens = self._parse_path(路径)
+        if not tokens:
+            try:
+                return (True, obj, json.dumps(obj, ensure_ascii=False, default=str))
+            except Exception:
+                return (True, obj, str(obj))
+
+        cur = obj
+        for t, v in tokens:
+            if t == "key":
+                if isinstance(cur, dict) and v in cur:
+                    cur = cur.get(v)
+                else:
+                    return (False, 默认值, "",)
+            elif t == "index":
+                if isinstance(cur, list) and 0 <= v < len(cur):
+                    cur = cur[v]
+                else:
+                    return (False, 默认值, "",)
+
+        try:
+            text = json.dumps(cur, ensure_ascii=False, default=str)
+        except Exception:
+            text = str(cur)
+        return (True, cur, text)

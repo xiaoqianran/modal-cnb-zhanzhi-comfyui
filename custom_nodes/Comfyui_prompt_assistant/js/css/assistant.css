@@ -565,23 +565,23 @@
 }
 
 .statustip.success {
-    color: color-mix(in srgb, var(--p-inputtext-color), rgb(18, 255, 18) 40%) !important;
-    background-color: color-mix(in srgb, var(--p-content-background), rgb(4, 58, 4) 30%);
+    color: color-mix(in srgb, var(--p-inputtext-color, #fff), rgb(18, 255, 18) 40%) !important;
+    background-color: color-mix(in srgb, var(--p-content-background, #1e1e1e), rgb(4, 58, 4) 30%);
 }
 
 .statustip.error {
-    color: color-mix(in srgb, var(--p-inputtext-color), rgb(255, 0, 0) 60%) !important;
-    background-color: color-mix(in srgb, var(--p-content-background), rgb(74, 12, 12) 30%);
+    color: color-mix(in srgb, var(--p-inputtext-color, #fff), rgb(255, 0, 0) 60%) !important;
+    background-color: color-mix(in srgb, var(--p-content-background, #1e1e1e), rgb(74, 12, 12) 30%);
 }
 
 .statustip.loading {
-    color: color-mix(in srgb, var(--p-inputtext-color), rgb(249, 255, 69) 30%) !important;
-    background-color: color-mix(in srgb, var(--p-content-background), rgb(114, 117, 22) 30%);
+    color: color-mix(in srgb, var(--p-inputtext-color, #fff), rgb(249, 255, 69) 30%) !important;
+    background-color: color-mix(in srgb, var(--p-content-background, #1e1e1e), rgb(114, 117, 22) 30%);
 }
 
 .statustip.info {
-    color: color-mix(in srgb, var(--p-inputtext-color), rgb(82, 70, 255) 60%) !important;
-    background-color: color-mix(in srgb, var(--p-content-background), rgb(55, 8, 113) 30%);
+    color: color-mix(in srgb, var(--p-inputtext-color, #fff), rgb(82, 70, 255) 60%) !important;
+    background-color: color-mix(in srgb, var(--p-content-background, #1e1e1e), rgb(55, 8, 113) 30%);
 }
 
 /* 状态提示动画类 */
@@ -618,8 +618,9 @@
 }
 
 [data-node-id] .assistant-container-common.image-assistant-container {
-    left: 6px;
-    bottom: 6px;
+    right: 6px;
+    bottom: 6px; 
+    left: auto;
     z-index: 10;
     transform: none;
     /* Vue模式下不需要画布缩放 */

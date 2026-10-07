@@ -1,7 +1,101 @@
 {
+  "FeiHouEasyH3FaceRefine": {
+    "display_name": "FeiHou Easy H3 人脸精修（实验）",
+    "inputs": {
+      "images": {
+        "name": "视频帧"
+      },
+      "model": {
+        "name": "精修模型"
+      },
+      "h3_context": {
+        "name": "H3 上下文"
+      },
+      "enabled": {
+        "name": "启用"
+      },
+      "detector": {
+        "name": "人脸检测模型"
+      },
+      "target": {
+        "name": "目标人物"
+      },
+      "denoise": {
+        "name": "精修强度"
+      },
+      "steps": {
+        "name": "采样步数"
+      },
+      "seed": {
+        "name": "种子"
+      },
+      "advanced": {
+        "name": "高级选项"
+      },
+      "canvas_size": {
+        "name": "精修画布"
+      },
+      "confidence": {
+        "name": "检测阈值"
+      },
+      "crop_factor": {
+        "name": "裁剪范围"
+      },
+      "chunk_frames": {
+        "name": "分段帧数"
+      },
+      "sampler_name": {
+        "name": "采样器"
+      },
+      "scheduler": {
+        "name": "调度器"
+      },
+      "prompt": {
+        "name": "面部精修提示词"
+      },
+      "force_offload": {
+        "name": "强制卸载"
+      },
+      "audio_lock": {
+        "name": "原音频约束（实验）"
+      },
+      "clean_second_model": {
+        "name": "使用纯净二采模型"
+      },
+      "face_mode": {
+        "name": "修复人数模式"
+      },
+      "max_faces": {
+        "name": "最多修复人数"
+      },
+      "reference_face": {
+        "name": "参考人脸"
+      },
+      "reference_faces": {
+        "name": "多人参考图批次"
+      },
+      "audio": {
+        "name": "原音频"
+      }
+    }
+  },
+  "FeiHouEasyH3Resolution": {"display_name":"FeiHou Easy H3 分辨率","description":"与 Easy H3 主节点使用相同的尺寸计算规则。自定义分辨率时使用宽度、高度。","inputs":{"resolution":{"name":"分辨率"},"aspect_ratio":{"name":"宽高比"},"width":{"name":"自定义宽度"},"height":{"name":"自定义高度"}},"outputs":{"0":{"name":"宽度"},"1":{"name":"高度"}}},
+  "FeiHouEasyH3ProductionPackLoader": {
+    "display_name": "FeiHou Easy H3 制作包分镜加载器",
+    "description": "载入文件夹或 ZIP，读取最终分镜页，每次任务输出一镜。将生成后操作设为 increment 可按序号推进。",
+    "inputs": {
+      "source": { "name": "制作包文件夹 / ZIP 路径" },
+      "shotlist_file": { "name": "分镜 HTML 相对路径（可留空）" },
+      "audio_file": { "name": "歌曲相对路径（可留空）" },
+      "shot_index": { "name": "分镜序号" },
+      "prompt_language": { "name": "提示词语言" },
+      "package_id": { "name": "已准备制作包 ID" }
+    },
+    "outputs": { "0": { "name": "制作包分镜" } }
+  },
   "FeiHouEasyH3LoraStack": {
-    "display_name": "加载LoRA（旁路，仅模型）（用于调试）",
-    "description": "供 FeiHou Easy H3 加载器使用的动态 LoRA 堆栈。",
+    "display_name": "加载LoRA（仅模型）",
+    "description": "供 FeiHou Easy H3 加载器使用的动态 LoRA 堆栈；每条 LoRA 可单独切换旁路或正常加载。",
     "inputs": {
       "optional_lora_stack": { "name": "可选 LoRA 堆栈" }
     },
@@ -30,7 +124,7 @@
   },
   "FeiHouEasyH3RemixLoader": {
     "display_name": "FeiHou Easy H3 Remix 加载器",
-    "description": "加载一个供 FL2VA 与 REF2VA 共用的 MiniMax H3 Remix 主模型，并支持独立的一采、二采 LoRA 堆栈。",
+    "description": "加载一个供 FL2VA 与 REF2VA 共用的 MiniMax H3 Remix 主模型，并支持独立的一采、二采 LoRA 堆栈；未选择二采模型时，二采输出自动使用主模型加二采 LoRA。",
     "inputs": {
       "remix_model": { "name": "Remix 主模型" },
       "text_encoder": { "name": "文本编码器" },
@@ -63,6 +157,7 @@
     "description": "内嵌 9 张图片、3 个视频、3 个音频媒体栏的 MiniMax H3 生成节点。",
     "inputs": {
       "h3_bundle": { "name": "H3 模型组合" },
+      "production_shot": { "name": "制作包分镜" },
       "mode": {
         "name": "模式",
         "options": {
@@ -75,7 +170,11 @@
       "aspect_ratio": { "name": "宽高比" },
       "width": { "name": "宽度" },
       "height": { "name": "高度" },
-      "seconds": { "name": "秒数" },
+      "audio_duration_auto": {
+      "name": "自动时长对齐",
+      "options": {"off": "关闭", "audio": "参考音频对齐", "video": "参考视频对齐"}
+    },
+    "seconds": { "name": "秒数" },
       "advanced": { "name": "高级选项" },
       "fps": { "name": "帧率（FPS）" },
       "keyframe_role": {

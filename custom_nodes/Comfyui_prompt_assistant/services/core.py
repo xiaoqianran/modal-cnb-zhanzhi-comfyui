@@ -5,7 +5,7 @@
 
 import httpx
 import os
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 import re
 
 
@@ -14,7 +14,7 @@ class HTTPClientPool:
     HTTP客户端池
     管理持久化的 httpx.AsyncClient，支持连接复用
     """
-    _clients: Dict[str, httpx.AsyncClient] = {}
+    _clients: Dict[Tuple[Any, ...], httpx.AsyncClient] = {}
     _loop_id: Optional[int] = None  # 记录创建客户端时的事件循环ID
     
     @classmethod
@@ -67,24 +67,38 @@ class HTTPClientPool:
         # 检测事件循环变化，必要时清理旧客户端
         cls._check_loop_change()
         
-        # 使用 base_url 作为唯一标识进行缓存
-        cache_key = base_url or provider
+        # 智能判定是否为本地地址
+        is_local = False
+        if base_url:
+            is_local = any(host in str(base_url) for host in ['localhost', '127.0.0.1', '0.0.0.0', '[::1]'])
+        
+        trust_env = not is_local
+        cache_key = (
+            base_url or provider,
+            float(timeout),
+            proxy or "",
+            bool(verify_ssl),
+            trust_env,
+            tuple(sorted((key, repr(value)) for key, value in kwargs.items())),
+        )
         
         if cache_key in cls._clients:
             client = cls._clients[cache_key]
             if not client.is_closed:
                 return client
-
+            
         # 创建新客户端
         client_kwargs = {
             'timeout': httpx.Timeout(timeout, connect=10.0, read=timeout, write=60.0),
             'verify': verify_ssl,
             'follow_redirects': True,
             'http2': False,
+            # 关键修复：根据目标地址智能控制系统代理配置
+            # 避免 HTTP_PROXY/HTTPS_PROXY 拦截本地请求，同时允许外部请求（如xflow, openai）使用代理
+            'trust_env': trust_env,
             # 设置连接池保持连接
             'limits': httpx.Limits(max_keepalive_connections=10, max_connections=20, keepalive_expiry=60.0)
-        }
-        
+        }        
         if proxy:
             client_kwargs['proxies'] = proxy
         

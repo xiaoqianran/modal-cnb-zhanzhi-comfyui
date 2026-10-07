@@ -1,3 +1,3 @@
 
-window.PromptAssistant_Version = "2.0.2";
+window.PromptAssistant_Version = "2.0.6";
     

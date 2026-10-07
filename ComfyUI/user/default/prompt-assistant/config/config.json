@@ -1,5 +1,5 @@
 {
-  "__config_version": "2.0",
+  "__config_version": "2.1",
   "__comment": "提示词小助手配置文件模板",
   "baidu_translate": {
     "app_id": "20231229001924751",

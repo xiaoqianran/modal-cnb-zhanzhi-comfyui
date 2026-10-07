@@ -30,6 +30,21 @@ def _regions(length, tile_count=2):
     return regions
 
 
+def validate_options(mode, tiles, axis):
+    if mode not in ("auto", "manual") or axis not in ("auto", "width", "height"):
+        raise ValueError("selflift-Avatar: tiling mode must be auto/manual and axis auto/width/height")
+    if mode == "manual" and (type(tiles) is not int or not 1 <= tiles <= 8):
+        raise ValueError("selflift-Avatar: manual tiling_tiles must be an integer from 1 to 8")
+
+
+def _select_axis(video_shape, choice="auto"):
+    if choice == "width":
+        return 4
+    if choice == "height":
+        return 3
+    return 3 if (video_shape[3] + 1) // 2 >= (video_shape[4] + 1) // 2 else 4
+
+
 def _packed_layout(signature, payload):
     options = {"keyframes": payload.get("keyframes"), "refs": payload.get("refs")}
     if "frame_count" in inspect.signature(PackedLayout).parameters:
@@ -74,7 +89,17 @@ def _tile_payload(payload, context, video, audio, axis, start, end):
 def _tiled_forward(executor, streams, timestep, context, transformer_options, minimax_payload=None,
                    n_tiles=2, plan=None, **kwargs):
     video, audio = streams
-    axis = 3 if (video.shape[3] + 1) // 2 >= (video.shape[4] + 1) // 2 else 4
+    # Only the fully generated video / fully preserved audio combination is supported.
+    # A redundant full-frame all-one video condition must not reach a smaller tile.
+    video_mask = kwargs.get("denoise_mask")
+    if video_mask is not None:
+        if not bool((video_mask == 1).all()):
+            raise ValueError("selflift-Avatar: tiled video preservation is not supported")
+        kwargs = {**kwargs, "denoise_mask": None}
+    audio_mask = kwargs.get("audio_denoise_mask")
+    if audio_mask is not None and not bool((audio_mask == 0).all()):
+        raise ValueError("selflift-Avatar: tiled audio conditioning requires a fully preserved audio mask")
+    axis = plan.get("axis", _select_axis(video.shape)) if plan is not None else _select_axis(video.shape)
     length = video.shape[axis]
     regions = _regions(length, plan['tiles'] if plan is not None else n_tiles)
     if len(regions) == 1:
@@ -148,32 +173,47 @@ def _budget(model, noise_shape, conds, latent_shapes, regions, axis):
 
 
 def _prepare_tiled_sampling(executor, model, noise_shape, conds, model_options=None,
-                            force_full_load=False, force_offload=False, *, latent_shapes, plan=None):
+                            force_full_load=False, force_offload=False, *, latent_shapes, plan=None,
+                            on_plan=None):
+    if force_offload:
+        return executor(model, noise_shape, conds, model_options=model_options,
+                        force_full_load=force_full_load, force_offload=True)
     video_shape, audio_shape = latent_shapes
-    axis = 3 if (video_shape[3] + 1) // 2 >= (video_shape[4] + 1) // 2 else 4
+    config = plan if plan is not None else {}
+    mode = config.get("mode", "auto")
+    requested = config.get("requested_tiles", 2)
+    choice = config.get("axis_choice", "auto")
+    validate_options(mode, requested, choice)
+    axis = _select_axis(video_shape, choice)
     full_elements = math.prod(video_shape[1:]) + math.prod(audio_shape[1:])
     if tuple(noise_shape) != (video_shape[0], 1, full_elements):
         raise ValueError("SelfLift: tiled memory planning received a different latent shape than the sampling input")
-    count = 2
-    if plan is not None:
-        available = _available_workspace(model)
-        for count in range(1, 9):
-            regions = _regions(video_shape[axis], count)
-            _, _, _, _, minimum = _budget(model, noise_shape, conds, latent_shapes, regions, axis)
-            if minimum <= available:
-                break
-        count = len(regions)
-        plan['tiles'] = count
-        logging.info("[SelfLift tiling plan] axis=%s tiles=%d target=%.2f MiB estimate_fits=%s",
-                     'H' if axis == 3 else 'W', plan['tiles'], available / 2**20, minimum <= available)
-    regions = _regions(video_shape[axis], count)
-    if len(regions) == 1 or force_offload:
+    available = _available_workspace(model)
+    candidates = range(1, 9) if mode == "auto" else (requested,)
+    for count in candidates:
+        regions = _regions(video_shape[axis], count)
+        budget_shape, tile_shape, buffer_bytes, preferred, minimum = _budget(
+            model, noise_shape, conds, latent_shapes, regions, axis)
+        if minimum <= available:
+            break
+    count = len(regions)
+    config.update(axis=axis, tiles=count, regions=regions, largest_tile=tuple(tile_shape),
+                  video_shape=tuple(video_shape), audio_shape=tuple(audio_shape),
+                  available_mib=available / 2**20, minimum_mib=minimum / 2**20,
+                  preferred_mib=preferred / 2**20, estimate_fits=minimum <= available)
+    logging.info("[SelfLift tiling plan] mode=%s axis=%s tiles=%d requested=%s target=%.2f MiB estimate_fits=%s",
+                 mode, 'H' if axis == 3 else 'W', count, requested if mode == "manual" else "auto",
+                 available / 2**20, minimum <= available)
+    if minimum > available:
+        logging.warning("selflift-Avatar: tiling estimate exceeds available workspace; OOM is possible. "
+                        "No automatic OOM retry; increase tiles or reduce resolution/length.")
+    if on_plan is not None:
+        on_plan(dict(config))
+    if count == 1:
         return executor(model, noise_shape, conds, model_options=model_options,
                         force_full_load=force_full_load, force_offload=force_offload)
-    budget_shape, tile_shape, buffer_bytes, preferred, minimum = _budget(
-        model, noise_shape, conds, latent_shapes, regions, axis)
     logging.info("[SelfLift tiling memory] largest_tile=%s full_audio=%s full_state_buffers=%.2f MiB "
-                 "minimum=%.2f MiB preferred=%.2f MiB (ComfyUI estimates; additional models and reserves excluded)",
+                 "minimum=%.2f MiB preferred=%.2f MiB (estimates, not measured peaks)",
                  tuple(tile_shape), audio_shape, buffer_bytes * noise_shape[0] / 2**20,
                  minimum / 2**20, preferred / 2**20)
     return executor(model, budget_shape, conds, model_options=model_options,
@@ -203,16 +243,17 @@ def _available_workspace(model):
     return available
 
 
-def tiled_model(model, latent_shapes):
+def tiled_model(model, latent_shapes, mode="auto", tiles=2, axis="auto", on_plan=None):
+    validate_options(mode, tiles, axis)
     if not isinstance(model.model, comfy.model_base.MiniMaxH3):
         raise ValueError("SelfLift: high-resolution tiling requires a MiniMax H3 model")
     if len(latent_shapes) != 2 or len(latent_shapes[0]) != 5 or len(latent_shapes[1]) != 4:
         raise ValueError("SelfLift: high-resolution tiling requires H3 video and audio latent streams")
-    plan = {}
+    plan = {"mode": mode, "requested_tiles": tiles, "axis_choice": axis}
     patched = model.clone()
     patched.add_wrapper_with_key(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL,
                                  "selflift_high_resolution_tiling", partial(_tiled_forward, plan=plan))
     patched.add_wrapper_with_key(comfy.patcher_extension.WrappersMP.PREPARE_SAMPLING,
                                  "selflift_high_resolution_tiling",
-                                 partial(_prepare_tiled_sampling, latent_shapes=tuple(tuple(shape) for shape in latent_shapes), plan=plan))
+                                 partial(_prepare_tiled_sampling, latent_shapes=tuple(tuple(shape) for shape in latent_shapes), plan=plan, on_plan=on_plan))
     return patched

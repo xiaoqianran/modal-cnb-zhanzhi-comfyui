@@ -1,10 +1,30 @@
 [project]
 name = "vnccs-utils"
-description = "VNCCS - Collection of utility nodes. VNCCS Visual Camera Control for Qwen-Image-Edit-2511-Multiple-Angles LoRa. VNCCS QWEN Detailer - For spot corrections in images of any size. VNCCS Pose Studio - Combined mesh editor and multi-pose generator. "
-version = "0.4.3"
+description = "VNCCS utility nodes: Pose Studio, UniCanvas, and 3D Factory."
+version = "0.6.9"
 license = {file = "LICENSE"} 
 
-dependencies = ["opencv-python", "huggingface_hub", "aiohttp", "kornia", "requests", "torch", "numpy", "Pillow"]
+dependencies = [
+    "opencv-python",
+    "huggingface_hub",
+    "aiohttp",
+    "av",
+    "kornia",
+    "requests",
+    "torch",
+    "torchvision",
+    "numpy",
+    "Pillow",
+    "transformers",
+    "safetensors",
+    "pytorch-lightning",
+    "omegaconf",
+    "yacs",
+    "timm",
+    "einops",
+    "roma",
+    "tqdm",
+]
 
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -22,7 +42,7 @@ Documentation = "https://github.com/AHEKOT/ComfyUI_VNCCS_Utils"
 [tool.comfy]
 PublisherId = "vnccs"
 DisplayName = "VNCCS - Collection of utility nodes"
-Icon = "https://raw.githubusercontent.com/AHEKOT/ComfyUI_VNCCS/refs/heads/main/images/VNCCS_LOGO.png"
+Icon = "https://github.com/AHEKOT/ComfyUI_VNCCS/blob/main/images/VNCCS_LOGO.png?raw=1"
 NodeIds = [
     "VNCCS_PositionControl",
     "VNCCS_VisualPositionControl",
@@ -30,6 +50,8 @@ NodeIds = [
     "VNCCS_BBox_Extractor",
     "VNCCS_ModelManager",
     "VNCCS_ModelSelector",
-    "VNCCS_PoseStudio"
+    "VNCCS_PoseStudio",
+    "VNCCS_UniCanvas",
+    "VNCCS_3DFactory",
+    "VNCCS_Config"
 ]
-

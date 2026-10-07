@@ -14,6 +14,8 @@ from typing import Any
 
 import folder_paths
 import torch
+
+logger = logging.getLogger(__name__)
 from .audio_gain import (
     audio_db_to_gain,
     audio_is_muted,
@@ -31,10 +33,13 @@ from .multitrack import (
     _resolve_timeline_image_item,
     _resize_multitrack_video,
     _trim_track_audio,
+    multitrack_audio_lock_is_effective,
     multitrack_is_shared_reference,
+    multitrack_is_muted_image,
     multitrack_media_identity,
     multitrack_segments_in_window,
 )
+from .video import extract_video_audio
 
 
 H3_FRAME_STEP = 17
@@ -256,7 +261,9 @@ def _h3_continuity_mode(value: Any) -> str:
     normalized = str(value or "shot").lower()
     if normalized == "context_test":
         return "context"
-    return normalized if normalized in {"context", "context_swap"} else "shot"
+    if normalized == "context_swap":
+        return "context_drift"
+    return normalized if normalized in {"context", "context_drift"} else "shot"
 
 
 def h3_task_segments(info: dict[str, Any]) -> list[dict[str, Any]]:
@@ -406,7 +413,16 @@ def h3_task_type(entry: dict[str, Any], info: dict[str, Any]) -> str:
 
     start_frame = _frame_value(entry.get("start_frame"))
     end_frame = _frame_value(entry.get("end_frame"))
-    image_count = len(content.get("images", [])) if isinstance(content.get("images"), list) else 0
+    images = content.get("images", [])
+    image_count = (
+        sum(
+            1
+            for image in images
+            if isinstance(image, dict) and not multitrack_is_muted_image(image)
+        )
+        if isinstance(images, list)
+        else 0
+    )
     has_video = any(
         isinstance(track, dict)
         and track.get("type") == "video"
@@ -428,10 +444,22 @@ def h3_task_type(entry: dict[str, Any], info: dict[str, Any]) -> str:
     return "i2v" if image_count > 0 else "t2v"
 
 
+def h3_task_is_passthrough(entry: dict[str, Any]) -> bool:
+    """Return whether this task segment requests direct media output."""
+    task = entry.get("task", {})
+    content = task.get("content", {}) if isinstance(task, dict) else {}
+    return (
+        isinstance(content, dict)
+        and str(content.get("task_mode", "default")).lower() == "passthrough"
+    )
+
+
 def _h3_locked_track(
     entry: dict[str, Any],
     info: dict[str, Any],
     track_type: str,
+    *,
+    require_audible_audio: bool = True,
 ) -> dict[str, Any] | None:
     start_frame = _frame_value(entry.get("start_frame"))
     end_frame = _frame_value(entry.get("end_frame"))
@@ -440,6 +468,10 @@ def _h3_locked_track(
             not isinstance(track, dict)
             or track.get("type") != track_type
             or track.get("audio_locked") is not True
+        ):
+            continue
+        if require_audible_audio and not multitrack_audio_lock_is_effective(
+            info, track, start_frame, end_frame,
         ):
             continue
         if any(
@@ -467,7 +499,12 @@ def h3_locked_video_track(
     entry: dict[str, Any], info: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Return the locked video track that controls the task's visual timeline."""
-    return _h3_locked_track(entry, info, "video")
+    return _h3_locked_track(
+        entry,
+        info,
+        "video",
+        require_audible_audio=False,
+    )
 
 
 def h3_generation_mode(task_type: str) -> str:
@@ -732,6 +769,35 @@ def has_h3_context_latent(
     except ValueError:
         return False
     return latent_path.is_file()
+
+
+def h3_active_segment_is_passthrough(
+    project_name: Any,
+    segment_index: int,
+    output_directory: str | Path | None = None,
+) -> bool:
+    """Check the saved mode of a segment's active generation."""
+    safe_name = safe_h3_project_name(project_name)
+    project_dir = (
+        Path(output_directory).resolve() / "easy_media" / "projects" / safe_name
+        if output_directory is not None
+        else h3_project_directory(safe_name)
+    )
+    try:
+        manifest = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
+        segment = manifest["segments"][str(int(segment_index))]
+        generation = segment["generations"][str(int(segment["active_generation"]))]
+        mode = generation.get("task_mode", segment.get("task_mode"))
+    except (
+        AttributeError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+    ):
+        return False
+    return isinstance(mode, str) and mode.lower() == "passthrough"
 
 
 def clear_h3_project_segments_from(
@@ -1303,14 +1369,18 @@ def _project_source_audio(
     content: dict,
     audio_items: list,
     video_items: list,
+    video_audio_cache: dict | None = None,
 ) -> 'dict | None':
     if track_type == "audio":
         return _resolve_multitrack_audio(content, audio_items)
     video = _resolve_multitrack_video(content, video_items)
     if video is None:
         return None
-    components = video.get_components()
-    return components.audio if isinstance(components.audio, dict) else None
+    # Many segments can point at the same source video (especially when a long
+    # video is split across the timeline). ``extract_video_audio`` (in
+    # ``utils.video``) dedupes by source path via ``video_audio_cache`` so we
+    # decode the file once and reuse the dict across segments.
+    return extract_video_audio(video, cache=video_audio_cache)
 
 
 def _project_shared_audio(
@@ -1375,9 +1445,11 @@ def prepare_multitrack_project_media(
     locked_audio: dict | None = None
     locked_audio_priority = 0
     shared_image_identities: set[tuple[str, str]] = set()
+    shared_image_sources: list[tuple[str, str] | None] = []
     shared_audio_identities: set[tuple[str, str]] = set()
     shared_video_identities: set[tuple[str, str]] = set()
     resize_cache: dict[tuple, object] = {}
+    video_audio_cache: dict[object, dict | None] = {}
 
     for track in tracks:
         if not isinstance(track, dict):
@@ -1397,6 +1469,9 @@ def prepare_multitrack_project_media(
                 for image_info in images if isinstance(images, list) else []:
                     if not isinstance(image_info, dict):
                         continue
+                    if multitrack_is_muted_image(image_info):
+                        retained_images.append(image_info)
+                        continue
                     identity = multitrack_media_identity(image_info)
                     if not multitrack_is_shared_reference(image_info):
                         retained_images.append(image_info)
@@ -1412,6 +1487,7 @@ def prepare_multitrack_project_media(
                             image, panorama_view, width, height,
                         )
                     shared_images.append(image)
+                    shared_image_sources.append(identity)
                     if identity is not None:
                         shared_image_identities.add(identity)
                 if isinstance(content, dict):
@@ -1429,15 +1505,25 @@ def prepare_multitrack_project_media(
         )
         if track.get("audio_locked") is True:
             resolved_segments: list[tuple[dict, dict]] = []
-            for local_segment in multitrack_segments_in_window(
-                track, 0, timeline_end,
+            if multitrack_audio_lock_is_effective(
+                info,
+                track,
+                0,
+                timeline_end,
+                has_solo_track=has_solo_track,
             ):
-                content = local_segment.get("content", {})
-                source_audio = _project_source_audio(
-                    track_type, content, audio_items, video_items,
-                )
-                if source_audio is not None:
-                    resolved_segments.append((local_segment, source_audio))
+                for local_segment in multitrack_segments_in_window(
+                    track, 0, timeline_end,
+                ):
+                    content = local_segment.get("content", {})
+                    if audio_is_muted(content):
+                        continue
+                    source_audio = _project_source_audio(
+                        track_type, content, audio_items, video_items,
+                        video_audio_cache,
+                    )
+                    if source_audio is not None:
+                        resolved_segments.append((local_segment, source_audio))
             lock_priority = 2 if track_type == "audio" else 1
             if resolved_segments and lock_priority > locked_audio_priority:
                 locked_audio = _merge_audio_track(
@@ -1520,9 +1606,14 @@ def prepare_multitrack_project_media(
                         image
                         for image in images
                         if not isinstance(image, dict)
+                        or multitrack_is_muted_image(image)
                         or multitrack_media_identity(image)
                         not in shared_image_identities
                     ]
+
+    task_info["_project_shared_image_sources"] = (
+        shared_image_sources[:MAX_MULTITRACK_PROJECT_IMAGES]
+    )
 
     return (
         task_info,
@@ -1575,11 +1666,32 @@ def prepare_multitrack_project_task_info(
     images: list[torch.Tensor],
     audio: list[dict[str, Any]],
     video: list[object],
+    task_entry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach already-loaded project references to one task's runtime context."""
     task_info = dict(tracks_info)
+    muted_sources: set[tuple[str, str]] = set()
+    task = task_entry.get("task", {}) if isinstance(task_entry, dict) else {}
+    content = task.get("content", {}) if isinstance(task, dict) else {}
+    if isinstance(content, dict):
+        task_images = content.get("images", [])
+        for image in task_images if isinstance(task_images, list) else []:
+            if multitrack_is_muted_image(image):
+                identity = multitrack_media_identity(image)
+                if identity is not None:
+                    muted_sources.add(identity)
+    image_sources = tracks_info.get("_project_shared_image_sources", [])
+    selected_images = [
+        image
+        for index, image in enumerate(images)
+        if not (
+            isinstance(image_sources, list)
+            and index < len(image_sources)
+            and image_sources[index] in muted_sources
+        )
+    ]
     task_info["_preloaded_media"] = {
-        "images": list(images),
+        "images": selected_images,
         "audio": list(audio),
         "video": list(video),
     }

@@ -322,12 +322,12 @@ def _load_minimax_node(monkeypatch):
     utils_package.FFMPEG_RESIZE_METHODS = frozenset()
     for name in (
         "audio_db_to_gain",
-        "audio_is_muted",
         "audio_volume_db",
         "equirectangular_to_perspective",
         "load_audio_waveform",
         "load_image_tensor",
         "multitrack_is_shared_reference",
+        "multitrack_is_muted_image",
         "multitrack_media_identity",
         "multitrack_segments_in_window",
         "multitrack_slot_name",
@@ -336,6 +336,9 @@ def _load_minimax_node(monkeypatch):
         "resolve_video_path",
     ):
         setattr(utils_package, name, lambda *_args, **_kwargs: None)
+    utils_package.audio_is_muted = (
+        lambda settings: isinstance(settings, dict) and settings.get("muted") is True
+    )
     models_module = types.ModuleType("easy_media.utils.models")
     models_module.detect_turbo_model = lambda model: types.SimpleNamespace(
         is_turbo=False,
@@ -1185,6 +1188,7 @@ def test_schema_exposes_list_media_inputs_without_image_position(monkeypatch):
         "width",
         "height",
         "length",
+        "locked_video_timing_frames",
         "ref_image_size",
     ]
     assert inputs["audio_vae"].kwargs["optional"] is True
@@ -1257,9 +1261,11 @@ def test_multitrack_h3_project_schema_exposes_pipeline_configuration(monkeypatch
         "single",
         "dual",
         "selflift",
+        "passthrough",
     ]
     assert sampling_mode_options[0][1] == []
     assert sampling_mode_options[1][1] == []
+    assert sampling_mode_options[3][1] == []
     selflift_inputs = {port.name: port for port in sampling_mode_options[2][1]}
     assert list(selflift_inputs) == [
         "transition_ratio",
@@ -1284,6 +1290,143 @@ def test_multitrack_h3_project_schema_exposes_pipeline_configuration(monkeypatch
         "PROJECT_NAME",
         "LOCKED_AUDIO",
     ]
+
+
+def test_h3_project_passthrough_shot_keeps_outgoing_context(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    result = module.EasyMultiTrackProject.execute(
+        **_h3_project_inputs(sampling_mode=_h3_sampling_mode("passthrough"))
+    )
+    nodes = list(result.expand.values())
+    types = {node["class_type"] for node in nodes}
+    assert "easy h3PassthroughVideo" in types
+    assert "easy minimaxH3ToVideo" not in types
+    assert "easy h3ConditioningCache" not in types
+    assert "SamplerCustomAdvanced" not in types
+    assert "easy h3SegmentSamplingStart" not in types
+    passthrough = _graph_node(result, "easy h3PassthroughVideo")
+    assert passthrough["inputs"]["frame_count"] == 120
+    assert passthrough["inputs"]["fps"] == 24.0
+    assert "easy saveVideo" not in types
+    artifact = _graph_node(result, "easy h3ProjectArtifact")
+    assert "context_latent" in artifact["inputs"]
+    assert artifact["inputs"]["continuity_mode"] == "shot"
+
+
+def test_h3_project_task_passthrough_can_mix_with_sampling(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    inputs = _h3_project_inputs()
+    task_segments = inputs["tracks_info"][0]["tracks"][0]["segments"]
+    task_segments[0]["content"]["task_mode"] = "passthrough"
+    task_segments.extend([
+        {
+            "start_frame": 120,
+            "end_frame": 240,
+            "content": {
+                "task_mode": "default",
+                "continuity_mode": "context",
+                "images": [],
+                "user_prompt": "continue after source",
+            },
+        },
+        {
+            "start_frame": 240,
+            "end_frame": 360,
+            "content": {
+                "task_mode": "passthrough",
+                "continuity_mode": "context_swap",
+                "images": [],
+                "user_prompt": "ignored",
+            },
+        },
+        {
+            "start_frame": 360,
+            "end_frame": 480,
+            "content": {
+                "task_mode": "default",
+                "continuity_mode": "context",
+                "images": [],
+                "user_prompt": "continue after second source",
+            },
+        },
+    ])
+    result = module.EasyMultiTrackProject.execute(**inputs)
+    nodes = list(result.expand.values())
+    assert sum(node["class_type"] == "easy h3PassthroughVideo" for node in nodes) == 2
+    assert sum(node["class_type"] == "easy minimaxH3ToVideo" for node in nodes) == 2
+    assert sum(node["class_type"] == "easy h3ProjectArtifact" for node in nodes) == 4
+    assert not any(node["class_type"] == "easy h3ProjectContextLatentLoad" for node in nodes)
+    artifacts = [node for node in nodes if node["class_type"] == "easy h3ProjectArtifact"]
+    assert [node["inputs"]["continuity_mode"] for node in artifacts] == ["shot", "context", "shot", "context"]
+
+
+def test_h3_project_single_task_passthrough_skips_prior_context_and_sampler(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    inputs = _h3_project_inputs(segment_start_number=[2], segment_count=[1])
+    task_segments = inputs["tracks_info"][0]["tracks"][0]["segments"]
+    task_segments.append({
+        "start_frame": 120,
+        "end_frame": 240,
+        "content": {
+            "task_mode": "passthrough",
+            "continuity_mode": "context",
+            "images": [],
+            "user_prompt": "ignored",
+        },
+    })
+    monkeypatch.setattr(module._project_module, "has_h3_context_latent", lambda *args, **kwargs: False)
+    result = module.EasyMultiTrackProject.execute(**inputs)
+    types = {node["class_type"] for node in result.expand.values()}
+    assert "easy h3PassthroughVideo" in types
+    assert "easy h3ProjectContextLatentLoad" not in types
+    assert "SamplerCustomAdvanced" not in types
+    assert "easy minimaxH3ToVideo" not in types
+
+
+@pytest.mark.parametrize("continuity_mode", ["shot", "context", "context_swap"])
+def test_h3_project_passthrough_ignores_continuity_mode_and_encodes_tail(
+    monkeypatch, continuity_mode,
+):
+    module = _load_minimax_node(monkeypatch)
+    inputs = _h3_project_inputs(sampling_mode=_h3_sampling_mode("passthrough"))
+    inputs["tracks_info"][0]["tracks"][0]["segments"][0]["content"]["continuity_mode"] = continuity_mode
+    result = module.EasyMultiTrackProject.execute(**inputs)
+    passthrough = _graph_node(result, "easy h3PassthroughVideo")
+    assert "keep_context" not in passthrough["inputs"]
+    artifact = _graph_node(result, "easy h3ProjectArtifact")
+    assert artifact["inputs"]["continuity_mode"] == "shot"
+    context = result.expand[artifact["inputs"]["context_latent"][0]]
+    assert context["class_type"] == "easy h3MotionContextLatentTrim"
+    assert context["inputs"]["context_length"] == "22"
+
+
+def test_h3_project_context_loads_saved_passthrough_shot_tail(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    inputs = _h3_project_inputs(segment_start_number=[2], segment_count=[1])
+    task_segments = inputs["tracks_info"][0]["tracks"][0]["segments"]
+    task_segments.append({
+        "start_frame": 120,
+        "end_frame": 240,
+        "content": {
+            "task_mode": "default",
+            "continuity_mode": "context",
+            "images": [],
+            "user_prompt": "a new scene",
+        },
+    })
+    monkeypatch.setattr(module._project_module, "has_h3_context_latent", lambda *args, **kwargs: True)
+    result = module.EasyMultiTrackProject.execute(**inputs)
+    assert any(
+        node["class_type"] == "easy h3ProjectContextLatentLoad"
+        for node in result.expand.values()
+    )
+    assert any(
+        node["class_type"] == "ComfyMathExpression"
+        and node["inputs"]["expression"] == "a + 34"
+        for node in result.expand.values()
+    )
+    artifact = _graph_node(result, "easy h3ProjectArtifact")
+    assert artifact["inputs"]["continuity_mode"] == "context"
 
 
 def test_h3_project_static_prepare_exposes_media_cache_boundary(monkeypatch):
@@ -1631,7 +1774,11 @@ def test_multitrack_h3_project_outputs_locked_audio_used_by_generation(monkeypat
     artifact = _graph_node(result, "easy h3ProjectArtifact")
     assert "locked_audio" not in artifact["inputs"]
     assert align["inputs"]["fps"] == 24.0
-    assert saved_video["inputs"]["input_mode.audio"] == {"prepared_locked_audio": True}
+    selector = _graph_node(result, "easy h3LockedAudioSelect")
+    assert selector["inputs"]["locked_audio"] == {"prepared_locked_audio": True}
+    assert saved_video["inputs"]["input_mode.audio"][0].endswith(
+        "locked_audio_select_0"
+    )
     assert not any(
         node["class_type"] == "easy multiTrackTaskOutput"
         and node["inputs"]["task_index"] == -1
@@ -1652,6 +1799,47 @@ def test_multitrack_h3_project_outputs_none_without_locked_audio(monkeypatch):
     saved_video = _graph_node(result, "easy saveVideo")
     audio_link = saved_video["inputs"]["input_mode.audio"]
     assert result.expand[audio_link[0]]["class_type"] == "VAEDecodeAudio"
+
+
+def test_muted_locked_video_preserves_timing_without_audio_lock(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    inputs = _h3_project_inputs()
+    info = inputs["tracks_info"][0]
+    info["tracks"].append({
+        "type": "video",
+        "audio_locked": True,
+        "muted": True,
+        "segments": [{
+            "start_frame": 0,
+            "end_frame": 120,
+            "content": {"media_type": "video"},
+        }],
+    })
+
+    result = module.EasyMultiTrackProject.execute(**inputs)
+
+    assert not any(
+        node["class_type"] == "easy minimaxH3AudioLock"
+        for node in result.expand.values()
+    )
+    trim = _graph_node(result, "easy h3ContextMediaTrim")
+    assert trim["inputs"]["output_frames"] == 120
+    assert trim["inputs"]["fit_video_duration"] is True
+    assert trim["inputs"]["pad_audio"] is True
+    saved_video = _graph_node(result, "easy saveVideo")
+    audio_link = saved_video["inputs"]["input_mode.audio"]
+    assert result.expand[audio_link[0]]["class_type"] == "easy h3ContextMediaTrim"
+
+
+def test_locked_audio_select_falls_back_when_video_has_no_audio(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    generated = {"waveform": torch.ones(1, 1, 4), "sample_rate": 24}
+
+    missing = module.EasyH3LockedAudioSelect.execute(generated, None)
+    malformed = module.EasyH3LockedAudioSelect.execute(generated, {})
+
+    assert missing.values[0] is generated
+    assert malformed.values[0] is generated
 
 
 def test_multitrack_h3_project_does_not_log_execution_events_while_expanding(
@@ -2486,6 +2674,7 @@ def test_multitrack_h3_selflift_uses_target_size_and_one_progressive_sample(
     assert "segment_index" not in selflift["inputs"]
     assert "upscale_by" not in selflift["inputs"]
     assert selflift["inputs"]["upscaler_model"] == "None"
+    assert selflift["inputs"]["highres_model"] is selflift["inputs"]["model"]
     assert artifact["inputs"]["sampling_pass"] == "single"
     assert artifact["inputs"]["tracks_info"]["width"] == 1344
     assert artifact["inputs"]["tracks_info"]["height"] == 768
@@ -2621,6 +2810,8 @@ def test_selflift_sampler_schema_forces_euler_by_not_exposing_a_sampler(monkeypa
     assert schema.node_id == "easy minimaxH3SelfLiftSampler"
     assert schema.is_dev_only is True
     assert "sampler" not in inputs
+    assert list(inputs)[-2:] == ["previous", "highres_model"]
+    assert inputs["highres_model"].kwargs["optional"] is True
     assert inputs["transition_ratio"].kwargs["default"] == 0.6
     assert inputs["lowres_scale"].kwargs["default"] == 0.6
     assert inputs["rho"].kwargs["default"] == pytest.approx(0.1)
@@ -2772,6 +2963,34 @@ def test_selflift_sampler_uses_lowres_scale(monkeypatch):
     assert captured["highres_tiling"] is False
     assert captured["low_context_latent"] is None
     assert result.values == (sampled, low_context)
+
+
+def test_selflift_sampler_forwards_high_resolution_model(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    captured = {}
+    sampling_module = types.ModuleType("easy_media.modules.selflift.sampling")
+
+    def progressive_sample_h3(**kwargs):
+        captured.update(kwargs)
+        return {"samples": object()}, {"samples": object()}
+
+    sampling_module.progressive_sample_h3 = progressive_sample_h3
+    monkeypatch.setitem(sys.modules, "easy_media.modules.selflift.sampling", sampling_module)
+    first_model = object()
+    second_model = object()
+
+    module.EasyMiniMaxH3SelfLiftSampler.execute(
+        model=first_model,
+        highres_model=second_model,
+        positive=[],
+        vae=object(),
+        latent_image={"samples": torch.zeros(1, 24, 1, 60, 104)},
+        sigmas=torch.tensor([1.0, 0.0]),
+        seed=42,
+    )
+
+    assert captured["model"] is first_model
+    assert captured["highres_model"] is second_model
 
 
 def test_selflift_sampler_forwards_artifact_correction_controls(monkeypatch):
@@ -2932,6 +3151,32 @@ def test_multitrack_project_uses_flat_upscale_by(
         conditionings = [node["inputs"] for node in result.expand.values()
                         if node["class_type"] == "easy minimaxH3ToVideo"]
         assert (conditionings[1]["width"], conditionings[1]["height"]) == expected_size
+
+
+def test_multitrack_reference_dual_reuses_conditioning_for_second_pass(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    module.comfy_nodes.NODE_CLASS_MAPPINGS["ImageResizeKJv2"] = _ImageResizeKJWithNvidia
+    inputs = _h3_project_inputs(sampling_mode=_h3_sampling_mode("dual"))
+    inputs["tracks_info"][0]["tracks"][0]["segments"][0]["content"]["task_mode"] = "ref"
+
+    result = module.EasyMultiTrackProject.execute(**inputs)
+    graph = result.expand
+    conditioning_nodes = [
+        node for node in graph.values()
+        if node["class_type"] == "easy minimaxH3ToVideo"
+    ]
+    assert len(conditioning_nodes) == 1
+    assert conditioning_nodes[0]["inputs"]["mode"] == "reference"
+    cache_id = next(
+        node_id for node_id, node in graph.items()
+        if node["class_type"] == "easy h3ConditioningCache"
+    )
+    guiders = [
+        node for node in graph.values()
+        if node["class_type"] == "BasicGuider"
+    ]
+    assert len(guiders) == 2
+    assert all(node["inputs"]["conditioning"] == [cache_id, 0] for node in guiders)
 
 
 def test_multitrack_h3_project_forwards_override_save_mode(monkeypatch):
@@ -3222,6 +3467,54 @@ def test_multitrack_h3_dynamic_dual_model_loader_uses_second_model_for_second_pa
     assert _graph_node(result, "VAEDecodeAudio")["inputs"]["vae"] is first_audio_vae
 
 
+def test_multitrack_h3_selflift_uses_second_model_only_for_high_resolution(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    first_model = _MiniMaxH3Model()
+    second_model = _MiniMaxH3Model()
+
+    result = module.EasyMultiTrackProject.execute(
+        **_h3_project_inputs(
+            model_loader=[{
+                "model": first_model,
+                "clip": object(),
+                "vae": object(),
+                "audio_vae": object(),
+            }],
+            sampling_mode=_h3_sampling_mode(
+                "selflift",
+                model_loader_2nd=[{"model": second_model}],
+            ),
+        )
+    )
+
+    selflift = _graph_node(result, "easy minimaxH3SelfLiftSampler")
+    assert selflift["inputs"]["model"] is first_model
+    assert selflift["inputs"]["highres_model"] is second_model
+
+
+def test_linked_selflift_forwards_second_model_loader(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    result = module.EasyMultiTrackProject.execute(
+        **_h3_project_inputs(
+            model_loader=[["first-loader", 0]],
+            sampling_mode=_h3_sampling_mode(
+                "selflift", model_loader_2nd=[["second-loader", 0]]
+            ),
+        )
+    )
+
+    model_id, model_prepare = next(
+        (node_id, node)
+        for node_id, node in result.expand.items()
+        if node["class_type"] == "easy h3ProjectStaticPrepare"
+        and node_id.endswith("project_model_prepare")
+    )
+    selflift = _graph_node(result, "easy minimaxH3SelfLiftSampler")
+    assert model_prepare["inputs"]["model_loader_2nd"] == ["second-loader", 0]
+    assert selflift["inputs"]["model"] == [model_id, 2]
+    assert selflift["inputs"]["highres_model"] == [model_id, 3]
+
+
 def test_multitrack_h3_rejects_incomplete_custom_sampling(monkeypatch):
     module = _load_minimax_node(monkeypatch)
     assert module is not None
@@ -3477,7 +3770,11 @@ def test_multitrack_h3_context_chain_uses_previous_segment_latent(monkeypatch):
         and node["inputs"]["input_mode.images"] == [trim_id, 0]
     )
     # The task audio already excludes the context prefix; do not trim it again.
-    assert context_video["inputs"]["input_mode.audio"] == {
+    context_selector = result.expand[
+        context_video["inputs"]["input_mode.audio"][0]
+    ]
+    assert context_selector["class_type"] == "easy h3LockedAudioSelect"
+    assert context_selector["inputs"]["locked_audio"] == {
         "prepared_locked_audio": True,
     }
     artifacts = [
@@ -3814,8 +4111,9 @@ def test_multitrack_h3_dual_context_uses_separate_low_and_hires_latents(monkeypa
         ]
 
 
+@pytest.mark.parametrize("continuity_mode", ["context_drift", "context_swap"])
 def test_multitrack_h3_context_swap_uses_drift_control_only_in_first_pass(
-    monkeypatch,
+    monkeypatch, continuity_mode,
 ):
     module = _load_minimax_node(monkeypatch)
     module.comfy_nodes.NODE_CLASS_MAPPINGS.update(
@@ -3831,7 +4129,7 @@ def test_multitrack_h3_context_swap_uses_drift_control_only_in_first_pass(
             "end_frame": 240,
             "content": {
                 "task_mode": "ref",
-                "continuity_mode": "context_swap",
+                "continuity_mode": continuity_mode,
                 "images": [{"media_index": 0}],
                 "user_prompt": "replace the character and preserve motion",
             },
@@ -3875,7 +4173,7 @@ def test_multitrack_h3_context_swap_uses_drift_control_only_in_first_pass(
     assert hires["inputs"]["previous_hires_latent"] == artifacts[0]["inputs"][
         "context_latent"
     ]
-    assert artifacts[1]["inputs"]["continuity_mode"] == "context_swap"
+    assert artifacts[1]["inputs"]["continuity_mode"] == continuity_mode
     assert all(
         artifact["inputs"]["context_latent"] != [first_noise_id, 0]
         for artifact in artifacts
@@ -4213,6 +4511,55 @@ def test_multitrack_h3_selflift_context_start_requires_exact_low_latent(monkeypa
     assert checked_resolutions == [("high", True), ("low", False)]
 
 
+def test_multitrack_h3_selflift_resumes_after_saved_passthrough(
+    monkeypatch, tmp_path,
+):
+    module = _load_minimax_node(monkeypatch)
+    monkeypatch.setattr(module.folder_paths, "get_output_directory", lambda: str(tmp_path))
+    project_dir = tmp_path / "easy_media" / "projects" / "demo"
+    project_dir.mkdir(parents=True)
+    (project_dir / "context_latent_0_1.safetensors").write_bytes(b"saved context")
+    (project_dir / "project.json").write_text(json.dumps({
+        "segments": {
+            "0": {
+                "active_generation": 1,
+                "task_mode": "default",
+                "generations": {
+                    "1": {
+                        "task_mode": "passthrough",
+                        "context_latent": "context_latent_0_1.safetensors",
+                    },
+                },
+            },
+        },
+    }))
+    info = _h3_project_inputs()["tracks_info"][0]
+    info["tracks"][0]["segments"][0]["content"]["task_mode"] = "passthrough"
+    info["tracks"][0]["segments"].append({
+        "start_frame": 120,
+        "end_frame": 240,
+        "content": {
+            "task_mode": "default",
+            "continuity_mode": "context",
+            "images": [],
+        },
+    })
+
+    result = module.EasyMultiTrackProject.execute(**_h3_project_inputs(
+        project_name=["demo"],
+        tracks_info=[info],
+        sampling_mode=_h3_sampling_mode("selflift"),
+        segment_start_number=[2],
+        segment_count=[1],
+    ))
+
+    loads = [node for node in result.expand.values()
+             if node["class_type"] == "easy h3ProjectContextLatentLoad"]
+    assert {node["inputs"]["resolution"] for node in loads} == {"high", "low"}
+    assert any(node["class_type"] == "easy minimaxH3SelfLiftSampler"
+               for node in result.expand.values())
+
+
 def test_multitrack_h3_selflift_context_swap_start_uses_both_saved_resolutions(
     monkeypatch,
 ):
@@ -4449,6 +4796,52 @@ def test_h3_project_artifact_writes_manifest_and_rotates_ten_generations(
     assert "anchor_latent_low" not in active_files
     assert active_files["continuity_mode"] == "shot"
     assert active_files["seed"] == 0xFFFFFFFFFFFFFFFF
+
+
+def test_h3_project_artifact_shot_saves_outgoing_context(monkeypatch, tmp_path):
+    module = _load_minimax_node(monkeypatch)
+    monkeypatch.setattr(module.folder_paths, "get_output_directory", lambda: str(tmp_path))
+    project_dir = tmp_path / "easy_media" / "projects" / "demo"
+    project_dir.mkdir(parents=True)
+    staged = project_dir / ".staging_video_0.mp4"
+    staged.write_bytes(b"video")
+
+    tracks_info = _h3_project_inputs()["tracks_info"][0]
+    tracks_info["tracks"][0]["segments"][0]["content"]["task_mode"] = "passthrough"
+    module.EasyH3ProjectArtifact.execute(
+        project_name="demo",
+        project_save="new",
+        segment_index=0,
+        context_latent=_h3_context_latent(1),
+        video_path=f"output/{staged.relative_to(tmp_path)}",
+        tracks_info=tracks_info,
+        continuity_mode="shot",
+    )
+
+    manifest = json.loads((project_dir / "project.json").read_text())
+    active = str(manifest["segments"]["0"]["active_generation"])
+    generation = manifest["segments"]["0"]["generations"][active]
+    assert "context_cut" not in generation
+    assert generation["task_mode"] == "passthrough"
+    assert generation["context_latent"] == f"context_latent_0_{active}.safetensors"
+    assert module._project_module.has_h3_context_latent(
+        "demo", 0, resolution="high", output_directory=tmp_path,
+    )
+
+    context_path = project_dir / generation["context_latent"]
+    old_context = context_path.read_bytes()
+    staged.write_bytes(b"replacement video")
+    module.EasyH3ProjectArtifact.execute(
+        project_name="demo",
+        project_save="override",
+        segment_index=0,
+        context_latent=_h3_context_latent(2),
+        video_path=f"output/{staged.relative_to(tmp_path)}",
+        tracks_info=tracks_info,
+        continuity_mode="shot",
+    )
+    assert context_path.exists()
+    assert context_path.read_bytes() != old_context
 
 
 def test_h3_project_artifact_notifies_only_after_new_video_is_in_manifest(
@@ -4820,6 +5213,22 @@ def test_reference_video_extraction_is_deferred_to_a_cacheable_subnode(monkeypat
     assert conditioning["inputs"]["ref_video_audio_0"] == [components_id, 1]
 
 
+def test_locked_video_timing_is_forwarded_to_reference_bridge(monkeypatch):
+    module = _load_minimax_node(monkeypatch)
+    assert module is not None
+
+    output = module.EasyMiniMaxH3ToVideo.execute(
+        **_base_inputs(
+            mode=["reference"],
+            videos=[object()],
+            locked_video_timing_frames=[56],
+        )
+    )
+
+    conditioning = _graph_node(output, module.REFERENCE_BRIDGE_NODE_ID)
+    assert conditioning["inputs"]["locked_video_timing_frames"] == 56
+
+
 def test_easy_node_reports_progress_for_each_media_input(monkeypatch):
     module = _load_minimax_node(monkeypatch)
     assert module is not None
@@ -5010,6 +5419,56 @@ def test_reference_bridge_pads_video_tail_without_resizing(monkeypatch):
     assert aligned.shape == (124, 1, 1, 1)
     assert aligned[:120, 0, 0, 0].tolist() == list(map(float, range(120)))
     assert aligned[120:, 0, 0, 0].tolist() == [119.0] * 4
+
+
+@pytest.mark.parametrize("source_frame_count", [39, 40, 41, 55, 56, 57])
+def test_reference_bridge_uniformly_fits_locked_video_timing(
+    monkeypatch,
+    source_frame_count,
+):
+    module = _load_minimax_node(monkeypatch)
+    assert module is not None
+    calls = []
+
+    class _NativeReferenceNode:
+        @classmethod
+        def execute(cls, **kwargs):
+            calls.append(kwargs)
+            return _NodeOutput("conditioning", "latent")
+
+    module.comfy_nodes.NODE_CLASS_MAPPINGS[
+        "MiniMaxH3ReferenceToVideo"
+    ] = _NativeReferenceNode
+    target_frame_count = module._align_frame_count(source_frame_count)
+    frames = _image_values(*range(source_frame_count))
+
+    module.EasyMiniMaxH3ReferenceToVideoBridge.execute(
+        clip=_Clip(),
+        vae=_Vae(),
+        prompt="prompt",
+        width=32,
+        height=32,
+        length=target_frame_count,
+        locked_video_timing_frames=target_frame_count,
+        ref_video_0=frames,
+    )
+
+    fitted = calls[0]["ref_videos"]["ref_video_0"]
+    expected_indexes = torch.linspace(
+        0,
+        source_frame_count - 1,
+        target_frame_count,
+    ).round().long()
+    assert fitted.shape == (target_frame_count, 1, 1, 1)
+    assert torch.equal(fitted[:, 0, 0, 0], expected_indexes.float())
+    restored_indexes = torch.linspace(
+        0,
+        target_frame_count - 1,
+        source_frame_count,
+    ).round().long()
+    assert fitted.index_select(0, restored_indexes)[:, 0, 0, 0].tolist() == list(
+        map(float, range(source_frame_count))
+    )
 
 
 def test_reference_fallback_pads_video_tail_instead_of_dropping_frames(monkeypatch):
@@ -5289,7 +5748,9 @@ def test_audio_only_project_saves_original_locked_audio(monkeypatch):
     })
     result = module.EasyMultiTrackProject.execute(**inputs)
     artifact = _graph_node(result, "easy h3ProjectArtifact")
-    assert artifact["inputs"]["audio"] == {"prepared_locked_audio": True}
+    selector = result.expand[artifact["inputs"]["audio"][0]]
+    assert selector["class_type"] == "easy h3LockedAudioSelect"
+    assert selector["inputs"]["locked_audio"] == {"prepared_locked_audio": True}
 
 
 def test_audio_only_context_trims_samples_and_retains_encoded_audio(monkeypatch):
@@ -5475,6 +5936,10 @@ def test_locked_media_preserves_source_span_in_both_passes(
             assert expression["expression"] == "a + 34"
         else:
             assert length == expected_generated
+        if track_type == "video":
+            assert node["inputs"]["locked_video_timing_frames"] == expected_generated
+        else:
+            assert "locked_video_timing_frames" not in node["inputs"]
     trims = [
         n for n in graph.values()
         if n["class_type"] == "easy h3ContextMediaTrim"
@@ -5491,7 +5956,9 @@ def test_locked_media_preserves_source_span_in_both_passes(
     for node in saves:
         trim = graph[node["inputs"]["input_mode.images"][0]]
         assert trim["inputs"]["output_frames"] == duration
-        assert node["inputs"]["input_mode.audio"] == {"prepared_locked_audio": True}
+        selector = graph[node["inputs"]["input_mode.audio"][0]]
+        assert selector["class_type"] == "easy h3LockedAudioSelect"
+        assert selector["inputs"]["locked_audio"] == {"prepared_locked_audio": True}
     # Every delivered segment, including the initial shot, supplies fresh context.
     encodes = [n for n in graph.values() if n["class_type"] == "VAEEncode"
                and "hires_context" in n["inputs"]["pixels"][0]]

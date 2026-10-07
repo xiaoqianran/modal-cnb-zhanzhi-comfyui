@@ -1,15 +1,9 @@
 {
     "UtilityNode": {
-        "title": "辅助节点⚡🅡🅞🅣🅘",
-        "inputs": {},
-        "widgets": {},
-        "outputs": {}
+        "title": "辅助节点⚡🅡🅞🅣🅘"
     },
     "BatchUtilityNode": {
-        "title": "批量工具节点⚡🅡🅞🅣🅘",
-        "inputs": {},
-        "widgets": {},
-        "outputs": {}
+        "title": "批量工具节点⚡🅡🅞🅣🅘"
     },
     "ImageIntervalSelect": {
         "title": "图像区间选择⚡🅡🅞🅣🅘",
@@ -19,7 +13,6 @@
             "start_at": "开始位置",
             "end_at": "结束位置"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -32,7 +25,6 @@
             "start_percentage": "起始百分比",
             "end_percentage": "结束百分比"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -46,7 +38,6 @@
             "scale_each": "单独缩放",
             "pad_value": "填充值"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -61,7 +52,6 @@
             "scale_each": "单独缩放",
             "pad_value": "填充值"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -72,7 +62,6 @@
             "image": "图像",
             "shuffle_size": "洗牌尺寸"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -82,7 +71,6 @@
         "inputs": {
             "image": "图像"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -94,7 +82,6 @@
             "image": "图像",
             "mask": "遮罩"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像",
             "mask": "遮罩"
@@ -128,7 +115,6 @@
             "model": "模型",
             "audio": "音频"
         },
-        "widgets": {},
         "outputs": {
             "drums_audio": "鼓音频",
             "vocals_audio": "人声音频",
@@ -150,7 +136,6 @@
             "filter_params": "滤波参数组",
             "sample_rate": "采样率"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -225,7 +210,6 @@
             "cmap": "颜色映射",
             "visualizer": "可视化器"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -239,7 +223,6 @@
             "channels": "通道",
             "audio": "音频"
         },
-        "widgets": {},
         "outputs": {
             "empty_mask": "空遮罩",
             "frame_count": "帧数",
@@ -256,7 +239,6 @@
             "channels": "通道",
             "audio": "音频"
         },
-        "widgets": {},
         "outputs": {
             "empty_mask": "空遮罩",
             "frame_count": "帧数",
@@ -273,7 +255,6 @@
             "channels": "通道",
             "audio": "音频"
         },
-        "widgets": {},
         "outputs": {
             "empty_mask": "空遮罩",
             "frame_count": "帧数",
@@ -289,7 +270,6 @@
             "audio": "音频",
             "n_steps": "音阶步数"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -302,7 +282,6 @@
             "fade_out_duration": "淡出时长",
             "shape": "形状"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -313,7 +292,6 @@
             "audio": "音频",
             "gain_db": "增益分贝"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -324,7 +302,6 @@
             "audio": "音频",
             "rate": "速率"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -337,7 +314,6 @@
             "pad_right": "右填充",
             "pad_mode": "填充模式"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -348,7 +324,6 @@
             "audio": "音频",
             "target_level": "目标电平"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -359,7 +334,6 @@
             "audio": "音频",
             "new_sample_rate": "新采样率"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -369,7 +343,6 @@
         "inputs": {
             "audio_list": "音频列表"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -379,7 +352,6 @@
         "inputs": {
             "audio": "音频"
         },
-        "widgets": {},
         "outputs": {
             "LIST[AUDIO]": "音频列表",
             "list[audio]": "音频列表"
@@ -391,7 +363,6 @@
             "audio1": "音频_1",
             "audio2": "音频_2"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -404,7 +375,6 @@
             "weight1": "权重_1",
             "weight2": "权重_2"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -415,7 +385,6 @@
             "audio1": "音频_1",
             "audio2": "音频_2"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -436,14 +405,16 @@
             "frames_per_eighth": "每八分音符帧数",
             "audio_duration": "音频时长",
             "beats_per_second": "每秒拍数",
-            "detected_bpm": "检测BPM值",
+            "detected_bpm": "检测到的 BPM 值",
             "sample_rate": "采样率",
             "num_channels": "通道数",
             "num_samples": "采样点数",
             "max_amplitude": "峰值振幅",
             "mean_amplitude": "平均振幅",
             "rms_amplitude": "RMS振幅",
-            "bit_depth": "bit位深度"
+            "bit_depth": "比特位深度",
+            "detected_bpm_rounded": "检测到的 BPM（整数）",
+            "detected_key": "检测到的主调"
         }
     },
     "AudioDither": {
@@ -453,7 +424,6 @@
             "bit_depth": "位深",
             "noise_shaping": "噪声整形"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -471,7 +441,6 @@
             "audio_frame": "音频帧",
             "feature_value": "特征值"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -490,7 +459,6 @@
             "feature_value": "特征值",
             "n_steps": "音阶步数"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -509,7 +477,6 @@
             "feature_value": "特征值",
             "rate": "速率"
         },
-        "widgets": {},
         "outputs": {
             "audio": "音频"
         }
@@ -539,7 +506,6 @@
             "feature_threshold": "特征阈值",
             "opt_feature": "可选特征"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像",
             "mask": "遮罩"
@@ -684,7 +650,6 @@
             "opt_feature": "可选特征",
             "depth_map": "深度图"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -732,7 +697,6 @@
             "other_depth_maps": "其他深度图",
             "blend_mode": "混合模式"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -765,8 +729,6 @@
     },
     "Doom_": {
         "title": "插件注释⚡🅡🅞🅣🅘",
-        "inputs": {},
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -779,9 +741,7 @@
             "frame_count": "总帧数",
             "width": "宽度",
             "height": "高度"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "FloatFeatureNode": {
         "title": "浮点特征节点⚡🅡🅞🅣🅘",
@@ -793,7 +753,6 @@
             "height": "高度",
             "floats": "浮点数组"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -811,7 +770,6 @@
             "last_value": "最终值",
             "interpolation_method": "插值方法"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -830,7 +788,6 @@
             "extraction_method": "提取方法",
             "feature_pipe": "特征管道"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -872,7 +829,6 @@
             "frames_per_cycle": "周期帧数",
             "offset": "偏移量"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -887,7 +843,6 @@
             "height": "高度",
             "depth_maps": "深度图"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -902,7 +857,6 @@
             "height": "高度",
             "images": "图像"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -917,7 +871,6 @@
             "height": "高度",
             "images": "图像"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -935,7 +888,6 @@
             "flow_threshold": "光流阈值",
             "magnitude_threshold": "幅度阈值"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -951,7 +903,6 @@
             "masks": "遮罩组",
             "threshold": "阈值"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -961,7 +912,6 @@
         "inputs": {
             "feature": "特征"
         },
-        "widgets": {},
         "outputs": {
             "name": "名称",
             "type": "类型",
@@ -982,9 +932,7 @@
             "audio": "音频",
             "frame_rate": "帧率",
             "frame_count": "总帧数"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "AudioFeatureExtractor": {
         "title": "音频特征提取器⚡🅡🅞🅣🅘",
@@ -996,7 +944,6 @@
             "height": "高度",
             "extraction_method": "提取方法"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征",
             "frame_count": "总帧数"
@@ -1013,7 +960,6 @@
             "width": "宽度",
             "height": "高度"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1030,7 +976,6 @@
             "height": "高度",
             "extraction_method": "提取方法"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1042,7 +987,6 @@
             "max_pitch": "最高音高",
             "previous_range_collection": "前级范围集合"
         },
-        "widgets": {},
         "outputs": {
             "pitch_range_collection": "音高范围集合"
         }
@@ -1053,7 +997,6 @@
             "preset": "预设",
             "previous_range_collection": "前级范围集合"
         },
-        "widgets": {},
         "outputs": {
             "pitch_range_collection": "音高范围集合"
         }
@@ -1067,7 +1010,6 @@
             "previous_range_collection": "前级范围集合",
             "midi_note": "MIDI音符"
         },
-        "widgets": {},
         "outputs": {
             "PITCH_RANGE_COLLECTION": "音高范围集合",
             "previous_range_collection": "前级范围集合"
@@ -1088,7 +1030,6 @@
             "midi_path": "MIDI路径",
             "video_frames": "视频帧"
         },
-        "widgets": {},
         "outputs": {
             "midi": "MIDI",
             "FEATURE": "特征"
@@ -1106,7 +1047,6 @@
             "height": "高度",
             "extraction_method": "提取方法"
         },
-        "widgets": {},
         "outputs": {
             "proximity_feature": "距离特征",
             "FEATURE": "特征"
@@ -1119,7 +1059,6 @@
             "method": "方法",
             "depth_maps": "深度图"
         },
-        "widgets": {},
         "outputs": {
             "LOCATION": "位置",
             "location": "位置"
@@ -1133,7 +1072,6 @@
             "z": "Z坐标",
             "batch_count": "批次数量"
         },
-        "widgets": {},
         "outputs": {
             "LOCATION": "位置",
             "location": "位置"
@@ -1147,7 +1085,6 @@
             "transformation_type": "变换类型",
             "transformation_value": "变换值"
         },
-        "widgets": {},
         "outputs": {
             "LOCATION": "位置",
             "location": "位置"
@@ -1166,7 +1103,6 @@
             "height": "高度",
             "extraction_method": "提取方法"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征",
             "image": "图像"
@@ -1202,7 +1138,6 @@
             "value_adjust": "值调整",
             "window_size": "窗口尺寸"
         },
-        "widgets": {},
         "outputs": {
             "TRIGGER_SET": "触发器合集",
             "trigger_set": "触发器合集"
@@ -1215,7 +1150,6 @@
             "fps": "帧率",
             "segments_alignment": "片段对齐"
         },
-        "widgets": {},
         "outputs": {
             "string": "字符串"
         }
@@ -1259,7 +1193,6 @@
         "inputs": {
             "alignment_text": "对齐文本"
         },
-        "widgets": {},
         "outputs": {
             "alignment_data": "对齐数据",
             "whisper_alignment": "语音对齐数据"
@@ -1271,7 +1204,6 @@
             "alignment_data": "对齐数据",
             "time_offset": "时间偏移"
         },
-        "widgets": {},
         "outputs": {
             "whisper_alignment": "语音对齐数据"
         }
@@ -1287,7 +1219,6 @@
             "window_size": "窗口尺寸",
             "threshold": "阈值"
         },
-        "widgets": {},
         "outputs": {
             "whisper_alignment": "语音对齐数据"
         }
@@ -1299,9 +1230,7 @@
             "original_feature": "原始特征",
             "processed_values": "处理值",
             "name_prefix": "名称前缀"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "FeatureMixer": {
         "title": "特征混合器⚡🅡🅞🅣🅘",
@@ -1324,7 +1253,6 @@
             "rise_smoothing_factor": "上升平滑因子",
             "values": "值"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1342,7 +1270,6 @@
             "max_output": "最大输出",
             "exponent": "指数"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1360,7 +1287,6 @@
             "weight1": "权重_1",
             "weight2": "权重_2"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1376,7 +1302,6 @@
             "y": "Y值",
             "operation": "操作"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1394,7 +1319,6 @@
             "alpha": "阿尔法",
             "sigma": "sigma"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1413,7 +1337,6 @@
             "phase_shift": "相位偏移",
             "blend": "混合度"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1430,7 +1353,6 @@
             "fader": "淡入淡出器",
             "control_feature": "控制特征"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1446,7 +1368,6 @@
             "lower_threshold": "下限阈值",
             "upper_threshold": "上限阈值"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1462,7 +1383,6 @@
             "lower_threshold": "下限阈值",
             "upper_threshold": "上限阈值"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1478,7 +1398,6 @@
             "target_feature_pipe": "目标特征管道",
             "fill_method": "填充方法"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1498,7 +1417,6 @@
             "frames_window": "帧窗口",
             "deccumulate": "反向累加"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1517,7 +1435,6 @@
             "easing": "缓动函数",
             "fade_out": "淡出"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1536,7 +1453,6 @@
             "min_distance": "最小距离",
             "extrapolate": "外推"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1555,7 +1471,6 @@
             "plateau_size": "平台尺寸",
             "detect_valleys": "检测谷值"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE": "特征"
         }
@@ -1568,7 +1483,6 @@
             "width": "宽度",
             "height": "高度"
         },
-        "widgets": {},
         "outputs": {
             "FEATURE_PIPE": "特征管道",
             "feature_pipe": "特征管道"
@@ -1587,9 +1501,7 @@
             "mode": "模式",
             "feature_param": "特征参数",
             "feature_mode": "特征模式"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "FeatureToWeightsStrategy": {
         "title": "特征转权重策略⚡🅡🅞🅣🅘",
@@ -1597,7 +1509,6 @@
             "module_path": "模块路径",
             "feature": "特征"
         },
-        "widgets": {},
         "outputs": {
             "WEIGHTS_STRATEGY": "权重策略",
             "weights_strategy": "权重策略"
@@ -1688,7 +1599,6 @@
             "module_path": "模块路径",
             "feature": "特征"
         },
-        "widgets": {},
         "outputs": {
             "float": "浮点数"
         }
@@ -1706,7 +1616,6 @@
             "feature": "特征",
             "feature_param": "特征参数"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -1728,7 +1637,6 @@
             "feature": "特征",
             "feature_param": "特征参数"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -1739,7 +1647,6 @@
             "module_path": "模块路径",
             "feature": "特征"
         },
-        "widgets": {},
         "outputs": {
             "mask": "遮罩"
         }
@@ -1755,7 +1662,6 @@
             "cn_weights": "控制网权重",
             "latent_keyframe": "Latent关键帧"
         },
-        "widgets": {},
         "outputs": {
             "timestep_keyframe": "时间步关键帧"
         }
@@ -1766,7 +1672,6 @@
             "feature": "特征",
             "prev_latent_kf": "前级Latent关键帧"
         },
-        "widgets": {},
         "outputs": {
             "LATENT_KEYFRAME": "Latent关键帧",
             "latent_keyframe": "Latent关键帧"
@@ -1844,7 +1749,6 @@
             "select_every": "选择间隔",
             "inherit_missing": "继承缺失"
         },
-        "widgets": {},
         "outputs": {
             "ad_keyframes": "AD关键帧"
         }
@@ -1858,7 +1762,6 @@
             "guarantee_steps": "保证步数",
             "inherit_missing": "继承缺失"
         },
-        "widgets": {},
         "outputs": {
             "ad_keyframes": "AD关键帧"
         }
@@ -1870,9 +1773,7 @@
             "invert_output": "反转输出",
             "lower_threshold": "下限阈值",
             "upper_threshold": "上限阈值"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "FeatureToFlexIntParam": {
         "title": "特征转Flex整数参数⚡🅡🅞🅣🅘",
@@ -1882,7 +1783,6 @@
             "lower_threshold": "下限阈值",
             "upper_threshold": "上限阈值"
         },
-        "widgets": {},
         "outputs": {
             "PARAMETER": "参数",
             "int": "整数"
@@ -1896,7 +1796,6 @@
             "lower_threshold": "下限阈值",
             "upper_threshold": "上限阈值"
         },
-        "widgets": {},
         "outputs": {
             "PARAMETER": "参数",
             "float": "浮点数"
@@ -1967,9 +1866,7 @@
             "feature": "特征",
             "prompt": "提示词",
             "extra_pnginfo": "额外PNG信息"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "FlexImageEdgeDetect": {
         "title": "Flex图像边缘检测⚡🅡🅞🅣🅘",
@@ -1984,8 +1881,7 @@
             "feature_threshold": "特征阈值",
             "low_threshold": "低阈值",
             "high_threshold": "高阈值"
-        },
-        "outputs": {}
+        }
     },
     "FlexImagePosterize": {
         "title": "Flex图像色调分离⚡🅡🅞🅣🅘",
@@ -2005,8 +1901,7 @@
             "channel_separation": "通道分离",
             "gamma": "Gamma",
             "dither_method": "抖动方法"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageKaleidoscope": {
         "title": "Flex图像万花筒⚡🅡🅞🅣🅘",
@@ -2026,8 +1921,7 @@
             "rotation": "旋转",
             "precession": "进动",
             "speed": "速度"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageColorGrade": {
         "title": "Flex图像调色⚡🅡🅞🅣🅘",
@@ -2043,8 +1937,7 @@
             "lut_file": "LUT文件",
             "intensity": "强度",
             "mix": "混合度"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageGlitch": {
         "title": "Flex图像故障效果⚡🅡🅞🅣🅘",
@@ -2064,8 +1957,7 @@
             "wave_frequency": "波形频率",
             "corruption_amount": "损坏程度",
             "time_seed": "时间种子"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageChromaticAberration": {
         "title": "Flex图像色差⚡🅡🅞🅣🅘",
@@ -2080,8 +1972,7 @@
             "feature_threshold": "特征阈值",
             "shift_amount": "偏移量",
             "angle": "角度"
-        },
-        "outputs": {}
+        }
     },
     "FlexImagePixelate": {
         "title": "Flex图像像素化⚡🅡🅞🅣🅘",
@@ -2095,8 +1986,7 @@
             "feature_mode": "特征模式",
             "feature_threshold": "特征阈值",
             "pixel_size": "像素尺寸"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageBloom": {
         "title": "Flex图像泛光⚡🅡🅞🅣🅘",
@@ -2117,8 +2007,7 @@
             "num_passes": "处理次数",
             "color_bleeding": "色彩溢出",
             "falloff": "衰减"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageTiltShift": {
         "title": "Flex图像移轴⚡🅡🅞🅣🅘",
@@ -2144,8 +2033,7 @@
             "bokeh_size": "散景尺寸",
             "bokeh_brightness": "散景亮度",
             "chromatic_aberration": "色差"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageParallax": {
         "title": "Flex图像视差⚡🅡🅞🅣🅘",
@@ -2164,8 +2052,7 @@
             "shift_y": "Y偏移",
             "shift_z": "Z偏移",
             "frame_index": "帧索引"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageContrast": {
         "title": "Flex图像对比度⚡🅡🅞🅣🅘",
@@ -2181,8 +2068,7 @@
             "contrast": "对比度",
             "brightness": "亮度",
             "preserve_luminosity": "保持亮度"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageWarp": {
         "title": "Flex图像扭曲⚡🅡🅞🅣🅘",
@@ -2203,8 +2089,7 @@
             "warp_frequency": "扭曲频率",
             "warp_octaves": "扭曲倍频",
             "warp_seed": "扭曲种子"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageVignette": {
         "title": "Flex图像暗角⚡🅡🅞🅣🅘",
@@ -2222,8 +2107,7 @@
             "feather": "羽化",
             "center_x": "中心X",
             "center_y": "中心Y"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageTransform": {
         "title": "Flex图像变换⚡🅡🅞🅣🅘",
@@ -2239,8 +2123,7 @@
             "transform_type": "变换类型",
             "x_value": "X值",
             "y_value": "Y值"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageHueShift": {
         "title": "Flex图像色相偏移⚡🅡🅞🅣🅘",
@@ -2255,8 +2138,7 @@
             "feature_mode": "特征模式",
             "feature_threshold": "特征阈值",
             "hue_shift": "色相偏移"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageDepthWarp": {
         "title": "Flex图像深度扭曲⚡🅡🅞🅣🅘",
@@ -2272,8 +2154,7 @@
             "feature_threshold": "特征阈值",
             "warp_strength": "扭曲强度",
             "frame_index": "帧索引"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageHorizontalToVertical": {
         "title": "Flex图像横竖转换⚡🅡🅞🅣🅘",
@@ -2291,8 +2172,7 @@
             "border_color": "边框颜色",
             "scale_factor": "缩放因子",
             "effect_strength": "效果强度"
-        },
-        "outputs": {}
+        }
     },
     "FlexImageBase": {
         "title": "Flex图像基础⚡🅡🅞🅣🅘",
@@ -2311,10 +2191,7 @@
         }
     },
     "ImageUtilityNode": {
-        "title": "图像工具节点⚡🅡🅞🅣🅘",
-        "inputs": {},
-        "widgets": {},
-        "outputs": {}
+        "title": "图像工具节点⚡🅡🅞🅣🅘"
     },
     "DyeImage": {
         "title": "染色图像",
@@ -2324,7 +2201,6 @@
             "target_rgb": "目标RGB",
             "tolerance": "容差"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -2337,7 +2213,6 @@
             "batch_size": "批次大小",
             "batch": "批次"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -2350,7 +2225,6 @@
             "upscale_method": "放大方法",
             "crop": "裁剪"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -2360,7 +2234,6 @@
         "inputs": {
             "color": "颜色"
         },
-        "widgets": {},
         "outputs": {
             "string": "字符串",
             "int": "整数"
@@ -2381,8 +2254,7 @@
             "feature_param": "特征参数",
             "feature_mode": "特征模式",
             "interpolation_mode": "插值模式"
-        },
-        "outputs": {}
+        }
     },
     "EmbeddingGuidedLatentInterpolate": {
         "title": "嵌入引导Latent插值⚡🅡🅞🅣🅘",
@@ -2400,8 +2272,7 @@
             "feature_param": "特征参数",
             "feature_mode": "特征模式",
             "interpolation_mode": "插值模式"
-        },
-        "outputs": {}
+        }
     },
     "FlexLatentBlend": {
         "title": "Flex Latent混合⚡🅡🅞🅣🅘",
@@ -2420,8 +2291,7 @@
             "feature_mode": "特征模式",
             "blend_mode": "混合模式",
             "blend_strength": "混合强度"
-        },
-        "outputs": {}
+        }
     },
     "FlexLatentNoise": {
         "title": "Flex Latent噪声⚡🅡🅞🅣🅘",
@@ -2437,8 +2307,7 @@
             "blend_mode": "混合模式",
             "noise_level": "噪声等级",
             "noise_type": "噪声类型"
-        },
-        "outputs": {}
+        }
     },
     "FlexLatentBase": {
         "title": "Flex Latent基础⚡🅡🅞🅣🅘",
@@ -2452,7 +2321,6 @@
             "feature_mode": "特征模式",
             "opt_feature": "可选特征"
         },
-        "widgets": {},
         "outputs": {
             "latent": "Latent"
         }
@@ -2478,7 +2346,6 @@
             "latent2": "潜在空间_2",
             "t": "时间"
         },
-        "widgets": {},
         "outputs": {
             "latent": "Latent"
         }
@@ -2500,8 +2367,7 @@
             "mask_strength": "遮罩强度",
             "max_kernel_size": "最大卷积核尺寸",
             "max_iterations": "最大迭代次数"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskWarp": {
         "title": "Flex遮罩扭曲⚡🅡🅞🅣🅘",
@@ -2521,8 +2387,7 @@
             "frequency": "频率（Hz）",
             "max_amplitude": "峰值振幅（dBFS）",
             "octaves": "倍频程"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskTransform": {
         "title": "Flex遮罩变换⚡🅡🅞🅣🅘",
@@ -2541,8 +2406,7 @@
             "mask_strength": "遮罩强度",
             "max_x_value": "最大x值",
             "max_y_value": "最大y值"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskMath": {
         "title": "Flex遮罩数学运算⚡🅡🅞🅣🅘",
@@ -2561,8 +2425,7 @@
             "grow_with_blur": "模糊扩张",
             "mask_strength": "遮罩强度",
             "max_blend": "最大混合"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskOpacity": {
         "title": "Flex遮罩不透明度⚡🅡🅞🅣🅘",
@@ -2580,8 +2443,7 @@
             "grow_with_blur": "模糊扩张",
             "mask_strength": "遮罩强度",
             "max_opacity": "最大不透明度"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskVoronoiScheduled": {
         "title": "Flex遮罩Voronoi调度⚡🅡🅞🅣🅘",
@@ -2610,8 +2472,7 @@
             "formula": "公式",
             "a": "A参数",
             "b": "B参数"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskBinary": {
         "title": "Flex遮罩二值化⚡🅡🅞🅣🅘",
@@ -2629,8 +2490,7 @@
             "grow_with_blur": "模糊扩张",
             "mask_strength": "遮罩强度",
             "threshold": "阈值"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskWavePropagation": {
         "title": "Flex遮罩波浪传播⚡🅡🅞🅣🅘",
@@ -2652,8 +2512,7 @@
             "wave_decay": "波衰减",
             "wave_frequency": "波的频率",
             "max_wave_field": "最大波场"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskEmanatingRings": {
         "title": "Flex遮罩放射环⚡🅡🅞🅣🅘",
@@ -2674,8 +2533,7 @@
             "ring_width": "环宽度",
             "ring_falloff": "环下降",
             "binary_mode": "二进制模式"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskRandomShapes": {
         "title": "Flex遮罩随机形状⚡🅡🅞🅣🅘",
@@ -2699,8 +2557,7 @@
             "appearance_method": "出现方法",
             "easing_function": "缓动函数",
             "shape_type": "形状类型"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskDepthChamber": {
         "title": "Flex遮罩深度腔⚡🅡🅞🅣🅘",
@@ -2720,8 +2577,7 @@
             "mask_strength": "遮罩强度",
             "z_front": "前Z值",
             "z_back": "后Z值"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskDepthChamberRelative": {
         "title": "Flex遮罩相对深度腔⚡🅡🅞🅣🅘",
@@ -2739,8 +2595,7 @@
             "mask_strength": "遮罩强度",
             "z1": "Z1值",
             "z2": "Z2值"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskInterpolate": {
         "title": "Flex遮罩插值⚡🅡🅞🅣🅘",
@@ -2763,8 +2618,7 @@
             "invert_mask_b": "反转遮罩B",
             "blend_mode": "混合模式",
             "mask": "遮罩"
-        },
-        "outputs": {}
+        }
     },
     "FlexMaskBase": {
         "title": "Flex遮罩基础⚡🅡🅞🅣🅘",
@@ -2799,9 +2653,7 @@
             "processed_masks": "处理遮罩",
             "original_masks": "原始遮罩",
             "progress_callback": "进度回调"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "TemporalMaskBase": {
         "title": "时序遮罩基础⚡🅡🅞🅣🅘",
@@ -2821,9 +2673,7 @@
             "effect_duration": "效果时长",
             "temporal_easing": "时序缓动",
             "palindrome": "回文"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "OpticalFlowMaskBase": {
         "title": "光流遮罩基础⚡🅡🅞🅣🅘",
@@ -2845,9 +2695,7 @@
             "frame_index": "帧索引",
             "flow_magnitude": "光流幅度",
             "flow": "光流"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "ParticleSystemMaskBase": {
         "title": "粒子系统遮罩基础⚡🅡🅞🅣🅘",
@@ -2890,7 +2738,6 @@
             "p4": "点4",
             "emitter_index": "发射器索引"
         },
-        "widgets": {},
         "outputs": {
             "mask": "遮罩",
             "image": "图像"
@@ -2916,7 +2763,6 @@
             "delay": "延迟",
             "rgb_string": "RGB字符串"
         },
-        "widgets": {},
         "outputs": {
             "mask": "遮罩"
         }
@@ -2938,7 +2784,6 @@
             "batch_size": "批次大小",
             "rgb_string": "RGB字符串"
         },
-        "widgets": {},
         "outputs": {
             "mask": "遮罩",
             "image": "图像"
@@ -2967,7 +2812,6 @@
             "mask2": "mask2",
             "operation": "操作"
         },
-        "widgets": {},
         "outputs": {
             "mask": "遮罩"
         }
@@ -2989,7 +2833,6 @@
             "sigma_color": "sigma_颜色",
             "sigma_space": "sigma_空间"
         },
-        "widgets": {},
         "outputs": {
             "mask": "遮罩",
             "image": "图像"
@@ -3007,7 +2850,6 @@
             "luminance_boost": "增加亮度",
             "background_influence": "背景影响"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
         }
@@ -3141,7 +2983,6 @@
             "previous_modulation": "历史调节",
             "feature": "特征"
         },
-        "widgets": {},
         "outputs": {
             "emitter_modulation": "发射器调制"
         }
@@ -3159,7 +3000,6 @@
             "feature": "特征",
             "target_emission_rate": "目标排放率"
         },
-        "widgets": {},
         "outputs": {
             "EMITTER_MODULATION": "发射器调节",
             "emitter_modulation": "发射器调节"
@@ -3178,7 +3018,6 @@
             "draw": "渲染",
             "previous_vortex": "历史湍流"
         },
-        "widgets": {},
         "outputs": {
             "VORTEX": "湍流",
             "vortex": "湍流"
@@ -3196,7 +3035,6 @@
             "draw": "渲染",
             "previous_well": "历史作用场"
         },
-        "widgets": {},
         "outputs": {
             "GRAVITY_WELL": "重力场",
             "gravity_well": "重力场"
@@ -3223,7 +3061,6 @@
             "particle_modulation": "粒子调节",
             "emitter_modulation": "发射器调节"
         },
-        "widgets": {},
         "outputs": {
             "PARTICLE_EMITTER": "粒子发射器",
             "particle_emitter": "粒子发射器"
@@ -3237,7 +3074,6 @@
             "rest_length": "其他长度",
             "max_distance": "最大的距离"
         },
-        "widgets": {},
         "outputs": {
             "SPRING_JOINT_SETTING": "弹性约束设置",
             "spring_joint_setting": "弹性约束设置"
@@ -3255,7 +3091,6 @@
             "feature_param": "特征参数",
             "feature": "特征"
         },
-        "widgets": {},
         "outputs": {
             "EMITTER_MOVEMENT": "发射器运动",
             "emitter_movement": "发射器运动"
@@ -3275,7 +3110,6 @@
             "color": "颜色",
             "previous_body": "历史物体"
         },
-        "widgets": {},
         "outputs": {
             "STATIC_BODY": "静态物体",
             "static_body": "静态物体"
@@ -3292,9 +3126,7 @@
             "random": "随机",
             "previous_modulation": "历史调节",
             "feature": "特征"
-        },
-        "widgets": {},
-        "outputs": {}
+        }
     },
     "ParticleSizeModulation": {
         "title": "粒子大小调节⚡🅡🅞🅣🅘",
@@ -3309,7 +3141,6 @@
             "feature": "特征",
             "target_size": "目标的大小"
         },
-        "widgets": {},
         "outputs": {
             "PARTICLE_MODULATION": "粒子调节",
             "particle_modulation": "粒子调节"
@@ -3328,7 +3159,6 @@
             "feature": "特征",
             "target_speed": "目标速度"
         },
-        "widgets": {},
         "outputs": {
             "PARTICLE_MODULATION": "粒子调节",
             "particle_modulation": "粒子调节"
@@ -3347,7 +3177,6 @@
             "feature": "特征",
             "target_color": "目标颜色"
         },
-        "widgets": {},
         "outputs": {
             "PARTICLE_MODULATION": "粒子调节",
             "particle_modulation": "粒子调节"
@@ -3497,7 +3326,6 @@
             "kp1": "kp1",
             "kp2": "kp2"
         },
-        "widgets": {},
         "outputs": {
             "pose_keypoint": "姿态关键点"
         }
@@ -3515,8 +3343,7 @@
             "feature_param": "特征参数",
             "feature_mode": "特征模式",
             "reverse": "反向"
-        },
-        "outputs": {}
+        }
     },
     "FlexVideoSeek": {
         "title": "Flex视频查找",
@@ -3531,8 +3358,7 @@
             "feature_param": "特征参数",
             "feature_mode": "特征模式",
             "reverse": "反向"
-        },
-        "outputs": {}
+        }
     },
     "FlexVideoFrameBlend": {
         "title": "动态视频帧合成⚡🅡🅞🅣🅘",
@@ -3552,8 +3378,7 @@
             "direction_bias": "方向偏差",
             "blend_mode": "混合模式",
             "motion_blur_strength": "运动模糊强度"
-        },
-        "outputs": {}
+        }
     },
     "FlexVideoSpeed": {
         "title": "Flex视频速度⚡🅡🅞🅣🅘",
@@ -3580,8 +3405,7 @@
             "file_name": "文件名称",
             "model_type": "模型类型",
             "ckpt_name": "ckpt名字"
-        },
-        "outputs": {}
+        }
     },
     "MakeInterpolationStateList": {
         "title": "蒙版加载状态列表⚡🅡🅞🅣🅘",
@@ -3589,7 +3413,6 @@
             "frame_indices": "帧索引",
             "is_skip_list": "skip列表"
         },
-        "widgets": {},
         "outputs": {
             "interpolation_states": "加载状态"
         }
@@ -3599,7 +3422,6 @@
         "inputs": {
             "float": "浮点数"
         },
-        "widgets": {},
         "outputs": {
             "int": "整数"
         }
@@ -3651,6 +3473,7 @@
     },
     "MIDIToAudio": {
         "title": "Midi转音频⚡🅡🅞🅣🅘",
+        "description": "这将生成 MIDI音符的粗略近似值，供快速参考，仅此而已。 可能无法准确获取音符，尤其是对于鼓声。",
         "inputs": {
             "midi": "Midi"
         },
@@ -3663,8 +3486,7 @@
             "Audio": "音频",
             "AUDIO": "音频",
             "audio": "音频"
-        },
-        "description": "这将生成 MIDI音符的粗略近似值，供快速参考，仅此而已。\n 可能无法准确获取音符，尤其是对于鼓声。"
+        }
     },
     "MIDILoader": {
         "title": "Midi加载器⚡🅡🅞🅣🅘",
@@ -3848,7 +3670,6 @@
         "inputs": {
             "image": "图像"
         },
-        "widgets": {},
         "outputs": {
             "IMAGE": "图像"
         }
@@ -3892,7 +3713,6 @@
             "IMAGE": "图像"
         }
     },
-
     "ACEStepAnalyzeLatent": {
         "title": "ACE一步分析Latent⚡🅡🅞🅣🅘",
         "inputs": {
@@ -4023,9 +3843,152 @@
             "opt_feature": "可选特征",
             "video": "视频"
         },
-        "widgets": {},
         "outputs": {
             "image": "图像"
+        }
+    },
+    "ACEStep15TaskTextEncode": {
+        "title": "任务文本编码（ACE-Step 1.5 ）⚡🅡🅞🅣🅘",
+        "widgets": {
+            "duration": "时长",
+            "bpm": "每分钟节拍数",
+            "keyscale": "音阶种类",
+            "timesignature": "拍号",
+            "cfg_scale": "引导系数",
+            "top_p": "核采样",
+            "top_k": "Top-K 采样",
+            "min_p": "最小概率阈值",
+            "seed": "种子",
+            "language": "语言",
+            "temperature": "温度",
+            "task_type": "任务类型",
+            "track_name": "乐器类别"
+        },
+        "outputs": {
+            "conditioning": "条件引导"
+        }
+    },
+    "ModelSamplingACEStep": {
+        "title": "模型采样（ACE-Step）⚡🅡🅞🅣🅘",
+        "inputs": {
+            "model": "模型"
+        },
+        "widgets": {
+            "shift": "时间步偏移"
+        }
+    },
+    "ACEStep15NativeCoverGuider": {
+        "title": "翻唱引导器 ACE-Step 1.5 ⚡🅡🅞🅣🅘",
+        "inputs": {
+            "model": "模型",
+            "positive": "正向提示词",
+            "negative": "反向提示词",
+            "source_latents": "源音频数据",
+            "semantic_hints": "语义引导",
+            "reference_latent": "风格参考"
+        }
+    },
+    "ACEStep15NativeEditGuider": {
+        "title": "编辑引导器 ACE-Step 1.5（扩充/重绘） ⚡🅡🅞🅣🅘",
+        "inputs": {
+            "model": "模型",
+            "positive": "正向提示词",
+            "negative": "负向提示词",
+            "source_latents": "源音频数据",
+            "reference_latent": "风格参考"
+        },
+        "widgets": {
+            "cfg": "引导系数（CFG）",
+            "extend_left_seconds": "向前延伸时长 (秒)",
+            "extend_right_seconds": "向后延伸时长 (秒)",
+            "repaint_start_seconds": "局部重绘起点 (秒)",
+            "repaint_end_seconds": "重绘结束时间 (秒)"
+        },
+        "outputs": {
+            "output_latent": "输出 Latent",
+            "guider": "引导器"
+        }
+    },
+    "PreviewAudioCompare": {
+        "title": "音频对比预览 ⚡🅡🅞🅣🅘",
+        "inputs": {
+            "audio_a": "音频A",
+            "audio_b": "音频B"
+        }
+    },
+    "AdvancedFeatureCombiner": {
+        "title": "高级特征组合器 ⚡🅡🅞🅣🅘",
+        "inputs": {
+            "audio": "音频",
+            "feature_1": "特征1",
+            "feature_2": "特征2",
+            "feature_3": "特征3"
+        },
+        "widgets": {
+            "combine_mode": "融合模式",
+            "interpolation_method": "插值方法",
+            "frame_count": "总帧数",
+            "frame_rate": "帧率",
+            "invert_output": "倒置输出"
+        },
+        "outputs": {
+            "FEATURE": "特征"
+        }
+    },
+    "InstantFloatPreview": {
+        "title": "实时浮点预览 ⚡🅡🅞🅣🅘",
+        "inputs": {
+            "float_1": "参数_1",
+            "float_2": "参数_2",
+            "float_3": "参数_3",
+            "float_4": "参数_4",
+            "float_5": "参数_5",
+            "float_6": "参数_6",
+            "audio": "音频"
+        },
+        "widgets": {
+            "title": "标题",
+            "rewind_seconds": "快退秒数",
+            "label_1": "标签 1",
+            "label_2": "标签 2",
+            "label_3": "标签 3",
+            "label_4": "标签 4",
+            "label_5": "标签 5",
+            "label_6": "标签 6"
+        }
+    },
+    "AudioTemporalMask15": {
+        "title": "音频时域掩码 (ACE 1.5) ⚡🅡🅞🅣🅘",
+        "inputs": {
+            "audio_latents": "音频潜空间数据"
+        },
+        "widgets": {
+            "length_mismatch": "长度不匹配"
+        }
+    },
+    "AnimatedFloatPreview": {
+        "title": "动画数值预览 ⚡🅡🅞🅣🅘",
+        "inputs": {
+            "audio": "音频",
+            "float_1": "参数_1",
+            "float_2": "参数_2",
+            "float_3": "参数_3",
+            "float_4": "参数_4",
+            "float_5": "参数_5",
+            "float_6": "参数_6"
+        },
+        "widgets": {
+            "window_size": "窗口大小",
+            "width": "宽度",
+            "height": "高度",
+            "title": "标题",
+            "audio_brightness": "音频明亮度",
+            "label_1": "标签 1",
+            "label_2": "标签 2",
+            "label_3": "标签 3",
+            "label_4": "标签 4",
+            "label_5": "标签 5",
+            "label_6": "标签 6"
         }
     }
 }

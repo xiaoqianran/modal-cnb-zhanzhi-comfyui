@@ -1,8 +1,8 @@
 export type MultiTrackType = 'task' | 'video' | 'audio' | 'subtitle'
 
-export type MultiTrackTaskMode = 'default' | 'l2v' | 'ref' | 'edit'
+export type MultiTrackTaskMode = 'default' | 'l2v' | 'ref' | 'edit' | 'passthrough'
 
-export type MultiTrackContinuityMode = 'shot' | 'context' | 'context_swap'
+export type MultiTrackContinuityMode = 'shot' | 'context' | 'context_drift' | 'context_swap'
 
 export type MultiTrackRefImageSize = 'match' | 'max'
 
@@ -32,6 +32,7 @@ export interface MultiTrackTaskImage {
   panorama_view?: MultiTrackPanoramaView
   shared_reference?: boolean
   shared_reference_copy?: boolean
+  muted?: boolean
 }
 
 export interface MultiTrackSegmentContent {

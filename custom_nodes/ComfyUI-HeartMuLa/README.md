@@ -35,6 +35,9 @@ We are not providing service here, we are group of hobbiests, developers who wan
 **Update:**
 
 ------------------------------------------------------------
+2026-02-14 :
+Added xpu support
+
 2026-01-23 :
 Support new model from HeartMuLa
 
@@ -134,11 +137,14 @@ Use HuggingFace Cli download model weights.
 
 type :
 
-1
+1 - HeartMuLaGen
+
 hf download HeartMuLa/HeartMuLaGen --local-dir ./HeartMuLa
 
 
-2
+
+2 - HeartMuLaGen base model
+
 hf download HeartMuLa/HeartMuLa-oss-3B --local-dir ./HeartMuLa/HeartMuLa-oss-3B
 
 or 
@@ -146,7 +152,9 @@ or
 hf download HeartMuLa/HeartMuLa-RL-oss-3B-20260123 --local-dir ./HeartMuLa/HeartMuLa-RL-oss-3B-20260123
 
 
-3
+
+3 - HeartCodec model
+
 hf download HeartMuLa/HeartCodec-oss --local-dir ./HeartMuLa/HeartCodec-oss
 
 or
@@ -154,7 +162,9 @@ or
 hf download HeartMuLa/HeartCodec-oss-20260123 --local-dir ./HeartMuLa/HeartCodec-oss-20260123
 
 
-4
+
+4 - HeartTranscriptor
+
 hf download HeartMuLa/HeartTranscriptor-oss --local-dir ./HeartMuLa/HeartTranscriptor-oss
 
 

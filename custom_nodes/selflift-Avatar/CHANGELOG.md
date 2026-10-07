@@ -1,19 +1,56 @@
 # Changelog
 
+## Documentation correction — 2026-10-06
+
+- Clarify that dual-model sampling already existed through `model` / `model_hires`. The October 5 update renames and reorders those inputs, corrects high-resolution device selection, and adds validation/tests; it does not introduce dual-model sampling or forced unloading.
+- Correct both READMEs and the update description below. No runtime code changes.
+
+## Main branch — 2026-10-05 (not yet packaged)
+
+- Rename existing dual-model inputs on both H3 and Image samplers: required `model` → `low_res_model`, optional `model_hires` → `high_res_model`. Preserve the existing high-resolution fallback to the low-resolution model; dual-model sampling is not new in this update.
+- Breaking workflow change: the old sampler input names are no longer accepted; existing workflows must reconnect to the renamed inputs. The H3 TST patch node is unchanged.
+- Display the high-resolution socket directly below the low-resolution socket and preserve link targets when reordering restored root-graph inputs.
+- Use the selected high-resolution model's load device for its sampling stage and validate its sampler compatibility.
+- Document wiring, migration, shared-conditioning constraints, and verification limits in both READMEs.
+- 53 CPU tests and both frontend test suites pass. Real dual-model quality and peak VRAM remain unverified; the v0.1.4 release archive is unchanged.
+
+## v0.1.4-experimental — 2026-09-18
+
+- Display actual automatic tile count on the first line of the node panel; show pending before planning and no-split for one tile.
+- Send structured plan data through live events and completed/cached UI results; preserve old cached-text support.
+- Reset stale counts for settings changes and new runs; do not overwrite manual dropdown values.
+- Add numeric-node-ID lookup fallback for live updates.
+- Sampling and tiling algorithms unchanged. 47 CPU tests and expanded stub-DOM frontend callback tests pass.
+
+## v0.1.3-experimental — 2026-09-18
+
+- Add backward-compatible auto/manual tile count and direction controls to the H3 sampler.
+- Manual dropdown offers 2, 4, 6, 8 (default 2); auto retains the original 1–8 search.
+- Keep English as the homepage and update the separate Chinese README, including VRAM estimation caveats.
+- Show actual spatial plan, estimated memory and errors in a read-only node panel.
+- Keep overlaps automatic and preserve the full-audio mask restriction.
+- 47 CPU tests and frontend callback tests with a stub DOM passed; real model and live frontend verification pending.
+
+## v0.1.2-experimental — 2026-09-16
+
+- Allow high-resolution tiling for the validated audio-only mask case: video mask all 1, audio mask all 0.
+- Automatically select spatial direction and tile count from available workspace; 1–8 tiles are possible.
+- Forward the complete audio latent and H3 audio conditioning to every video tile.
+- Keep rejecting partial/soft video masks, partial/soft audio masks, dynamic mask schedules, and ControlNet with the H3 tiling path.
+- Add tile-stitching and masked-tiling regression tests; 34 CPU tests pass.
+- Add separate English and Chinese documentation; English README is the repository homepage.
+- Add a clickable GIF preview and publish the maintainer-provided `_00011-audio.mp4` as a public Release asset.
+- Publish the additional maintainer-provided `Selflift Avatar demo.mp4` as a public demo Release asset.
+
 ## v0.1.1-experimental
 
-- 接通 H3 原生音频遮罩条件与模型输入侧音频注入，不再仅恢复输出。
-- 高清恢复采样状态与干净 inpaint anchor 分离。
-- 保留静态遮罩范围、原节点 ID 和原工作流接口。
-- 28 项 CPU 测试通过，新增模型输入和条件标签验证。
-- 维护者反馈当前工作流试用可用；尚无系统性口型质量验证。
-- 首个公开预发布版本，保留 v0.1.0 供回退。
+- Connect H3 native audio conditioning and model-input audio injection instead of only restoring audio after prediction.
+- Separate the high-resolution noisy resume state from the clean inpaint anchor.
+- Preserve dual-stream masks, multi-channel masks, and constant image-sized SolidMask audio compatibility.
+- 28 CPU tests passed; no systematic lip-sync benchmark.
 
 ## v0.1.0-experimental
 
-- 独立注册 Avatar H3、Image、TST 节点，不覆盖原版。
-- 支持 H3 双流遮罩、多通道视频 mask、打包 mask 及音频静态约束。
-- 修正 H3 音频约束的采样尺度转换。
-- 支持附加到音频的恒定图像尺寸 SolidMask，拒绝非恒定图像网格。
-- 修复带遮罩纯像素 anchor 分支。
-- 26 项 CPU 测试通过；真实大模型生成未验证。
+- Independent Avatar H3, Image, and TST node registrations without overriding the original plugin.
+- H3 dual-stream masks, multi-channel video masks, packed masks, and static audio constraints.
+- H3 audio-scale correction and the masked pure pixel-anchor fix.

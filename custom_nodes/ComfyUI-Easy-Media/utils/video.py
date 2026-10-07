@@ -18,10 +18,165 @@ from typing import Any, Callable
 import folder_paths
 import torch
 
+
+def stage_passthrough_video_media(
+    video: object | None,
+    frame_count: int,
+    fps: float,
+    width: int,
+    height: int,
+    output_path: str | Path,
+    *,
+    context_frames: int = 22,
+) -> tuple[str, torch.Tensor, dict[str, Any]]:
+    """Stage a task video or black fallback with FFmpeg and decode its suffix."""
+    from .minimax import H3_VAE_FRAME_CHUNK, H3_VAE_FRAME_REMAINDER, h3_phase_aligned_context_start
+    from .multitrack import _video_stream_source
+
+    if frame_count < 1 or not math.isfinite(fps) or fps <= 0:
+        raise ValueError("Passthrough requires a positive frame count and fps")
+    if width < 1 or height < 1 or width % 2 or height % 2:
+        raise ValueError("Passthrough requires positive even output dimensions")
+    ffmpeg = get_ffmpeg_path("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError("Passthrough requires FFmpeg")
+    source_path = _video_stream_source(video) if video is not None else None
+    temporary_paths: list[str] = []
+    if video is not None and source_path is None:
+        source_fd, source_path = tempfile.mkstemp(
+            suffix=".mp4", dir=folder_paths.get_temp_directory(),
+        )
+        os.close(source_fd)
+        temporary_paths.append(source_path)
+        try:
+            video.save_to(source_path)
+        except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as error:
+            Path(source_path).unlink(missing_ok=True)
+            raise ValueError("Unable to materialize passthrough VIDEO input") from error
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    duration = frame_count / fps
+    try:
+        has_audio = False
+        command = [ffmpeg, "-y", "-nostdin", "-v", "error"]
+        if source_path is not None:
+            source_info = ffprobe_info(source_path)
+            if not source_info.get("has_video"):
+                raise ValueError("Passthrough source has no video stream")
+            source_duration = source_info.get("duration")
+            source_frames = source_info.get("frame_count")
+            source_fps = source_info.get("fps")
+            if isinstance(source_frames, int) and isinstance(source_fps, (int, float)) and source_fps > 0:
+                source_duration = source_frames / source_fps
+            if isinstance(source_duration, (int, float)) and source_duration + 1e-3 < duration:
+                raise ValueError("Passthrough video must cover the complete task timeline")
+            has_audio = source_info.get("has_audio") is True
+            command.extend(["-i", source_path])
+        else:
+            command.extend([
+                "-f", "lavfi", "-i",
+                f"color=c=black:s={width}x{height}:r={fps}:d={duration}",
+            ])
+        if not has_audio:
+            command.extend(["-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={duration}"])
+        command.extend([
+            "-map", "0:v:0", "-map", "0:a:0" if has_audio else "1:a:0",
+            "-vf", (
+                f"fps=fps={fps}:start_time=0,scale={width}:{height},"
+                f"tpad=stop_mode=clone:stop_duration={duration},"
+                f"trim=end_frame={frame_count},setpts=PTS-STARTPTS"
+            ),
+            "-af", (
+                "aresample=44100:first_pts=0,"
+                f"atrim=duration={duration},asetpts=PTS-STARTPTS,"
+                f"apad=pad_dur={duration},atrim=duration={duration}"
+            ),
+            "-frames:v", str(frame_count), "-t", str(duration),
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+            str(destination),
+        ])
+        try:
+            result = subprocess.run(command, capture_output=True, timeout=600)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise RuntimeError(f"Passthrough FFmpeg staging failed: {error}") from error
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Passthrough FFmpeg staging failed: "
+                + result.stderr.decode(errors="replace")[-800:]
+            )
+        staged_info = ffprobe_info(str(destination))
+        if staged_info.get("frame_count") != frame_count:
+            raise RuntimeError(
+                f"Passthrough FFmpeg staging produced {staged_info.get('frame_count')} "
+                f"frames instead of {frame_count}"
+            )
+        aligned_count = (
+            H3_VAE_FRAME_CHUNK * max(
+                0, math.ceil((frame_count - H3_VAE_FRAME_REMAINDER) / H3_VAE_FRAME_CHUNK)
+            ) + H3_VAE_FRAME_REMAINDER
+        )
+        suffix_start = (
+            h3_phase_aligned_context_start(aligned_count, context_frames)
+            if aligned_count >= context_frames else 0
+        )
+        suffix_start = min(suffix_start, frame_count - 1)
+        suffix_count = frame_count - suffix_start
+        seek_time = suffix_start / fps
+        video_result = subprocess.run(
+            [ffmpeg, "-v", "error", "-ss", str(seek_time), "-i", str(destination),
+             "-map", "0:v:0", "-frames:v", str(suffix_count),
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, timeout=120,
+        )
+        expected_bytes = suffix_count * width * height * 3
+        if video_result.returncode != 0 or len(video_result.stdout) != expected_bytes:
+            raise RuntimeError(
+                "Passthrough tail video decode failed: "
+                + video_result.stderr.decode(errors="replace")[-600:]
+            )
+        images = torch.frombuffer(bytearray(video_result.stdout), dtype=torch.uint8)
+        images = images.reshape(suffix_count, height, width, 3).to(torch.float32) / 255.0
+        if suffix_count < context_frames:
+            images = torch.cat(
+                (images, images[-1:].expand(context_frames - suffix_count, -1, -1, -1)),
+                dim=0,
+            )
+        audio_start = max(0.0, duration - context_frames / fps)
+        audio_result = subprocess.run(
+            [ffmpeg, "-v", "error", "-ss", str(audio_start), "-i", str(destination),
+             "-map", "0:a:0", "-t", str(duration - audio_start),
+             "-f", "f32le", "-acodec", "pcm_f32le", "-ac", "2", "-ar", "44100", "-"],
+            capture_output=True, timeout=120,
+        )
+        if audio_result.returncode != 0:
+            raise RuntimeError(
+                "Passthrough tail audio decode failed: "
+                + audio_result.stderr.decode(errors="replace")[-600:]
+            )
+        samples = torch.frombuffer(bytearray(audio_result.stdout), dtype=torch.float32)
+        if samples.numel() % 2:
+            raise RuntimeError("Passthrough tail audio has an invalid sample count")
+        waveform = samples.reshape(-1, 2).T.contiguous().unsqueeze(0)
+        wanted_samples = max(1, round(context_frames / fps * 44100))
+        waveform = waveform[..., -wanted_samples:]
+        if waveform.shape[-1] < wanted_samples:
+            waveform = torch.nn.functional.pad(waveform, (wanted_samples - waveform.shape[-1], 0))
+        return str(destination), images, {"waveform": waveform, "sample_rate": 44100}
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    finally:
+        for path in temporary_paths:
+            Path(path).unlink(missing_ok=True)
+
 logger = logging.getLogger(__name__)
 
 FFMPEG_RESIZE_METHODS = frozenset({"stretch", "resize", "pad", "pad (white)", "crop"})
 _VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
+
+
+_FFMPEG_TIMEOUT_SECONDS = 60.0
 
 
 def _video_output_suffix(path: str) -> str:
@@ -173,6 +328,89 @@ def resize_video_with_ffmpeg(
     return output_path
 
 
+def render_single_video_segment_with_ffmpeg(
+    source: str,
+    source_start_frame: int,
+    frame_count: int,
+    frame_rate: float,
+    width: int,
+    height: int,
+    resize_method: str,
+    *,
+    audio_volume_db: float = 0.0,
+    audio_muted: bool = False,
+) -> str | None:
+    """Render one task-length clip without a full-timeline overlay graph."""
+    ffmpeg = get_ffmpeg_path("ffmpeg")
+    resize_filter = _ffmpeg_resize_filter(width, height, resize_method)
+    if (
+        ffmpeg is None or resize_filter is None or not os.path.isfile(source)
+        or frame_count <= 0 or frame_rate <= 0 or width % 2 or height % 2
+    ):
+        return None
+
+    duration = frame_count / frame_rate
+    source_start = max(0, source_start_frame) / frame_rate
+    has_audio = ffprobe_info(source).get("has_audio") is True
+    output_fd, output_path = tempfile.mkstemp(
+        suffix=".mp4", dir=folder_paths.get_temp_directory(),
+    )
+    os.close(output_fd)
+    command = [
+        ffmpeg, "-y", "-nostdin", "-loglevel", "error",
+        "-ss", str(source_start), "-t", str(duration), "-i", source,
+        "-map", "0:v:0",
+    ]
+    if has_audio:
+        command.extend(["-map", "0:a:0"])
+    command.extend([
+        "-vf",
+        f"fps=fps={frame_rate}:start_time=0,{resize_filter},"
+        f"tpad=stop_mode=clone:stop_duration={duration},"
+        f"trim=end_frame={frame_count},setpts=PTS-STARTPTS",
+    ])
+    if has_audio:
+        try:
+            volume_db = float(audio_volume_db)
+        except (TypeError, ValueError):
+            volume_db = 0.0
+        if not math.isfinite(volume_db):
+            volume_db = 0.0
+        volume_filter = "volume=0" if audio_muted else f"volume={volume_db:g}dB"
+        command.extend([
+            "-af",
+            f"aresample=44100:first_pts=0,atrim=duration={duration},"
+            f"asetpts=PTS-STARTPTS,{volume_filter},"
+            f"apad=pad_dur={duration},atrim=duration={duration}",
+        ])
+    command.extend([
+        "-frames:v", str(frame_count), "-t", str(duration),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart", output_path,
+    ])
+    try:
+        result = subprocess.run(
+            command, capture_output=True, timeout=_FFMPEG_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        try:
+            os.unlink(output_path)
+        except OSError:
+            pass
+        raise RuntimeError(f"FFmpeg single video segment render failed: {exc}") from exc
+    if result.returncode != 0:
+        try:
+            os.unlink(output_path)
+        except OSError:
+            pass
+        raise RuntimeError(
+            "FFmpeg single video segment render failed: "
+            + result.stderr.decode(errors="replace")[-600:]
+        )
+    return output_path
+
+
 def merge_video_track_with_ffmpeg(
     segments: list[dict],
     total_length: int,
@@ -206,6 +444,8 @@ def merge_video_track_with_ffmpeg(
     command = [
         ffmpeg,
         "-y",
+        "-nostdin",
+        "-loglevel", "error",
         "-f",
         "lavfi",
         "-i",
@@ -353,7 +593,17 @@ def merge_video_track_with_ffmpeg(
         output_path,
     ])
     try:
-        result = subprocess.run(command, capture_output=True)
+        result = subprocess.run(
+            command, capture_output=True, timeout=_FFMPEG_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        try:
+            os.unlink(output_path)
+        except OSError:
+            pass
+        raise RuntimeError(
+            f"FFmpeg video track merge timed out after {exc.timeout:g} seconds"
+        ) from exc
     except OSError as exc:
         logger.warning("FFmpeg video track merge failed to start: %s", exc)
         try:
@@ -390,6 +640,37 @@ def get_ffmpeg_path(name: str = "ffmpeg") -> str | None:
             if os.path.isfile(path):
                 return path
     return None
+
+
+def decode_multitrack_preview_frame(
+    video_path: str | Path,
+    frame: int,
+    frame_rate: float,
+) -> bytes:
+    """Return the exact frame selected by the video-track FFmpeg fps filter."""
+    if frame < 0 or not math.isfinite(frame_rate) or frame_rate <= 0:
+        raise ValueError("Invalid preview frame or frame rate")
+    ffmpeg = get_ffmpeg_path()
+    if ffmpeg is None:
+        raise RuntimeError("FFmpeg is required for frame-accurate preview")
+    # Accurate input seeking decodes from the preceding keyframe. Keep one second
+    # of source frames before the requested output frame so the fps filter has
+    # the same timestamp context as a full decode from frame zero.
+    seek_time = max(0, math.floor(frame / frame_rate) - 1)
+    seek_args = ["-ss", str(seek_time), "-copyts", "-start_at_zero"] if seek_time else []
+    timestamp_filter = "" if seek_time else "setpts=PTS-STARTPTS,"
+    result = subprocess.run(
+        [ffmpeg, "-v", "error", *seek_args, "-i", str(video_path),
+         "-vf", f"{timestamp_filter}fps=fps={frame_rate}:start_time=0,"
+                f"select=eq(n\\,{frame}),scale=w='min(960,iw)':h=-2",
+         "-frames:v", "1", "-an", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+        capture_output=True, check=False, timeout=60,
+    )
+    if result.returncode != 0 or not result.stdout:
+        raise RuntimeError(
+            f"Unable to decode preview frame: {result.stderr.decode(errors='replace')[-600:]}"
+        )
+    return result.stdout
 
 
 def video_input_to_local_file(
@@ -565,7 +846,12 @@ def validate_merge_compatibility(specs: list[MergeSpec]) -> None:
         for label in labels:
             baseline_val = getattr(baseline, label)
             spec_val = getattr(spec, label)
-            if baseline_val != spec_val:
+            if label == "fps":
+                # Decoders can report the same nominal rate with tiny rounding differences.
+                matches = math.isclose(float(baseline_val), float(spec_val), rel_tol=0, abs_tol=1e-4)
+            else:
+                matches = baseline_val == spec_val
+            if not matches:
                 raise ValueError(
                     f"Video {index} is incompatible: '{label}' mismatch "
                     f"(expected {baseline_val!r}, got {spec_val!r})"
@@ -775,16 +1061,20 @@ def ffprobe_info(path: str) -> dict[str, Any]:
     ffprobe = get_ffmpeg_path("ffprobe")
     if not ffprobe:
         return {}
-    result = subprocess.run(
-        [
-            ffprobe, "-v", "error",
-            "-show_entries", "format=duration:stream=codec_type,width,height,r_frame_rate,avg_frame_rate,nb_frames,nb_read_frames",
-            "-of", "json",
-            path,
-        ],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                ffprobe, "-v", "error",
+                "-show_entries", "format=duration:stream=codec_type,width,height,r_frame_rate,avg_frame_rate,nb_frames,nb_read_frames",
+                "-of", "json",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"FFprobe timed out for {path} after 30 seconds") from exc
     if result.returncode != 0:
         return {}
     try:
@@ -1131,6 +1421,8 @@ def ffmpeg_extract_audio(video_path: str) -> dict | None:
     cmd = [
         ffmpeg,
         "-y",
+        "-nostdin",
+        "-loglevel", "error",
         "-i",
         video_path,
         "-vn",
@@ -1139,7 +1431,10 @@ def ffmpeg_extract_audio(video_path: str) -> dict | None:
         audio_path,
     ]
     try:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        result = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            check=False, timeout=_FFMPEG_TIMEOUT_SECONDS,
+        )
         if result.returncode != 0:
             logger.warning(
                 "[ffmpeg_extract_audio] FFmpeg audio extraction failed: %s",
@@ -1147,6 +1442,9 @@ def ffmpeg_extract_audio(video_path: str) -> dict | None:
             )
             return None
         return _load_wav_audio(audio_path)
+    except subprocess.TimeoutExpired:
+        # A stalled decoder must not fall through to a second full-frame decode.
+        raise
     except Exception as exc:
         logger.warning("[ffmpeg_extract_audio] FFmpeg audio extraction error: %s", exc)
         return None
@@ -1155,6 +1453,85 @@ def ffmpeg_extract_audio(video_path: str) -> dict | None:
             os.unlink(audio_path)
         except OSError:
             pass
+
+
+def extract_video_audio(
+    video,
+    cache: "dict | None" = None,
+) -> "dict | None":
+    """Extract a ComfyUI AUDIO dict from a VIDEO input. Prefers FFmpeg.
+
+    PyAV's full-frame decode walks every frame of the source file — wasteful
+    when only the audio stream is needed. FFmpeg demuxes the audio stream
+    directly. This helper is the shared extraction path for any code that
+    needs the audio track of a VIDEO input (e.g. audio-locked multitrack
+    tracks).
+
+    When ``cache`` is provided, the result is memoized for inputs that resolve
+    to the same underlying source so repeated calls (one per timeline segment)
+    share a single decode. The cache key is the source path when the input is
+    file-backed, else ``id(video)``.
+
+    Falls back to PyAV's ``video.get_components().audio`` when FFmpeg cannot
+    be used (in-memory / URL / trimmed source, or when FFmpeg raised or
+    returned no audio). A ``[Warning]`` is logged only when FFmpeg was
+    actually attempted but failed — in-memory / URL sources silently fall
+    back because FFmpeg was never in the picture.
+    """
+    # Lazy import: ``utils/__init__.py`` loads ``.video`` (step 4) before
+    # ``.multitrack`` (step 13), so a top-level ``from .multitrack import …``
+    # here would fire before ``_video_stream_source`` exists.
+    from .multitrack import _video_stream_source
+
+    source_path = _video_stream_source(video)
+    cache_key = source_path if isinstance(source_path, str) else id(video)
+
+    if isinstance(cache, dict) and cache_key in cache:
+        return cache[cache_key]
+
+    audio = _extract_video_audio_uncached(video, source_path)
+    if isinstance(cache, dict):
+        cache[cache_key] = audio
+    return audio
+
+
+def _extract_video_audio_uncached(video, source_path) -> "dict | None":
+    ffmpeg_attempted = False
+    if isinstance(source_path, str) and os.path.isfile(source_path):
+        if ffprobe_info(source_path).get("has_audio") is False:
+            return None
+        ffmpeg_attempted = True
+        try:
+            audio = ffmpeg_extract_audio(source_path)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"FFmpeg audio extraction timed out for {source_path} "
+                f"after {exc.timeout:g} seconds"
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[extract_video_audio] FFmpeg audio extraction raised: %s",
+                exc,
+            )
+            audio = None
+        if isinstance(audio, dict):
+            return audio
+    try:
+        components = video.get_components()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "[extract_video_audio] PyAV get_components raised: %s",
+            exc,
+        )
+        return None
+    audio = getattr(components, "audio", None)
+    if ffmpeg_attempted and isinstance(audio, dict):
+        logger.warning(
+            "[extract_video_audio] FFmpeg returned no audio for %s; "
+            "falling back to PyAV full-frame decode (slower).",
+            source_path,
+        )
+    return audio if isinstance(audio, dict) else None
 
 
 # ---------------------------------------------------------------------------

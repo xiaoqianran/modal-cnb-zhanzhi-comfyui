@@ -453,7 +453,7 @@ async def add_model_to_service_api(request):
         model_name = data.get('model_name')
         temperature = data.get('temperature', 0.7)
         top_p = data.get('top_p', 0.9)
-        max_tokens = data.get('max_tokens', 1024)
+        max_tokens = data.get('max_tokens', 4096)
         
         if not model_type or not model_name:
             return web.json_response({
@@ -676,6 +676,42 @@ async def update_model_parameter_api(request):
 
 
 # ====================== 配置API ======================
+
+def _load_ui_locale_messages(language: str):
+    """加载界面本地化词典"""
+    # 基础路径
+    locales_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locales")
+    
+    # 尝试加载请求的语言，如果失败回退到中文
+    locale_path = os.path.join(locales_dir, language, "ui.json")
+    if os.path.exists(locale_path):
+        normalized = language
+    else:
+        normalized = "zh"
+        locale_path = os.path.join(locales_dir, normalized, "ui.json")
+    
+    try:
+        with open(locale_path, "r", encoding="utf-8") as f:
+            return normalized, json.load(f)
+    except Exception as e:
+        print(f"{ERROR_PREFIX} 无法读取语言文件 {locale_path}: {str(e)}")
+        # 最后的兜底，返回空词典
+        return "zh", {}
+
+@PromptServer.instance.routes.get(f'{API_PREFIX}/config/ui_locale/{{language}}')
+async def get_ui_locale(request):
+    """获取前端UI本地化词典"""
+    try:
+        language = request.match_info.get("language", "zh")
+        normalized, messages = _load_ui_locale_messages(language)
+        return web.json_response({
+            "success": True,
+            "language": normalized,
+            "messages": messages
+        })
+    except Exception as e:
+        print(f"{ERROR_PREFIX} UI本地化词典加载失败 | 错误:{str(e)}")
+        return web.json_response({"success": False, "error": str(e)}, status=500)
 
 @PromptServer.instance.routes.get(f'{API_PREFIX}/config/system_prompts')
 async def get_system_prompts_config(request):
@@ -1143,8 +1179,14 @@ async def baidu_translate(request):
             return web.json_response({"success": False, "error": "缺少request_id"}, status=400)
         
         # 准备阶段日志
-        from_lang_name = {"auto": "自动", "zh": "中文", "en": "英文"}.get(from_lang, from_lang)
-        to_lang_name = {"zh": "中文", "en": "英文"}.get(to_lang, to_lang)
+        # 语言显示文字映射
+        lang_names = {
+            "auto": "自动检测", "zh": "简体中文", "en": "英文", "zh-TW": "繁体中文", 
+            "ja": "日语", "ko": "韩语", "ar": "阿拉伯语", "es": "西班牙语", 
+            "fa": "波斯语", "fr": "法语", "pt-BR": "葡萄牙语(巴西)", "ru": "俄语", "tr": "土耳其语"
+        }
+        from_lang_name = lang_names.get(from_lang, from_lang)
+        to_lang_name = lang_names.get(to_lang, to_lang)
         log_prepare(TASK_TRANSLATE, request_id, SOURCE_FRONTEND, "百度翻译", None, None, {"方向": f"{from_lang_name}→{to_lang_name}", "长度": len(text)})
         
         # 创建并注册任务
@@ -1251,8 +1293,14 @@ async def llm_translate(request):
         from .services.openai_base import OpenAICompatibleService
         
         prefix = AUTO_TRANSLATE_REQUEST_PREFIX if is_auto else REQUEST_PREFIX
-        from_lang_name = {"auto": "自动检测", "zh": "中文", "en": "英文"}.get(from_lang, from_lang)
-        to_lang_name = {"zh": "中文", "en": "英文"}.get(to_lang, to_lang)
+        # 语言显示文字映射
+        lang_names = {
+            "auto": "自动检测", "zh": "简体中文", "en": "英文", "zh-TW": "繁体中文", 
+            "ja": "日语", "ko": "韩语", "ar": "阿拉伯语", "es": "西班牙语", 
+            "fa": "波斯语", "fr": "法语", "pt-BR": "葡萄牙语(巴西)", "ru": "俄语", "tr": "土耳其语"
+        }
+        from_lang_name = lang_names.get(from_lang, from_lang)
+        to_lang_name = lang_names.get(to_lang, to_lang)
         
         # 使用独立的翻译配置
         translate_config = config_manager.get_translate_config()

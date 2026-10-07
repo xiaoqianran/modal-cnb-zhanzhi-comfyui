@@ -11,14 +11,14 @@ import type {
   TrackData,
 } from '@/types/multitrack'
 import { uuid } from './uuid'
-import { synchronizeSharedTaskImages } from './task-image-utils'
+import { activeTaskImages, synchronizeSharedTaskImages } from './task-image-utils'
 
 export const MULTITRACK_DEFAULT_FRAME_RATE = 24
 export const MULTITRACK_DEFAULT_TOTAL_LENGTH = 120
 export const MULTITRACK_MIN_DURATION_SECONDS = 5
-export const MULTITRACK_TASK_MODES = ['default', 'ref', 'edit', 'l2v'] as const
+export const MULTITRACK_TASK_MODES = ['default', 'ref', 'edit', 'l2v', 'passthrough'] as const
 export const MULTITRACK_DEFAULT_TASK_MODE: MultiTrackTaskMode = 'default'
-export const MULTITRACK_CONTINUITY_MODES = ['shot', 'context', 'context_swap'] as const
+export const MULTITRACK_CONTINUITY_MODES = ['shot', 'context', 'context_drift'] as const
 export const MULTITRACK_DEFAULT_CONTINUITY_MODE: MultiTrackContinuityMode = 'shot'
 export const MULTITRACK_REF_IMAGE_SIZES = ['match', 'max'] as const
 export const MULTITRACK_DEFAULT_REF_IMAGE_SIZE: MultiTrackRefImageSize = 'match'
@@ -110,6 +110,7 @@ export function getMultiTrackTaskType(
   imageCount: number,
   hasVideoInRange: boolean,
 ): string {
+  if (mode === 'passthrough') return 'passthrough'
   if (mode === 'l2v') return 'l2v'
   if (mode === 'ref') return hasVideoInRange ? 'rv2v' : 'r2v'
   if (mode === 'edit') return imageCount > 0 ? 'vi2v' : 'v2v'
@@ -117,6 +118,59 @@ export function getMultiTrackTaskType(
   if (imageCount === 1) return 'i2v'
   if (imageCount === 2) return 'fl2v'
   return 'fmlf2v'
+}
+
+export interface MergeSelectedTaskSegmentsResult {
+  tracks: MultiTrack[]
+  mergedSegmentId: string
+}
+
+export function mergeSelectedTaskSegments(
+  tracks: MultiTrack[],
+  selectedSegmentIds: Set<string>,
+): MergeSelectedTaskSegmentsResult | null {
+  if (selectedSegmentIds.size < 2) return null
+
+  const matchingTracks = tracks.filter((track) => (
+    track.type === 'task'
+    && track.segments.some((segment) => selectedSegmentIds.has(segment.id))
+  ))
+  if (matchingTracks.length !== 1) return null
+
+  const track = matchingTracks[0]
+  const orderedSegments = [...track.segments].sort((left, right) => left.start_frame - right.start_frame)
+  const selectedIndexes = orderedSegments.flatMap((segment, index) => (
+    selectedSegmentIds.has(segment.id) ? [index] : []
+  ))
+  if (selectedIndexes.length !== selectedSegmentIds.size || selectedIndexes.length < 2) return null
+  const firstIndex = selectedIndexes[0]
+  const lastIndex = selectedIndexes[selectedIndexes.length - 1]
+  if (lastIndex - firstIndex + 1 !== selectedIndexes.length) return null
+
+  const selectedSegments = orderedSegments.slice(firstIndex, lastIndex + 1)
+  const firstSegment = selectedSegments[0]
+  const contentSource = selectedSegments.find((segment) => (
+    getSelectedTaskUserPrompt(segment.content).trim().length > 0
+    || activeTaskImages(segment.content.images).length > 0
+  )) ?? firstSegment
+  const mergedSegment: MultiTrackSegment = {
+    ...firstSegment,
+    start_frame: firstSegment.start_frame,
+    end_frame: selectedSegments[selectedSegments.length - 1].end_frame,
+    content: { ...contentSource.content },
+  }
+  const mergedIds = new Set(selectedSegments.map((segment) => segment.id))
+  const nextSegments = orderedSegments.flatMap((segment) => {
+    if (segment.id === firstSegment.id) return [mergedSegment]
+    return mergedIds.has(segment.id) ? [] : [segment]
+  })
+
+  return {
+    tracks: tracks.map((candidate) => candidate.id === track.id
+      ? { ...candidate, segments: nextSegments }
+      : candidate),
+    mergedSegmentId: mergedSegment.id,
+  }
 }
 
 export function secondsToFrame(time: number, frameRate: number): number {
@@ -339,6 +393,7 @@ function normalizeTaskMode(value: unknown): MultiTrackTaskMode {
 }
 
 function normalizeContinuityMode(value: unknown): MultiTrackContinuityMode {
+  if (value === 'context_swap') return 'context_drift'
   return typeof value === 'string' && (MULTITRACK_CONTINUITY_MODES as readonly string[]).includes(value)
     ? value as MultiTrackContinuityMode
     : MULTITRACK_DEFAULT_CONTINUITY_MODE

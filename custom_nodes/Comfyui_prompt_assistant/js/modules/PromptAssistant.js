@@ -299,6 +299,18 @@ class PromptAssistant {
         this.initialized = false;
     }
 
+    /**
+     * 【核心优化】统一获取助手实例的唯一键名
+     * 解决子图节点 ID 冲突及不同扫描模式下的键名不一致问题
+     */
+    _getAssistantKey(node, inputId) {
+        if (!node) return null;
+        const graph = node.graph || app.graph;
+        // 优先顺序：graph.id (Locator ID) -> graph._workflow_id -> 'main'
+        const graphId = graph?.id || graph?._workflow_id || 'main';
+        return `${graphId}_${node.id}_${inputId}`;
+    }
+
     // ---生命周期管理功能---
     /**
      * 判断功能是否被禁用
@@ -494,14 +506,23 @@ class PromptAssistant {
             return;
         }
 
-        // 检查nodeId是否有效
+        // 检查Id是否有效
         if (nodeId !== null && nodeId !== undefined) {
             // 确保nodeId是字符串类型，便于后续比较
-            const nodeIdStr = String(nodeId);
+            const searchId = String(nodeId);
 
-            // 获取当前节点的所有实例键
+            // 获取所有匹配的实例键
+            // 逻辑：匹配精确键 (graphId_nodeId_inputId) 或者以 nodeId_ 开头的旧键，或者包含 _nodeId_ 的全量键
             const keysToDelete = Array.from(PromptAssistant.instances.keys())
-                .filter(key => key === nodeIdStr || key.startsWith(`${nodeIdStr}_`));
+                .filter(key => {
+                    // 1. 精确匹配（如果传入的是 assistantKey）
+                    if (key === searchId) return true;
+                    // 2. 匹配 nodeId (旧格式)
+                    if (key.startsWith(`${searchId}_`)) return true;
+                    // 3. 匹配带 graphId 前缀的格式 (graphId_nodeId_inputId)
+                    const parts = key.split('_');
+                    return parts.length >= 2 && parts[1] === searchId;
+                });
 
             // 如果有实例需要清理
             if (keysToDelete.length > 0) {
@@ -657,12 +678,16 @@ class PromptAssistant {
             (node.constructor && node.constructor.name === 'Subgraph');
 
         if (isVueMode && (isMarkdownNode || isUUIDType || isSubgraphType)) {
-            // Vue mode下这些节点类型直接视为有效
+            // logger.debug(`[isValidNode] Vue+Special match: ${node.type}`);
             return true;
         }
 
+        const valid = !!node.widgets;
+        if (!valid) {
+            // logger.debug(`[isValidNode] Fallback check: ${node.type}`);
+        }
         // 标准检查：需要有widgets属性
-        return !!node.widgets;
+        return valid;
     }
 
     /**
@@ -679,17 +704,17 @@ class PromptAssistant {
     /**
      * 获取实例
      */
-    static getInstance(nodeId) {
-        if (nodeId == null) return null;
-        return this.instances.get(String(nodeId));
+    static getInstance(key) {
+        if (key == null) return null;
+        return this.instances.get(String(key));
     }
 
     /**
      * 检查实例是否存在
      */
-    static hasInstance(nodeId) {
-        if (nodeId == null) return false;
-        return this.instances.has(String(nodeId));
+    static hasInstance(key) {
+        if (key == null) return false;
+        return this.instances.has(String(key));
     }
 
     /**
@@ -701,6 +726,8 @@ class PromptAssistant {
         if (!window.FEATURES.enabled || !node) return;
 
         const isVueMode = LiteGraph.vueNodesMode === true;
+        const graph = node.graph || app.graph;
+        const graphId = graph?.id || graph?._workflow_id || 'main';
 
 
 
@@ -745,9 +772,8 @@ class PromptAssistant {
         validInputs.forEach((inputWidget, widgetIndex) => {
             const inputId = inputWidget.name || inputWidget.id;
 
-            // 生成唯一的 assistantKey
-            // 对于同名的多个输入框（如 Show Any 节点的列表输入），使用索引区分
-            let assistantKey = `${node.id}_${inputId}`;
+            // --- 核心修复：多图支持的唯一键 ---
+            let assistantKey = this._getAssistantKey(node, inputId);
 
             // 检查是否存在同名的输入框，如果存在则使用索引或 DOM 元素的唯一标识
             const sameNameWidgets = validInputs.filter(w => (w.name || w.id) === inputId);
@@ -757,43 +783,49 @@ class PromptAssistant {
                 if (inputEl) {
                     // 为输入框元素添加唯一标识
                     if (!inputEl.dataset.promptAssistantUniqueId) {
-                        inputEl.dataset.promptAssistantUniqueId = `${node.id}_${inputId}_${widgetIndex}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                        inputEl.dataset.promptAssistantUniqueId = `${graphId}_${node.id}_${inputId}_${widgetIndex}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                     }
                     assistantKey = inputEl.dataset.promptAssistantUniqueId;
                 } else {
                     // 降级方案：使用索引
-                    assistantKey = `${node.id}_${inputId}_${widgetIndex}`;
+                    assistantKey = `${graphId}_${node.id}_${inputId}_${widgetIndex}`;
                 }
             }
 
             // 检查实例是否已存在
             if (PromptAssistant.hasInstance(assistantKey)) {
-                // 如果实例存在，检查输入控件是否已更新
+                // 如果实例存在，检查输入控件是否已更新，或者 UI 元素是否已丢失
                 const instance = PromptAssistant.getInstance(assistantKey);
                 const currentInputEl = inputWidget.inputEl;
                 const instanceInputEl = instance?.text_element;
+                const instanceUIEl = instance?.element;
 
-                // 只有在以下情况下才清理并重建：
-                // 1. 两个元素都存在
-                // 2. 它们是不同的元素
-                // 3. 不是因为临时的 DOM 状态变化（如打开弹窗）
-                if (instanceInputEl && currentInputEl && instanceInputEl !== currentInputEl) {
+                // 检查 UI 元素是否仍然在 DOM 中
+                const isVueMode = nodeMountService.isVueNodesMode();
+                const nodeContainer = isVueMode ? document.querySelector(`[data-node-id="${node.id}"]`) : null;
+                const isUIPresent = isVueMode ? nodeContainer?.contains(instanceUIEl) : document.body.contains(instanceUIEl);
+
+                // --- 修复：处理挂载竞争状态 ---
+                // 如果 UI 元素丢失，或者输入元素引用变化且原元素已移除，则清理并重建
+                // 增加 _isMounting 标记检查，避免异步挂载期间被误判为丢失
+                if (!instanceUIEl || (!isUIPresent && !instance._isMounting)) {
+                    logger.debug(() => `[checkAndSetupNode] UI 元素已丢失，清理实例以触发重建 | 节点ID: ${node.id} | 键: ${assistantKey}`);
+                    // 传入完整的 assistantKey 以确保精确清理
+                    this.cleanup(assistantKey);
+                } else if (!isUIPresent && instance._isMounting) {
+                    // 正在挂载中，跳过
+                    return;
+                } else if (instanceInputEl && currentInputEl && instanceInputEl !== currentInputEl) {
                     // 进一步检查：确保确实需要重建（避免误判）
                     // 如果当前元素已经从 DOM 中移除，才需要清理
                     if (!document.body.contains(instanceInputEl)) {
                         logger.debug(() => `[checkAndSetupNode] 输入元素已失效，清理实例 | 节点ID: ${node.id}`);
                         this.cleanup(node.id);
                     } else {
-                        // 元素仍然在 DOM 中，可能只是引用变化，不需要清理
-                        // logger.debug(() => `[checkAndSetupNode] 输入元素引用变化但仍有效，跳过清理 | 节点ID: ${node.id}`);
                         return;
                     }
-                } else if (!currentInputEl && instanceInputEl) {
-                    // Vue 模式下，inputEl 可能暂时为 null，不应该触发清理
-                    logger.debug(() => `[checkAndSetupNode] 当前inputEl为null，跳过清理（Vue模式下可能暂时为null） | 节点ID: ${node.id}`);
-                    return;
                 } else {
-                    // 实例存在且未更新，跳过
+                    // 实例存在且一切正常，跳过
                     return;
                 }
             }
@@ -827,6 +859,8 @@ class PromptAssistant {
         const isMarkdown = this._isMarkdownNode(node);
         const isSubgraph = this._isSubgraphNode(node);
 
+        // logger.debug(`[_handleVueDomScanNode] Scanning: ${node.type}`);
+
         // 仅处理我们识别的有效节点
         if (!isMarkdown && !isSubgraph) return;
 
@@ -849,6 +883,7 @@ class PromptAssistant {
         if (textareas.length === 0) {
             // 可能是 TipTap 编辑器（针对 Note 节点）
             const editor = nodeContainer.querySelector('.tiptap') || nodeContainer.querySelector('.ProseMirror');
+            // logger.debug(`[Vue扫描] 节点无文本框 | ID: ${node.id}`);
             if (editor) {
                 this._mountDomAssistant(node, editor, 'text', 0);
             }
@@ -867,11 +902,28 @@ class PromptAssistant {
      * 执行实际的 DOM 挂载
      */
     _mountDomAssistant(node, element, inputId, index) {
-        const assistantKey = `${node.id}_${inputId}`;
-        if (PromptAssistant.hasInstance(assistantKey)) return;
+        const assistantKey = this._getAssistantKey(node, inputId);
+        if (PromptAssistant.hasInstance(assistantKey)) {
+            const instance = PromptAssistant.getInstance(assistantKey);
+            const isVueMode = nodeMountService.isVueNodesMode();
+            const nodeContainer = isVueMode ? document.querySelector(`[data-node-id="${node.id}"]`) : null;
+            const isUIPresent = isVueMode ? nodeContainer?.contains(instance?.element) : document.body.contains(instance?.element);
 
-        // 检查元素是否已被挂载
-        if (element._promptAssistantMounted) return;
+            if (instance?.element && isUIPresent) {
+                return;
+            }
+
+            // 实例存在但 UI 丢失，清理旧实例以便重建
+            logger.debug(() => `[_mountDomAssistant] 检测到孤立实例，清理重建 | 节点ID: ${node.id}`);
+            this.cleanup(node.id);
+        }
+
+        // 检查元素是否已被挂载 (基于 DOM 属性判断)
+        if (element._promptAssistantMounted) {
+            // 如果属性还在但实例在 Map 中没了，或者 UI 确实不可见了，应该允许重新挂载
+            // 这里我们保持原样，通过上面的 cleanup 保证一致性
+            return;
+        }
 
         // 创建虚拟 widget
         const virtualWidget = {
@@ -892,7 +944,7 @@ class PromptAssistant {
         const assistant = this.createAssistant(node, inputId, virtualWidget, nodeInfo, assistantKey);
         if (assistant) {
             this.showAssistantUI(assistant);
-            logger.debugSample(() => `[DOM扫描] ${node.type}节点挂载成功 | ID: ${node.id} | Key: ${assistantKey}`);
+            // logger.debugSample(() => `[DOM扫描] ${node.type}节点挂载成功 | ID: ${node.id} | Key: ${assistantKey}`);
         }
     }
 
@@ -948,9 +1000,13 @@ class PromptAssistant {
                     inputEl: inputEl,
                     _needsDelayedTextareaLookup: isVueMode && !inputEl
                 };
-
-            } else {
-
+            }
+            // 补充注入查找到的真实 textarea (解决 Litegraph 下 PromotedWidgetView 获取不到 inputEl 导致中止的问题)
+            const mountContainer = nodeMountService.findMountContainer(node, inputWidget);
+            if (mountContainer && mountContainer.textarea) {
+                processedWidget = Object.create(processedWidget);
+                processedWidget.inputEl = mountContainer.textarea;
+                processedWidget.element = mountContainer.textarea;
             }
 
             // 创建小助手实例
@@ -1021,7 +1077,7 @@ class PromptAssistant {
         }
 
         const nodeId = node.id;
-        const widgetKey = assistantKey || `${nodeId}_${inputId}`;
+        const widgetKey = assistantKey || this._getAssistantKey(node, inputId);
 
 
 
@@ -1044,6 +1100,7 @@ class PromptAssistant {
             text_element: inputEl,
             inputEl: inputEl,
             isDestroyed: false,
+            _isMounting: true, // 标记挂载中状态
             nodeInfo: {
                 ...nodeInfo,
                 nodeId: nodeId,
@@ -1293,7 +1350,12 @@ class PromptAssistant {
 
 
 
-            this._setupUIPosition(widget, inputEl, containerEl, canvasContainerRect, (success) => {
+            this._setupUIPosition(widget, inputEl, containerEl, canvasContainerRect, inputWidget, (success) => {
+
+                if (widget.isDestroyed) {
+                    logger.debug(`[定位] 回调跳过：实例已销毁 | ID: ${nodeId}`);
+                    return;
+                }
 
                 if (!success) {
                     logger.debugSample(() => `[小助手] 创建暂缓 | 节点ID: ${nodeId} | 原因: 定位容器未就绪 (等待DOM渲染)`);
@@ -1310,6 +1372,8 @@ class PromptAssistant {
 
                 // 定位成功后更新尺寸
                 container.updateDimensions();
+                // 挂载完成，清除标记
+                widget._isMounting = false;
             });
 
             return containerEl;
@@ -2540,7 +2604,7 @@ class PromptAssistant {
      * 支持 Vue node2.0 和 litegraph.js 两种渲染模式
      * @param {Function} onComplete - 定位完成回调，接收boolean参数，true表示成功，false表示失败
      */
-    _setupUIPosition(widget, inputEl, containerDiv, canvasContainerRect, onComplete) {
+    _setupUIPosition(widget, inputEl, containerDiv, canvasContainerRect, inputWidget, onComplete) {
 
 
         // 清理函数列表
@@ -2556,8 +2620,8 @@ class PromptAssistant {
         }
 
 
-        // 创建widget对象用于容器查找
-        const widgetObj = {
+        // 使用真实的 inputWidget，用于适配 Subgraph 的 PromotedWidgetView 解包
+        const widgetObj = inputWidget || {
             inputEl: inputEl,
             element: inputEl,
             name: widget.inputId,

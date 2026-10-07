@@ -1,8 +1,14 @@
 # ComfyUI-FeiHou-Toolbox
 
+## 花果山Ai灵境坊
+
+- 网站 / API 服务：[api.fei-hou.net](https://api.fei-hou.net/)
+- Windows 客户端下载：[GitHub](https://github.com/FX-FeiHou/FeiHou-Ai-Studio/releases/latest) · [夸克网盘](https://pan.quark.cn/s/327190b9484c)。首次使用请选择 `FeiHou-Ai-Studio-Win-1.1.4-full.zip` 完整包，不要选择增量更新包或 Source code；已有用户优先通过启动器更新。
+- 范例工作流：[API 生图与视频合并范例](workflows/FeiHou_API_Image%26Video_example.json)。其中的文本显示和分组开关分别需要 ComfyUI-Custom-Scripts、rgthree-comfy；API 节点本身不依赖这两个包。
+
 ComfyUI 自定义节点工具箱，主要围绕多图参考、SAM3/SAM3.1 人物抠图拼接、SCAIL-2 遮罩处理、图像批次处理、布尔值传递，以及工作流分组切换进行扩展。
 
-当前版本为 **v2.9.4**。
+当前版本为 **v2.10.3**。
 其中 **多参图像手动拼接** 的最新版本为 **v2.2.2**。
 
 <p align="right">
@@ -31,6 +37,16 @@ git clone https://github.com/FX-FeiHou/ComfyUI-FeiHou-Toolbox.git
 
 ## 节点概览
 
+### FeiHou API 媒体节点
+
+`FeiHou-API Images` 和 `FeiHou-API Video` 接入 `https://api.fei-hou.net`。填写 API Key、刷新模型并设置参数后运行。
+
+媒体载入已独立为 `FeiHou-API Media` 节点，直接采用 Easy-H3 的媒体区样式，支持 9 张图片、3 个视频、3 个音频，以及替换、删除、同类拖动排序和音频区间截取。将其“媒体”输出连接至 API 生成节点，在生成节点提示词中输入 `@` 即可选择已载入的素材。复制节点和保存工作流会保留媒体记录；媒体文件保存在当前 ComfyUI 输入目录，工作流 JSON 本身不包含文件内容。
+
+`媒体输入` 接口也兼容原生 IMAGE（批次）、VIDEO 或 AUDIO；使用独立载入节点时提供可视化 `@` 选择。模型的实际素材限制仍生效：例如 Seedance 多模态需选择 `-multi`，`-t2v` 不接受参考素材，生图接口不接收视频和音频。API Key 会随普通节点控件保存在工作流中，分享前请清空。
+
+范例工作流：[API 生图与视频合并范例](workflows/FeiHou_API_Image%26Video_example.json)。
+
 节点显示标题会跟随当前 ComfyUI 界面语言自动切换。本文档展示中文标题。
 
 | 节点标题 | 节点注册名 | 版本 |
@@ -44,6 +60,15 @@ git clone https://github.com/FX-FeiHou/ComfyUI-FeiHou-Toolbox.git
 | 多框忽略并切换 | `FastGroupsBypassSwitch` | v2.0 |
 | 随机种子噪波 | `RandomSeedNoise` | v2.8 |
 | Video Combine 🎥🅥🅗🅢 V2 | `VideoCombineV2` | v2.9 |
+| FeiHou-视频预览 | `FeiHouVideoPreview` | v2.9.5 |
+| FeiHou-API Images | `FeiHouApiImage` | v2.10.0 |
+| FeiHou-API Video | `FeiHouApiVideo` | v2.10.0 |
+| FeiHou-API Media | `FeiHouApiMediaLoader` | v2.10.0 |
+
+- **FeiHou-视频预览**：预览生成或本地载入的视频，支持循环播放与预览控制。
+- **FeiHou-API Images**：API 生图，支持模型选择、分辨率、画面比例和媒体参考。
+- **FeiHou-API Video**：API 生视频，按模型提供生成参数，输出视频、视频链接和尾帧图片。
+- **FeiHou-API Media**：独立媒体载入，最多支持 9 图、3 视频、3 音频，通过连线在提示词中 `@` 引用。
 
 ### 创建 SCAIL-2 彩色遮罩 V2
 
@@ -87,6 +112,29 @@ Switch 节点的改版，用于在两条路径之间切换，并减少未启用�
 ---
 
 ## 版本记录
+
+### v2.10.3
+
+- 修复新版 ComfyUI 前端载入旧工作流时，`Video Combine 🎥🅥🅗🅢 V2` 节点帧率控件消失的问题。
+- 兼容命名字段和旧版位置数组，并尽量恢复工作流中原来保存的帧率。
+
+### v2.10.2
+
+- 拖入 FeiHou-视频预览节点的本地视频直接使用浏览器临时地址预览，不上传、不导入视频内嵌工作流。节点外的拖放保留 ComfyUI 原行为；刷新页面后需重新选择本地视频。
+
+### v2.10.1
+
+- 修复 ComfyUI 0.33.1 缺少核心视频预览函数导致整个节点包无法加载的问题，改用包内预览实现并兼容旧版保存接口。
+- 7 项本地测试通过；尚未在用户云电脑实测。
+
+### v2.10.0
+
+- API Video 新增尾帧 IMAGE 输出：优先使用 API 尾帧图片，否则从视频提取最后一帧；不额外保存 PNG。关闭“请求返回尾帧”也可使用此输出。
+
+- 新增 FeiHou-API Images、FeiHou-API Video 和独立 FeiHou-API Media，接入 api.fei-hou.net。
+- 支持模型刷新、模型参数、9 图/3 视频/3 音频、原生提示词框的 @ 引用和音频截取。
+- 采用 Easy-H3 媒体区样式，修正边距、动态布局、隐藏记录和底部缩放；支持旧工作流迁移。
+- 更新中英 i18n 和两份范例工作流。
 
 ### v2.9.4
 

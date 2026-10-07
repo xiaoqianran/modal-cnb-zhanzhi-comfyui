@@ -1,6 +1,118 @@
 {
     "custom_nodes": [
         {
+            "author": "ANe5s",
+            "title": "Krea2 Harness",
+            "reference": "https://github.com/ANe5s/ComfyUI-Krea2-Harness",
+            "files": [
+                "https://github.com/ANe5s/ComfyUI-Krea2-Harness"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI nodes for generating Krea 2 prompts, applying moodboard styles and prompt harnesses, and selecting Krea 2 Turbo resolutions."
+        },
+        {
+            "author": "zjkhurry",
+            "title": "ComfyUI TRELLIS.2 mac",
+            "reference": "https://github.com/zjkhurry/ComfyUI-TRELLIS.2-mac",
+            "files": [
+                "https://github.com/zjkhurry/ComfyUI-TRELLIS.2-mac"
+            ],
+            "install_type": "git-clone",
+            "description": "TRELLIS.2 image-to-3D generation for ComfyUI, running natively on Apple Silicon (MPS/Metal)."
+        },
+        {
+            "author": "ethanfel",
+            "title": "MiniMax H3 Timed References",
+            "reference": "https://github.com/ethanfel/ComfyUI-MiniMaxH3-Timed-References",
+            "files": [
+                "https://github.com/ethanfel/ComfyUI-MiniMaxH3-Timed-References"
+            ],
+            "install_type": "git-clone",
+            "description": "Timed and untimed Qwen-only image and video references for ComfyUI's core MiniMax H3 Ref2VA node."
+        },
+        {
+            "author": "vctrprzvfx",
+            "title": "VFX Naming Convention",
+            "reference": "https://github.com/vctrprzvfx/ComfyUI-VFX-Naming",
+            "files": [
+                "https://github.com/vctrprzvfx/ComfyUI-VFX-Naming"
+            ],
+            "install_type": "git-clone",
+            "description": "Build VFX-compliant filename prefixes (SHOW_SEQ_SHOT_task_ven_v###) for Save Image and video saver nodes."
+        },
+        {
+            "author": "BetaDoggo",
+            "title": "Comfyui-Sparse-Attention",
+            "reference": "https://github.com/BetaDoggo/Comfyui-Sparse-SLA-Attention",
+            "files": [
+                "https://github.com/BetaDoggo/Comfyui-Sparse-SLA-Attention"
+            ],
+            "install_type": "git-clone",
+            "description": "Block-sparse (SLA) attention for MiniMax-H3 -- the inference path the lightx2v SLA turbo LoRA was distilled against."
+        },
+        {
+            "author": "kaerozhi",
+            "title": "ComfyUI VideoMark",
+            "reference": "https://github.com/kaerozhi/comfyui-videomark",
+            "files": [
+                "https://github.com/kaerozhi/comfyui-videomark"
+            ],
+            "install_type": "git-clone",
+            "description": "Watermark node pack for video and image workflows. Corner / center / floating / tiled placement, animated intro and outro copyright cards, and text or PNG-logo overlays with adjustable outline and drop shadow. The watermark text can be typed in the node or driven from an upstream node (text_in), which is handy for burning parameter values into comparison renders. Ships a visual panel for picking styles and uploading a logo, with English and Chinese UI. Works on any IMAGE batch, so it drops into MiniMax H3, Wan, LTX, Hunyuan, VHS or AnimateDiff frame pipelines, and a single photo works too. No extra dependencies beyond ComfyUI's bundled torch / numpy / Pillow.",
+            "tags": [
+                "watermark",
+                "video",
+                "image",
+                "logo",
+                "overlay",
+                "text",
+                "copyright"
+            ]
+        },
+        {
+            "author": "oekobudde",
+            "title": "GIF Toolkit",
+            "reference": "https://github.com/oekobudde/ComfyUI-GIFToolkit",
+            "files": [
+                "https://github.com/oekobudde/ComfyUI-GIFToolkit"
+            ],
+            "install_type": "git-clone",
+            "description": "Create compact looping GIFs in ComfyUI with preset sizing, visual multi-text placement, optional blinking and preview-first export."
+        },
+        {
+            "author": "AbstractEyes",
+            "title": "CFG Megapack",
+            "id": "comfy-cfg-megapack",
+            "reference": "https://github.com/AbstractEyes/comfy-cfg-megapack",
+            "files": [
+                "https://github.com/AbstractEyes/comfy-cfg-megapack"
+            ],
+            "install_type": "git-clone",
+            "description": "Classifier-free guidance taken apart into seven stage nodes (when, weak branch, combine, where, correct, govern, measure) plus 50 nodes named after the published guidance methods they implement (APG, CFG-Zero*, PAG, SEG, Perp-Neg, FDG, the guidance interval and more), all on one engine. SDXL, SD1.5 and flow-matching models (Anima)."
+        },
+        {
+            "author": "aifeifei798",
+            "name": "ComfyUI-FeiFei",
+            "title": "ComfyUI-FeiFei",
+            "reference": "https://github.com/aifeifei798/ComfyUI-FeiFei",
+            "files": [
+                "https://github.com/aifeifei798/ComfyUI-FeiFei"
+            ],
+            "install_type": "git-clone",
+            "description": "FeiFei's custom nodes: LLM-driven Prompt Director, prompt enhancing, vision captioner, aspect-ratio sizing, style/character templates, watermark, WebP save/load.",
+            "pip": [
+                "openai"
+            ],
+            "tags": [
+                "llm",
+                "prompt",
+                "caption",
+                "director",
+                "webp",
+                "feifei"
+            ]
+        },
+        {
             "author": "a63976659",
             "title": "ComfyUI-Global-Translation",
             "id": "comfyui-global-translation",
@@ -2032,16 +2144,6 @@
             "description": "Schematic/technical annotation overlay generator — detection circles, tangent chains, crosshair frames, and pixelation zones over any image"
         },
         {
-            "author": "unitas81",
-            "title": "ComfyUI-FilterLoRATriggers",
-            "reference": "https://github.com/Unitas81/ComfyUI-FilterLoRATriggers",
-            "files": [
-                "https://github.com/Unitas81/ComfyUI-FilterLoRATriggers"
-            ],
-            "install_type": "git-clone",
-            "description": "Filter LoRA trigger pollution + RegionalLayoutMasks (!!/!!!/TB/TMB) for Attention Couple workflows"
-        },
-        {
             "author": "artfat-creator",
             "title": "Artfat Face Consistency",
             "reference": "https://github.com/artfat-creator/ComfyUI-Artfat-FaceConsistency",
@@ -2712,16 +2814,6 @@
             "description": "Standalone bundle for the single-pose character clone workflow built on Qwen-Image-Edit."
         },
         {
-            "author": "Danchi93",
-            "title": "ComfyUI-Multi-Lora",
-            "reference": "https://github.com/Danchi93/ComfyUI-Multi-Lora",
-            "files": [
-                "https://github.com/Danchi93/ComfyUI-Multi-Lora"
-            ],
-            "install_type": "git-clone",
-            "description": "A collection of custom nodes for ComfyUI."
-        },
-        {
             "author": "baslack",
             "title": "alt_ltx23_scheduler",
             "reference": "https://github.com/baslack/alt_ltx23_scheduler",
@@ -2795,6 +2887,7 @@
             "author": "Danchi93",
             "title": "ComfyUI-Workflow-Tools",
             "reference": "https://github.com/Danchi93/ComfyUI-Workflow-Tools",
+            "reference2": "https://github.com/Danchi93/ComfyUI-Multi-Lora",
             "files": [
                 "https://github.com/Danchi93/ComfyUI-Workflow-Tools"
             ],

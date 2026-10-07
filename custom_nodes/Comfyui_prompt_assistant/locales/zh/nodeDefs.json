@@ -13,11 +13,11 @@
             },
             "custom_rule_content": {
                 "name": "自定义规则内容",
-                "tooltip": "在此输入您的自定义规则内容; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "在此输入您的自定义规则内容"
             },
             "user_prompt": {
                 "name": "用户提示词",
-                "tooltip": "想要增强的原始提示词; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "想要增强的原始提示词"
             },
             "llm_service": {
                 "name": "LLM服务",
@@ -29,7 +29,11 @@
             },
             "source_text": {
                 "name": "原文输入",
-                "tooltip": "可选的输入文本; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "可选的输入文本"
+            },
+            "seed": {
+                "name": "随机种子",
+                "tooltip": "控制生成的随机性。选择非固定模式可强制节点重新执行"
             }
         },
         "outputs": {
@@ -57,11 +61,11 @@
             },
             "custom_rule_content": {
                 "name": "自定义规则内容",
-                "tooltip": "在此输入您的自定义规则内容; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "在此输入您的自定义规则内容"
             },
             "user_prompt": {
                 "name": "用户提示词",
-                "tooltip": "输入额外的具体要求，将与规则一起发送给模型; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "输入额外的具体要求，将与规则一起发送给模型"
             },
             "vlm_service": {
                 "name": "视觉服务",
@@ -70,6 +74,10 @@
             "ollama_auto_unload": {
                 "name": "自动释放显存",
                 "tooltip": "生成完成后自动释放Ollama模型显存"
+            },
+            "seed": {
+                "name": "随机种子",
+                "tooltip": "控制生成的随机性。选择非固定模式可强制节点重新执行"
             }
         },
         "outputs": {
@@ -89,7 +97,7 @@
         "inputs": {
             "source_text": {
                 "name": "原文",
-                "tooltip": "需要翻译的文本; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "需要翻译的文本"
             },
             "target_language": {
                 "name": "目标语言",
@@ -106,6 +114,10 @@
             "ollama_auto_unload": {
                 "name": "自动释放显存",
                 "tooltip": "生成完成后自动释放Ollama模型显存"
+            },
+            "seed": {
+                "name": "随机种子",
+                "tooltip": "控制生成的随机性。选择非固定模式可强制节点重新执行"
             }
         },
         "outputs": {
@@ -129,11 +141,11 @@
             },
             "custom_rule_content": {
                 "name": "自定义规则内容",
-                "tooltip": "在此输入您的自定义规则内容; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "在此输入您的自定义规则内容"
             },
             "user_prompt": {
                 "name": "用户提示词",
-                "tooltip": "输入额外的具体要求，将与规则一起发送给模型; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "输入额外的具体要求，将与规则一起发送给模型"
             },
             "vlm_service": {
                 "name": "视觉服务",
@@ -163,9 +175,13 @@
                 "name": "视频",
                 "tooltip": "输入视频"
             },
-            "image_sequence": {
-                "name": "图像序列",
-                "tooltip": "输入图像序列"
+            "video_frames": {
+                "name": "图像",
+                "tooltip": "输入图像序列（IMAGE batch）"
+            },
+            "seed": {
+                "name": "随机种子",
+                "tooltip": "控制生成的随机性。选择非固定模式可强制节点重新执行"
             }
         },
         "outputs": {
@@ -193,7 +209,7 @@
             },
             "user_prompt": {
                 "name": "用户提示词",
-                "tooltip": "输入额外的具体要求,将与预设一起发送给模型; 💡输入触发词[R],可以让节点每次都被执行"
+                "tooltip": "输入额外的具体要求,将与预设一起发送给模型"
             },
             "vlm_service": {
                 "name": "视觉服务",
@@ -202,6 +218,10 @@
             "ollama_auto_unload": {
                 "name": "自动释放显存",
                 "tooltip": "生成完成后自动释放Ollama模型显存"
+            },
+            "seed": {
+                "name": "随机种子",
+                "tooltip": "控制生成的随机性。选择非固定模式可强制节点重新执行"
             }
         },
         "outputs": {

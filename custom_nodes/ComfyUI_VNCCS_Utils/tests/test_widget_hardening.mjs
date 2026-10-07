@@ -1,0 +1,706 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+
+const modelManagerSource = await readFile(new URL("../web/vnccs_model_manager.js", import.meta.url), "utf8");
+const uniCanvasSource = await readFile(new URL("../web/vnccs_unicanvas.js", import.meta.url), "utf8");
+const poseStudioSource = await readFile(new URL("../web/vnccs_pose_studio.js", import.meta.url), "utf8");
+const poseStudioCoreSource = await readFile(new URL("../web/vnccs_pose_studio_core.js", import.meta.url), "utf8");
+const poseAnimationSource = await readFile(new URL("../web/vnccs_pose_animation.mjs", import.meta.url), "utf8");
+const poseCharactersSource = await readFile(new URL("../web/vnccs_pose_characters.mjs", import.meta.url), "utf8");
+
+
+test("Model Manager never interpolates remote data into innerHTML", () => {
+    const assignments = modelManagerSource.matchAll(/innerHTML\s*\+?=\s*(`[^`]*`|"[^"]*"|'[^']*')/gs);
+    for (const assignment of assignments) {
+        assert.equal(assignment[1].includes("${"), false, assignment[0]);
+    }
+    assert.match(modelManagerSource, /appendTextElement\(topRow, "span", model\.name/);
+    assert.match(modelManagerSource, /appendTextElement\(el, "div", m\.name/);
+});
+
+
+test("DOM widgets release global listeners and timers on removal", () => {
+    assert.match(modelManagerSource, /this\.listWidget\?\.dispose\(\)/);
+    assert.match(modelManagerSource, /this\.selectorWidget\?\.dispose\(\)/);
+    assert.match(modelManagerSource, /removeEventListener\("vnccs-registry-updated"/);
+    assert.match(uniCanvasSource, /this\._eventAbortController\?\.abort\(\)/);
+    assert.match(uniCanvasSource, /this\.stopDrawProgressPolling\(\)/);
+    assert.match(poseStudioSource, /document\.removeEventListener\("pointerdown", this\._boundHandleDocumentPointerDown\)/);
+});
+
+
+test("Pose Studio sync lock is reset in a finally block", () => {
+    const start = poseStudioSource.indexOf("syncToNode(fullCapture = false, options = {})");
+    const end = poseStudioSource.indexOf("\n    loadFromNode()", start);
+    const method = poseStudioSource.slice(start, end);
+    assert.match(method, /this\._isSyncing = true;\s*try \{/);
+    assert.match(method, /finally \{\s*this\._isSyncing = false;/);
+});
+
+
+test("Pose Studio upload rejects HTTP sync failures", () => {
+    const helperStart = poseStudioSource.indexOf("const requirePoseStudioSyncResponse = async");
+    const eventEnd = poseStudioSource.indexOf("\n        api.addEventListener(\"vnccs_apply_sam3d_pose\"", helperStart);
+    const normalSyncPath = poseStudioSource.slice(helperStart, eventEnd);
+    assert.match(normalSyncPath, /if \(!response\.ok\)/);
+    assert.match(normalSyncPath, /throw new Error\(message\)/);
+    assert.match(normalSyncPath, /await requirePoseStudioSyncResponse\(response\)/);
+    assert.match(normalSyncPath, /await reportPoseStudioSyncFailure\(nodeId, syncToken, e\)/);
+});
+
+test("SAM projection does not apply a second scale over the recovered camera", () => {
+    const start = poseStudioSource.indexOf("applySAM3DFrameCameraParams(poseData, meshData = null)");
+    const end = poseStudioSource.indexOf("\n    formatVideoTime(", start);
+    const method = poseStudioSource.slice(start, end);
+    const projectionStart = method.indexOf("setSAMProjectionCameraFrame?.(frameParams.sam_projection)");
+    const projectionBranch = method.slice(projectionStart);
+    assert.match(method, /setSAMProjectionCameraFrame\?\.\(frameParams\.sam_projection\)/);
+    assert.doesNotMatch(projectionBranch, /projectionFit|this\.exportParams\.cam_zoom\s*=\s*frameParams\.zoom/);
+    assert.doesNotMatch(projectionBranch, /this\.exportParams\.cam_zoom\s*=\s*1/);
+    assert.doesNotMatch(projectionBranch, /this\.exportParams\.cam_offset_[xy]\s*=\s*0/);
+});
+
+test("ordinary SAM framing reuses the exact projection with fixed Pose Studio FOV", () => {
+    const helperStart = poseStudioSource.indexOf("applySAM3DStandardCameraFit(poseData, meshData = null, standardTargetFrame = null)");
+    const methodStart = poseStudioSource.indexOf("applySAM3DFrameCameraParams(poseData, meshData = null)");
+    const methodEnd = poseStudioSource.indexOf("\n    formatVideoTime(", methodStart);
+    const helper = poseStudioSource.slice(helperStart, methodStart);
+    const method = poseStudioSource.slice(methodStart, methodEnd);
+
+    assert.match(helper, /neutralTransform = \{ x: 0, y: 0, z: 0, zoom: 1 \}/);
+    assert.match(helper, /fitSAM3DToStandardCamera/);
+    assert.match(helper, /meshData,[\s\S]*standardTargetFrame/);
+    assert.match(helper, /cameraFramingToCharacterTransform\(framing, pivot\)/);
+    assert.match(helper, /for \(let iteration = 0; iteration < 4; iteration \+= 1\)/);
+    assert.match(helper, /composeCameraFramingWithCharacterTransform/);
+    assert.match(helper, /true,[\s\S]*standardTargetFrame/);
+    assert.doesNotMatch(helper, /currentZoom/);
+    assert.match(method, /if \(!this\.exportParams\.samApplyCamera\)/);
+    assert.match(method, /buildEquivalentPerspectiveProjectionFrame/);
+    assert.match(method, /frameParams\.sam_projection,[\s\S]*POSE_STUDIO_CAPTURE_FOV/);
+    assert.match(poseStudioCoreSource, /projection_zoom: projectionZoom/);
+    const directStart = method.indexOf("if (frameParams.sam_projection)");
+    const directEnd = method.indexOf("this.viewer?.setSAMProjectionCameraFrame?.(null)", directStart);
+    const directBranch = method.slice(directStart, directEnd);
+    assert.doesNotMatch(directBranch, /applySAM3DStandardCameraFit|sam_standard_target/);
+});
+
+test("SAM camera fitting does not emit runtime diagnostics", () => {
+    assert.doesNotMatch(poseStudioSource, /SAMCameraFit|_logSAMCameraFit|_samCameraFitTraceSeq/);
+});
+
+
+test("Pose Library image previews preserve their aspect ratio without cropping", () => {
+    const rule = poseStudioSource.match(/\.vnccs-ps-library-item-preview img\s*\{([^}]*)\}/)?.[1] || "";
+    assert.match(rule, /max-width:\s*100%/);
+    assert.match(rule, /max-height:\s*100%/);
+    assert.match(rule, /width:\s*auto/);
+    assert.match(rule, /height:\s*auto/);
+    assert.match(rule, /object-fit:\s*contain/);
+    assert.doesNotMatch(rule, /object-fit:\s*cover/);
+});
+
+test("Pose Studio library launcher uses the concise product name", () => {
+    assert.match(poseStudioSource, /> Pose Library';/);
+    assert.doesNotMatch(poseStudioSource, /Pose Library Gallery/);
+});
+
+test("Pose Studio exposes male genitals only through an opt-in checkbox", () => {
+    assert.match(poseStudioSource, /show_genitals: false/);
+    assert.match(poseStudioSource, /genitalsLabel\.innerText = "Show Genitals"/);
+    assert.match(poseStudioSource, /this\.genderFields\.show_genitals = \{ field: genitalsField, gender: "male" \}/);
+    assert.match(
+        poseStudioSource,
+        /this\.meshParams\.show_genitals = genitalsCheckbox\.checked;\s*this\.onMeshParamsChanged\("show_genitals"\)/,
+    );
+});
+
+
+test("Pose Library create-new publishing cannot retain or silently reuse the old target", () => {
+    const modalStart = poseStudioSource.indexOf("showPublishLocalRepositoryModal(forceConfigure = false)");
+    const modalEnd = poseStudioSource.indexOf("\n    async runLocalPoseRepositoryPublish", modalStart);
+    const modalMethod = poseStudioSource.slice(modalStart, modalEnd);
+    assert.match(modalMethod, /let existingRepoDraft = current\.publish_repo_id \|\| "";/);
+    assert.match(modalMethod, /let newRepoDraft = "";/);
+    assert.match(
+        modalMethod,
+        /repoEl\.value = modeEl\.value === "create" \? newRepoDraft : existingRepoDraft;/,
+    );
+
+    const publishStart = poseStudioSource.indexOf("async runLocalPoseRepositoryPublish(payload)");
+    const publishEnd = poseStudioSource.indexOf("\n    async addPoseRepository", publishStart);
+    const publishMethod = poseStudioSource.slice(publishStart, publishEnd);
+    assert.match(publishMethod, /const repoId = String\(payload\?\.repo_id \|\| ""\)\.trim\(\);/);
+    assert.match(publishMethod, /this\.setRepositoryProgressState\(progressKey, \{ repoId \}\);/);
+    assert.match(publishMethod, /JSON\.stringify\(\{ \.\.\.payload, repo_id: repoId, task_id: taskId \}\)/);
+    assert.match(publishMethod, /this\._localPoseRepositoryPublishActive/);
+});
+
+
+test("adding a Pose Library repository downloads it and refreshes the library in one action", () => {
+    const normalizeStart = poseStudioSource.indexOf("normalizePoseRepositoryInput(value)");
+    const addStart = poseStudioSource.indexOf("async addPoseRepository()", normalizeStart);
+    const addEnd = poseStudioSource.indexOf("\n    createRepositoryTaskId", addStart);
+    const normalizeMethod = poseStudioSource.slice(normalizeStart, addStart);
+    const addMethod = poseStudioSource.slice(addStart, addEnd);
+    assert.match(normalizeMethod, /\['huggingface\.co', 'www\.huggingface\.co'\]/);
+    assert.match(normalizeMethod, /return `\$\{parts\[0\]\}\/\$\{parts\[1\]\}`;/);
+    assert.match(addMethod, /this\.normalizePoseRepositoryInput\(input\?\.value\)/);
+    assert.match(addMethod, /const taskId = this\.createRepositoryTaskId\("repo-add"\);/);
+    assert.match(addMethod, /JSON\.stringify\(\{ repo_id: repoId, task_id: taskId \}\)/);
+    assert.match(addMethod, /setInterval\(\(\) => this\.pollRepositoryProgress\(taskId, progress\), 350\)/);
+    assert.match(addMethod, /const refreshed = data\.refreshed \|\| \{\};/);
+    assert.match(addMethod, /await this\.refreshLibrary\(true\);/);
+    assert.match(addMethod, /refreshed\.status !== "error"[\s\S]*await this\.toggleLibrarySettings\(false\);/);
+});
+
+
+test("loading a scene-format pose preserves Pose Manager while animations open Studio", () => {
+    const loadStart = poseStudioSource.indexOf("async loadCharacterSceneLibraryAsset(asset, { animation = false } = {})");
+    const loadEnd = poseStudioSource.indexOf("\n    loadAnimationLibraryAsset", loadStart);
+    const loadMethod = poseStudioSource.slice(loadStart, loadEnd);
+    assert.match(
+        loadMethod,
+        /if \(animation\) this\.setInterfaceMode\("studio", \{ sync: false \}\);/,
+    );
+    assert.doesNotMatch(
+        loadMethod,
+        /\n\s*this\.setInterfaceMode\("studio", \{ sync: false \}\);/,
+    );
+
+    const dispatchStart = poseStudioSource.indexOf("async loadFromLibrary(poseOrName)");
+    const dispatchEnd = poseStudioSource.indexOf("\n    showSettingsModal()", dispatchStart);
+    const dispatchMethod = poseStudioSource.slice(dispatchStart, dispatchEnd);
+    assert.match(
+        dispatchMethod,
+        /const activeScenePose = assetType === "pose"[\s\S]*extractActivePoseFromSceneAsset\(data\.pose\)/,
+    );
+    assert.match(
+        dispatchMethod,
+        /assetType === "animation"[\s\S]*data\.pose\.characters\.length/,
+    );
+    assert.match(
+        dispatchMethod,
+        /JSON\.stringify\(activeScenePose \|\| data\.pose\)/,
+    );
+    assert.match(
+        dispatchMethod,
+        /data\.pose\?\.type === "pose_set"[\s\S]*this\.loadPoseSetAsset\(data\.pose\)/,
+    );
+});
+
+
+test("only explicit pose-set assets replace the Pose Manager pose list", () => {
+    const setStart = poseStudioSource.indexOf("loadPoseSetAsset(asset)");
+    const setEnd = poseStudioSource.indexOf("\n    loadAnimationLibraryAsset", setStart);
+    const setMethod = poseStudioSource.slice(setStart, setEnd);
+    assert.match(setMethod, /this\.poses = sourcePoses\.map/);
+    assert.match(setMethod, /this\.activeTab = 0;/);
+
+    const dispatchStart = poseStudioSource.indexOf("async loadFromLibrary(poseOrName)");
+    const dispatchEnd = poseStudioSource.indexOf("\n    showSettingsModal()", dispatchStart);
+    const dispatchMethod = poseStudioSource.slice(dispatchStart, dispatchEnd);
+    assert.match(dispatchMethod, /const isPoseSet = data\.pose\?\.type === "pose_set"/);
+    assert.doesNotMatch(dispatchMethod, /const isPoseSet = [^;]*characters/);
+});
+
+
+test("saving a current library pose does not serialize the whole Pose Manager set", () => {
+    const saveStart = poseStudioSource.indexOf("async saveToLibrary(name, includePreview = true, metadata = {})");
+    const saveEnd = poseStudioSource.indexOf("\n    applyLibraryPoseFraming", saveStart);
+    const saveMethod = poseStudioSource.slice(saveStart, saveEnd);
+    assert.match(saveMethod, /type: animationMode \? "pose_animation" : "scene_pose"/);
+    assert.match(saveMethod, /const selectedPose = serialized\.poses\[this\.activeTab\]/);
+    assert.match(saveMethod, /serialized\.poses = \[selectedPose\];/);
+    assert.match(saveMethod, /activeTab: animationMode \? this\.activeTab : 0/);
+});
+
+
+test("Pose Manager regenerates missing previews after worker model load and mode entry", () => {
+    const modeStart = poseStudioSource.indexOf("setInterfaceMode(mode, { sync = true } = {})");
+    const modeEnd = poseStudioSource.indexOf("\n    applyInterfaceMode()", modeStart);
+    const modeMethod = poseStudioSource.slice(modeStart, modeEnd);
+    assert.match(
+        modeMethod,
+        /normalized === "manager"[\s\S]*renderPoseManager\(\);[\s\S]*scheduleAllManagerPreviewRefresh\(\);/,
+    );
+
+    const loadStart = poseStudioSource.indexOf("loadModel(showOverlay = true, recenterViewport = true)");
+    const loadEnd = poseStudioSource.indexOf("\n    isLiveMorphKey", loadStart);
+    const loadMethod = poseStudioSource.slice(loadStart, loadEnd);
+    assert.match(
+        loadMethod,
+        /viewer\.isInitialized\(\)[\s\S]*syncToNode\(true\);[\s\S]*scheduleAllManagerPreviewRefresh\(\);/,
+    );
+});
+
+
+test("Pose Manager keeps the pose image input and gates automatic proportion analysis", () => {
+    assert.match(poseStudioSource, /manager_auto_analyze_proportions: true/);
+    assert.match(poseStudioSource, /autoAnalyzeText\.textContent = "Auto-analyze proportions"/);
+    assert.match(
+        poseStudioSource,
+        /manager_auto_analyze_proportions = autoAnalyzeCheckbox\.checked;[\s\S]*syncToNode\(false, \{ skipCapture: true \}\)/,
+    );
+
+    const modeStart = poseStudioSource.indexOf("setInterfaceMode(mode, { sync = true } = {})");
+    const modeEnd = poseStudioSource.indexOf("\n    applyInterfaceMode()", modeStart);
+    const modeMethod = poseStudioSource.slice(modeStart, modeEnd);
+    assert.match(modeMethod, /_vnccsEnsurePoseImageInput/);
+    assert.doesNotMatch(modeMethod, /SetPoseImageInputDisabled/);
+    const ensureStart = poseStudioSource.indexOf("const ensurePoseImageInput = (node) =>");
+    const ensureEnd = poseStudioSource.indexOf("const setCameraPromptInputDisabled", ensureStart);
+    const ensureMethod = poseStudioSource.slice(ensureStart, ensureEnd);
+    assert.match(ensureMethod, /addInput\("pose_image", "IMAGE"\)/);
+    assert.doesNotMatch(ensureMethod, /removeInput|disconnectInput/);
+});
+
+
+test("Pose Manager SAM input applies proportions without replacing managed poses", () => {
+    const managerStart = poseStudioSource.indexOf("async applySAM3DProportionsToPoseManager(poseData)");
+    const managerEnd = poseStudioSource.indexOf("\n    applySAM3DMeshOverlayFit", managerStart);
+    const managerMethod = poseStudioSource.slice(managerStart, managerEnd);
+    assert.match(managerMethod, /manager_auto_analyze_proportions === false/);
+    assert.match(
+        managerMethod,
+        /viewer\.applySAM3DImport\([\s\S]*poseForAnalysis,[\s\S]*recordState: false,[\s\S]*dispatchPoseChange: false/,
+    );
+    assert.match(
+        managerMethod,
+        /applySAM3DMeshOverlayFit\([\s\S]*fitData\.meshData,[\s\S]*poseForAnalysis,[\s\S]*dispatchPoseChange: false/,
+    );
+    assert.doesNotMatch(managerMethod, /commitViewerPoseToCurrentEditor/);
+    assert.doesNotMatch(managerMethod, /this\.poses\[this\.activeTab\]\s*=\s*poseForAnalysis/);
+    assert.match(managerMethod, /for \(const pose of this\.poses \|\| \[\]\)/);
+    assert.match(managerMethod, /delete pose\.bonePositions/);
+    assert.match(managerMethod, /finally \{[\s\S]*viewer\.setPose\(restoredPose, true\)/);
+    assert.match(managerMethod, /viewer\.applyBoneLengthScales\?\.\(\)/);
+    assert.match(managerMethod, /previousSAMVisualState[\s\S]*setSAMProjectionCameraFrame/);
+    assert.match(managerMethod, /this\.applyAgeCameraFit\(\);[\s\S]*scheduleAllManagerPreviewRefresh\(\)/);
+    assert.match(managerMethod, /await this\.awaitManagerPreviewRefresh\(generation\)/);
+
+    const importIndex = managerMethod.indexOf("this.viewer.applySAM3DImport(");
+    const overlayIndex = managerMethod.indexOf("this.applySAM3DMeshOverlayFit(", importIndex);
+    const syncIndex = managerMethod.indexOf("this.syncMeshProportionSlidersFromViewer()", overlayIndex);
+    const restoreIndex = managerMethod.indexOf("this.viewer.setPose(restoredPose, true)", syncIndex);
+    assert.ok(importIndex >= 0 && overlayIndex > importIndex && syncIndex > overlayIndex && restoreIndex > syncIndex);
+
+    const eventStart = poseStudioSource.indexOf('api.addEventListener("vnccs_apply_sam3d_pose"');
+    const eventEnd = poseStudioSource.indexOf("\n    },\n\n    async beforeRegisterNodeDef", eventStart);
+    const eventMethod = poseStudioSource.slice(eventStart, eventEnd);
+    assert.match(eventMethod, /applyMode === "manager_proportions"/);
+    assert.match(eventMethod, /applySAM3DProportionsToPoseManager\(poseData\)/);
+    assert.match(eventMethod, /widget\.syncToNode\(true, \{[\s\S]*executionCapture: true/);
+    assert.match(eventMethod, /viewer\.applySAM3DImport\(/, "ordinary Pose Studio import must remain intact");
+
+    const coreImportStart = poseStudioCoreSource.indexOf("applySAM3DImport(data, shoulderYOffset = 0, options = {})");
+    const coreImportEnd = poseStudioCoreSource.indexOf("\n    applyHMR2v1Import", coreImportStart);
+    const coreImportMethod = poseStudioCoreSource.slice(coreImportStart, coreImportEnd);
+    assert.match(
+        coreImportMethod,
+        /dispatchPoseChange: options\.dispatchPoseChange !== false/,
+        "world-keypoint SAM imports must honor proportion-only analysis",
+    );
+    assert.match(
+        coreImportMethod,
+        /if \(options\.dispatchPoseChange !== false\) this\.dispatchPoseChange\(\)/,
+        "rotation-only SAM imports must honor proportion-only analysis",
+    );
+
+    const overlayStart = poseStudioCoreSource.indexOf("fitCurrentPoseToSAMMeshOverlay(shoulderYOffset = 0, options = {})");
+    const overlayEnd = poseStudioCoreSource.indexOf("\n    fitSAM3DJointRootLengthsToWorldKps", overlayStart);
+    const overlayMethod = poseStudioCoreSource.slice(overlayStart, overlayEnd);
+    assert.match(
+        overlayMethod,
+        /dispatchPoseChange: finalPass && options\.dispatchPoseChange !== false/,
+        "mesh-overlay proportion fitting must not leak the detected pose either",
+    );
+
+    const overlayBridgeStart = poseStudioSource.indexOf("applySAM3DMeshOverlayFit(meshData, poseData, options = {})");
+    const overlayBridgeEnd = poseStudioSource.indexOf("\n    applySAM3DStandardCameraFit", overlayBridgeStart);
+    const overlayBridgeMethod = poseStudioSource.slice(overlayBridgeStart, overlayBridgeEnd);
+    assert.match(
+        overlayBridgeMethod,
+        /fitCurrentPoseToSAMMeshOverlay\([\s\S]*dispatchPoseChange: options\.dispatchPoseChange !== false/,
+        "the Pose Manager suppression flag must reach the overlay fitter",
+    );
+});
+
+
+test("Pose Manager waits for the real skin texture before capture", () => {
+    const refreshStart = poseStudioSource.indexOf("refreshAllManagerPreviews(generation");
+    const refreshEnd = poseStudioSource.indexOf("\n    updateExistingPoseManagerDetailCards", refreshStart);
+    const refreshMethod = poseStudioSource.slice(refreshStart, refreshEnd);
+    assert.match(refreshMethod, /isCaptureReady\?\.\(\) === false/);
+    assert.match(refreshMethod, /waitForCaptureReady\?\.\(\)/);
+
+    assert.match(poseStudioCoreSource, /isCaptureReady\(\)/);
+    assert.match(poseStudioCoreSource, /waitForCaptureReady\(\)/);
+    assert.match(
+        poseStudioCoreSource,
+        /map: skinTex,[\s\S]*color: skinTex \? 0xffffff : \(textureSkinningEnabled \? 0xc8b5aa : 0xaaaaaa\)/,
+    );
+});
+
+
+test("Pose Manager exposes Head Size and refreshes it without rebuilding the morph model", () => {
+    const sidebarStart = poseStudioSource.indexOf("_createPoseManagerSidebar()");
+    const sidebarEnd = poseStudioSource.indexOf("\n    createManagerSlider", sidebarStart);
+    const sidebarMethod = poseStudioSource.slice(sidebarStart, sidebarEnd);
+    assert.match(
+        sidebarMethod,
+        /key: "head_size", label: "Head Size", min: 0\.5, max: 2\.0, step: 0\.01/,
+    );
+
+    const applyStart = poseStudioSource.indexOf("applyManagerMeshValue(key, value, options = {})");
+    const applyEnd = poseStudioSource.indexOf("\n    applyExternalCharacterCreatorValues", applyStart);
+    const applyMethod = poseStudioSource.slice(applyStart, applyEnd);
+    assert.match(applyMethod, /key === "head_size"/);
+    assert.match(applyMethod, /viewer\?\.updateHeadScale\?\.\(value\)/);
+    assert.match(applyMethod, /scheduleAllManagerPreviewRefresh\(\)/);
+});
+
+
+test("each Pose Manager model generation restarts preview capture from the first card", () => {
+    const scheduleStart = poseStudioSource.indexOf("\n    scheduleAllManagerPreviewRefresh() {");
+    const scheduleEnd = poseStudioSource.indexOf("\n    refreshAllManagerPreviews", scheduleStart);
+    const scheduleMethod = poseStudioSource.slice(scheduleStart, scheduleEnd);
+    assert.match(scheduleMethod, /this\._managerPreviewRefreshNextIndex = 0;/);
+    assert.doesNotMatch(scheduleMethod, /isMidRefresh/);
+
+    const workerStart = poseStudioSource.indexOf("handleMorphWorkerMessage(message)");
+    const workerEnd = poseStudioSource.indexOf("\n    flushPendingMorphSolve", workerStart);
+    const workerMethod = poseStudioSource.slice(workerStart, workerEnd);
+    assert.ok(
+        workerMethod.indexOf("ageFitChanged = this.applyAgeCameraFit()")
+            < workerMethod.indexOf("this.scheduleAllManagerPreviewRefresh()"),
+        "AGE camera fitting must finish before preview capture is scheduled",
+    );
+});
+
+test("Pose Manager independently fits and centers every deformed pose preview", () => {
+    const refreshStart = poseStudioSource.indexOf("refreshAllManagerPreviews(generation");
+    const refreshEnd = poseStudioSource.indexOf("\n    updateExistingPoseManagerDetailCards", refreshStart);
+    const refreshMethod = poseStudioSource.slice(refreshStart, refreshEnd);
+    assert.match(refreshMethod, /viewer\.setPose\(pose, true\);[\s\S]*computePoseManagerCaptureFraming\(w, h, poseCamera\)/);
+    assert.match(
+        refreshMethod,
+        /if \(!framing\) continue;[\s\S]*viewer\.capture\([\s\S]*framing\.zoom,[\s\S]*framing\.offsetX,[\s\S]*framing\.offsetY/,
+    );
+    assert.match(
+        refreshMethod,
+        /finally \{[\s\S]*viewer\.updateCaptureCamera\?\.\([\s\S]*activeCamera\.yaw_deg,[\s\S]*activeCamera\.pitch_deg/,
+        "manager preview fitting must not leak its temporary camera into Studio or library poses",
+    );
+
+    assert.match(poseStudioCoreSource, /computeModelFitFraming\(/);
+    assert.match(poseStudioCoreSource, /const determinant = j00 \* j11 - j01 \* j10;/);
+});
+
+test("Pose Manager RUN uploads the visible cards without rendering again", () => {
+    const syncStart = poseStudioSource.indexOf("syncToNode(fullCapture = false, options = {})");
+    const syncEnd = poseStudioSource.indexOf("\n    loadFromNode()", syncStart);
+    const syncMethod = poseStudioSource.slice(syncStart, syncEnd);
+    assert.match(syncMethod, /const reusePoseManagerCaptures = \(/);
+    assert.match(syncMethod, /options\.executionCapture === true[\s\S]*&& poseManagerInterface/);
+    assert.match(syncMethod, /\|\| reusePoseManagerCaptures/);
+    assert.match(syncMethod, /this\._executionCaptureSnapshot = this\.poseCaptures\.slice\(\)/);
+    assert.match(syncMethod, /Pose Manager previews are not ready/);
+    assert.doesNotMatch(syncMethod, /computePoseManagerCaptureFraming/);
+
+    const uploadStart = poseStudioSource.indexOf("const uploadPoseStudioSync = async");
+    const uploadEnd = poseStudioSource.indexOf("\n        const reportPoseStudioSyncFailure", uploadStart);
+    const uploadMethod = poseStudioSource.slice(uploadStart, uploadEnd);
+    assert.match(uploadMethod, /const capturedImages = node\.studioWidget\._executionCaptureSnapshot/);
+    assert.match(uploadMethod, /captured_images: capturedImages/);
+    assert.match(uploadMethod, /lighting_prompts: capturedLightingPrompts/);
+});
+
+test("Reset clears library framing together with the pose", () => {
+    const fitStart = poseStudioSource.indexOf("\n    fitActiveRestPoseToFrame(");
+    const resetStart = poseStudioSource.indexOf("\n    resetCurrentPose() {");
+    const resetEnd = poseStudioSource.indexOf("\n    resetCurrentAnimation()", resetStart);
+    const fitMethod = poseStudioSource.slice(fitStart, resetStart);
+    const resetMethod = poseStudioSource.slice(resetStart, resetEnd);
+    assert.match(fitMethod, /viewer\.computeModelFitFraming\(/);
+    assert.match(fitMethod, /cameraFramingToCharacterTransform\(/);
+    assert.match(fitMethod, /active\.transform = \{ \.\.\.transform \};/);
+    assert.match(resetMethod, /viewer\.resetPose\(\);[\s\S]*fitActiveRestPoseToFrame\(\);/);
+    assert.match(
+        resetMethod,
+        /syncToNode\(false, \{ skipCapture: true, skipCaptureUpload: true \}\);/,
+    );
+    assert.match(resetMethod, /this\.poseCaptures\[this\.activeTab\] = null;/);
+    assert.match(resetMethod, /this\.resetMeshProportions\(\);/);
+
+    const proportionsStart = poseStudioSource.indexOf("\n    resetMeshProportions() {");
+    const proportionsEnd = poseStudioSource.indexOf("\n    resetCurrentAnimation()", proportionsStart);
+    const proportionsMethod = poseStudioSource.slice(poseStudioSource.indexOf("\n    applyCurrentMeshProportions()"), proportionsEnd);
+    assert.match(poseStudioSource.slice(proportionsStart, proportionsEnd), /this\.applyCurrentMeshProportions\(\);/);
+    assert.match(
+        proportionsMethod,
+        /Object\.assign\(this\.meshParams, DEFAULT_POSE_STUDIO_MESH_PROPORTIONS\);/,
+    );
+    assert.match(
+        proportionsMethod,
+        /LEGACY_POSE_STUDIO_MESH_PROPORTION_KEYS[\s\S]*delete this\.meshParams\[key\]/,
+    );
+    assert.match(proportionsMethod, /viewer\.updateHeadScale\?\./);
+    assert.match(proportionsMethod, /viewer\.updateArmScale\?\./);
+    assert.match(proportionsMethod, /viewer\.updateHandScale\?\./);
+    assert.match(proportionsMethod, /viewer\.updateFootScale\?\./);
+    assert.match(proportionsMethod, /viewer\.updateBoneLengthScale\?\./);
+    assert.doesNotMatch(proportionsMethod, /\b(age|gender|weight|muscle|height|breast_size|penis_len)\b/);
+
+    const clearStart = poseAnimationSource.indexOf("export function createClearedAnimationState");
+    const clearEnd = poseAnimationSource.indexOf("\nexport function serializeAnimationStateSnapshot", clearStart);
+    const clearMethod = poseAnimationSource.slice(clearStart, clearEnd);
+    assert.match(clearMethod, /baseTransform: DEFAULT_ANIMATION_CHARACTER_TRANSFORM/);
+    assert.doesNotMatch(clearMethod, /previous\.baseTransform/);
+});
+
+test("state-only sync can suppress capture-cache upload retries", () => {
+    const syncStart = poseStudioSource.indexOf("\n    syncToNode(fullCapture = false, options = {})");
+    const syncEnd = poseStudioSource.indexOf("\n    loadFromNode()", syncStart);
+    const syncMethod = poseStudioSource.slice(syncStart, syncEnd);
+    assert.match(
+        syncMethod,
+        /if \(!this\.host\?\.embedded && options\.skipCaptureUpload !== true\) \{[\s\S]*this\.queueCaptureUpload\(captureId\);/,
+    );
+
+    const uploadStart = poseStudioSource.indexOf("\n    queueCaptureUpload(captureId)");
+    const uploadEnd = poseStudioSource.indexOf("\n    syncToNode(", uploadStart);
+    const uploadMethod = poseStudioSource.slice(uploadStart, uploadEnd);
+    assert.match(uploadMethod, /captures\.every\(capture => typeof capture === "string" && capture\.length > 0\)/);
+    assert.match(uploadMethod, /error\?\.status !== 413/);
+});
+
+
+test("animation timeline fills its viewport and exposes mouse-draggable horizontal scrolling", () => {
+    assert.match(poseAnimationSource, /viewportWidth: this\.body\?\.clientWidth/);
+    assert.match(poseAnimationSource, /this\.horizontalScrollInput\.type = "range"/);
+    assert.match(
+        poseAnimationSource,
+        /this\.body\.scrollLeft = Number\(this\.horizontalScrollInput\.value\) \|\| 0/,
+    );
+    assert.match(
+        poseAnimationSource,
+        /this\.body\.addEventListener\("scroll", \(\) => \{\s*this\._syncHorizontalScrollbar\(\)/,
+    );
+    assert.match(poseStudioSource, /\.vnccs-ps-tl-body \{[\s\S]*overflow-x: hidden;[\s\S]*overflow-y: auto;/);
+    assert.match(
+        poseAnimationSource,
+        /this\.body\.addEventListener\("wheel", event => \{[\s\S]*this\.body\.scrollLeft = clamp\(/,
+    );
+    assert.match(poseStudioSource, /\.vnccs-ps-tl-horizontal-scroll\.visible \{\s*display: flex;/);
+});
+
+
+test("Characters section follows Prompt and starts collapsed", () => {
+    const sidebarStart = poseStudioSource.indexOf("_createRightSidebar()");
+    const sidebarEnd = poseStudioSource.indexOf("\n    _setupFinalUI()", sidebarStart);
+    const sidebarMethod = poseStudioSource.slice(sidebarStart, sidebarEnd);
+    const promptAppend = sidebarMethod.indexOf("rightSidebar.appendChild(promptSection.el)");
+    const charactersCreate = sidebarMethod.indexOf('this.createSection("Characters", false)');
+    const charactersAppend = sidebarMethod.indexOf("rightSidebar.appendChild(charactersSection.el)");
+
+    assert.ok(promptAppend >= 0, "Prompt section must be appended to the right sidebar");
+    assert.ok(charactersCreate > promptAppend, "Characters must be created after Prompt");
+    assert.ok(charactersAppend > charactersCreate, "Characters must be appended after it is created");
+});
+
+
+test("the original camera positioning widget controls the selected character", () => {
+    const leftStart = poseStudioSource.indexOf("_createLeftPanel()");
+    const leftEnd = poseStudioSource.indexOf("\n    _createCenterPanel()", leftStart);
+    const leftPanel = poseStudioSource.slice(leftStart, leftEnd);
+    assert.match(leftPanel, /createSliderField\("Zoom", "cam_zoom"/);
+    assert.match(leftPanel, /this\.createCameraRadar\(camSection\)/);
+
+    const characterStart = poseStudioSource.indexOf("\n    renderCharactersUI() {");
+    const characterEnd = poseStudioSource.indexOf("\n    persistActivePoseCameraParams()", characterStart);
+    const characterPanel = poseStudioSource.slice(characterStart, characterEnd);
+    assert.doesNotMatch(characterPanel, /Position X|Position Y|Depth|character-transform-grid/);
+
+    const persistStart = characterEnd;
+    const persistEnd = poseStudioSource.indexOf("\n    currentCameraParams()", persistStart);
+    const persistMethod = poseStudioSource.slice(persistStart, persistEnd);
+    assert.match(persistMethod, /const cameraParams = this\.currentCameraParams\(\)/);
+    assert.match(persistMethod, /x:\s*this\.exportParams\.cam_offset_x/);
+    assert.match(persistMethod, /y:\s*this\.exportParams\.cam_offset_y/);
+    assert.match(persistMethod, /zoom:\s*this\.exportParams\.cam_zoom/);
+
+    const radarStart = poseStudioSource.indexOf("createCameraRadar(section)");
+    const radarEnd = poseStudioSource.indexOf("\n    createLightRadar", radarStart);
+    const radarMethod = poseStudioSource.slice(radarStart, radarEnd);
+    const yUpdate = radarMethod.indexOf("this.exportParams.cam_offset_y = next.y");
+    const selectedCharacterUpdate = radarMethod.indexOf("this.persistActivePoseCameraParams()", yUpdate);
+    assert.ok(yUpdate >= 0 && selectedCharacterUpdate > yUpdate);
+});
+
+
+test("character removal uses the Pose Studio modal instead of browser confirm", () => {
+    const renderStart = poseStudioSource.indexOf("\n    renderCharactersUI() {");
+    const confirmStart = poseStudioSource.indexOf("\n    showCharacterRemoveConfirm(character) {", renderStart);
+    const renderMethod = poseStudioSource.slice(renderStart, confirmStart);
+    assert.doesNotMatch(renderMethod, /window\.confirm/);
+    assert.match(renderMethod, /this\.showCharacterRemoveConfirm\(active\)/);
+    assert.match(renderMethod, /toolbar\.className = "vnccs-ps-character-toolbar"/);
+    assert.match(renderMethod, /colorField\.className = "vnccs-ps-character-color-control"/);
+    assert.match(renderMethod, /remove\.className = "vnccs-ps-character-remove"/);
+    assert.doesNotMatch(renderMethod, /nameInput|character-name-row|textContent = "\+ Add"/);
+    assert.match(
+        renderMethod,
+        /const charactersBySlot = new Map\(this\.characters\.map\(character => \[character\.slot, character\]\)\)/,
+    );
+    assert.match(
+        renderMethod,
+        /button\.classList\.add\("empty"\)[\s\S]*button\.addEventListener\("click", \(\) => this\.addCharacter\(index\)\)/,
+    );
+
+    const confirmEnd = poseStudioSource.indexOf("\n    persistActivePoseCameraParams()", confirmStart);
+    const confirmMethod = poseStudioSource.slice(confirmStart, confirmEnd);
+    assert.match(confirmMethod, /overlay\.className = "vnccs-ps-modal-overlay"/);
+    assert.match(confirmMethod, /modal\.className = "vnccs-ps-modal vnccs-ps-character-remove-modal"/);
+    assert.match(confirmMethod, /this\.deleteCharacter\(characterId\)/);
+    assert.match(confirmMethod, /titleText\.textContent = `Remove Character \$\{characterNumber\}\?`/);
+    assert.match(confirmMethod, /actions\.append\(cancelBtn, removeBtn\)/);
+    assert.match(confirmMethod, /requestAnimationFrame\(\(\) => cancelBtn\.focus\(\)\)/);
+    assert.match(confirmMethod, /event\.key === "Escape"/);
+    assert.match(confirmMethod, /event\.key !== "Tab"/);
+    assert.doesNotMatch(confirmMethod, /character\?\.name|innerHTML|window\.confirm|and its animation|🗑️|⚠️/);
+    assert.match(poseStudioSource, /\.vnccs-ps-character-remove-modal \{[\s\S]*width: min\(240px, calc\(100% - 24px\)\)/);
+    assert.match(poseStudioSource, /\.vnccs-ps-character-remove-actions \{[\s\S]*grid-template-columns: 1fr 1fr/);
+});
+
+
+test("save-to-library modal scales with the widget and keeps actions accessible", () => {
+    assert.match(
+        poseStudioSource,
+        /\.vnccs-ps-save-library-modal \{[\s\S]*--vnccs-ps-save-scale: clamp\(0\.72, var\(--vnccs-ps-relative-ui-scale\), 1\.15\)/,
+    );
+    assert.match(
+        poseStudioSource,
+        /\.vnccs-ps-save-library-modal \{[\s\S]*width: min\(calc\(380px \* var\(--vnccs-ps-save-scale\)\), calc\(100% - 24px\)\)/,
+    );
+    assert.match(
+        poseStudioSource,
+        /\.vnccs-ps-save-library-modal \{[\s\S]*max-height: calc\(100% - 24px\)/,
+    );
+    assert.match(
+        poseStudioSource,
+        /\.vnccs-ps-save-library-modal \.vnccs-ps-modal-content \{[\s\S]*overflow-y: auto/,
+    );
+    assert.match(
+        poseStudioSource,
+        /\.vnccs-ps-save-library-actions \{[\s\S]*grid-template-columns: 1fr 1fr/,
+    );
+    assert.doesNotMatch(
+        poseStudioSource,
+        /\.vnccs-ps-save-library-modal \{[\s\S]{0,160}width: min\(680px/,
+    );
+
+    const saveStart = poseStudioSource.indexOf("showSaveToLibraryModal() {");
+    const saveEnd = poseStudioSource.indexOf("\n    async saveLibraryPoseRecord", saveStart);
+    const saveMethod = poseStudioSource.slice(saveStart, saveEnd);
+    assert.match(saveMethod, /modal\.setAttribute\('aria-modal', 'true'\)/);
+    assert.match(saveMethod, /class="vnccs-ps-save-library-actions"/);
+    assert.match(saveMethod, /Name is required\./);
+    assert.match(saveMethod, /saveButton\.disabled = true;[\s\S]*cancelButton\.disabled = true;/);
+    assert.match(saveMethod, /event\.key === 'Escape'/);
+    assert.match(saveMethod, /event\.key !== 'Tab'/);
+    assert.match(saveMethod, /event\.key === 'Enter'/);
+    assert.match(saveMethod, /requestAnimationFrame\(\(\) => nameInput\.focus\(\)\)/);
+    assert.doesNotMatch(saveMethod, /💾|min-height: 72px|font-size: 22px/);
+});
+
+
+test("Pose Studio enforces four-character maximum and one-character minimum", () => {
+    assert.match(
+        poseCharactersSource,
+        /export const MAX_POSE_STUDIO_CHARACTERS\s*=\s*4;/,
+    );
+
+    const addStart = poseStudioSource.indexOf("async addCharacter(requestedSlot = null)");
+    const addEnd = poseStudioSource.indexOf("\n    async deleteCharacter", addStart);
+    const addMethod = poseStudioSource.slice(addStart, addEnd);
+    assert.match(
+        addMethod,
+        /this\.characters\.length\s*>=\s*MAX_POSE_STUDIO_CHARACTERS[\s\S]*return false;/,
+    );
+    assert.match(addMethod, /const slot = nextCharacterSlot\(this\.characters, requestedSlot\)/);
+    assert.match(addMethod, /color: nextCharacterColor\(this\.characters, slot\)/);
+    assert.match(addMethod, /this\.characters\.sort\(\(left, right\) => left\.slot - right\.slot\)/);
+
+    const deleteStart = addEnd;
+    const deleteEnd = poseStudioSource.indexOf("\n    async selectCharacter", deleteStart);
+    const deleteMethod = poseStudioSource.slice(deleteStart, deleteEnd);
+    assert.match(
+        deleteMethod,
+        /this\.characters\.length\s*<=\s*1[\s\S]*return false;/,
+    );
+});
+
+
+test("Pose Studio sync persists the v3 multi-character scene schema", () => {
+    const syncStart = poseStudioSource.indexOf("syncToNode(fullCapture = false, options = {})");
+    const syncEnd = poseStudioSource.indexOf("\n    loadFromNode()", syncStart);
+    const syncMethod = poseStudioSource.slice(syncStart, syncEnd);
+
+    assert.match(syncMethod, /schema_version:\s*3/);
+    assert.match(syncMethod, /active_character_id:\s*this\.activeCharacterId/);
+    assert.match(syncMethod, /characters:\s*serializedCharacters/);
+    assert.match(syncMethod, /timeline:\s*\{\s*\.\.\.this\.sharedTimeline\s*\}/);
+});
+
+
+test("full capture updates every character for the current frame or pose before rendering", () => {
+    const syncStart = poseStudioSource.indexOf("syncToNode(fullCapture = false, options = {})");
+    const syncEnd = poseStudioSource.indexOf("\n    loadFromNode()", syncStart);
+    const syncMethod = poseStudioSource.slice(syncStart, syncEnd);
+    const fullCaptureStart = syncMethod.indexOf("if (fullCapture)");
+    const activeCaptureStart = syncMethod.indexOf("// Capture only ACTIVE", fullCaptureStart);
+    const fullCapturePath = syncMethod.slice(fullCaptureStart, activeCaptureStart);
+
+    assert.match(
+        fullCapturePath,
+        /this\.updateCharacterScene\(animationMode\s*\?\s*\{\s*frame:\s*i\s*\}\s*:\s*\{\s*poseIndex:\s*i\s*\}\s*\)/,
+    );
+    const sceneUpdate = fullCapturePath.indexOf("this.updateCharacterScene(animationMode");
+    const compositeCapture = fullCapturePath.indexOf(
+        "this.setPoseCapture(i, this.viewer.capture",
+        sceneUpdate,
+    );
+    assert.ok(
+        sceneUpdate >= 0 && compositeCapture > sceneUpdate,
+        "the complete character scene must be updated before its composite capture",
+    );
+});
+
+
+test("repository Git fallback keeps clone diagnostics visible", () => {
+    const renderStart = poseStudioSource.indexOf("renderPoseRepositorySettings() {");
+    const renderEnd = poseStudioSource.indexOf("\n    renderLocalPoseRepositorySettings()", renderStart);
+    const renderMethod = poseStudioSource.slice(renderStart, renderEnd);
+    assert.match(renderMethod, /repo\.git_error/);
+    assert.match(renderMethod, /Git clone failed — HTTP fallback was used/);
+    assert.match(renderMethod, /vnccs-ps-library-repo-diagnostic/);
+
+    const progressStart = poseStudioSource.indexOf("createInlineRepositoryProgress(key");
+    const progressEnd = poseStudioSource.indexOf("\n    async pollRepositoryProgress", progressStart);
+    const progressMethod = poseStudioSource.slice(progressStart, progressEnd);
+    assert.match(progressMethod, /hasOwnProperty\.call\(status, "git_error"\)/);
+    assert.match(progressMethod, /patch\.git_error = status\.git_error/);
+
+    const addStart = poseStudioSource.indexOf("async addPoseRepository() {");
+    const addEnd = poseStudioSource.indexOf("\n    createRepositoryTaskId", addStart);
+    const addMethod = poseStudioSource.slice(addStart, addEnd);
+    assert.match(addMethod, /!refreshed\.git_error/);
+    assert.match(addMethod, /Open Git diagnostics below/);
+});
+
+test("Pose Studio redraws its position marker after viewport rendering", () => {
+    assert.match(poseStudioSource, /onViewportRender: \(\) => \{[\s\S]*?this\.radarRedraw\?\.\(\);[\s\S]*?this\.host\.onViewportRender\?\.\(\);/);
+});

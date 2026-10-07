@@ -41,6 +41,7 @@ interface TrackAreaProps {
     sourceType: MultiTrackSourceType,
     startFrame?: number,
     endFrame?: number,
+    previewUrl?: string,
   ) => void
   onAddAudio: (
     trackId: string,
@@ -60,7 +61,7 @@ interface TrackAreaProps {
   onAddTrack: (type: MultiTrackType) => void
   onAddSubtitleSegment: (trackId: string, startFrame?: number, endFrame?: number) => void
   onImportSubtitles?: (trackId: string, srtText: string, startFrame: number) => void
-  onReplaceVideo: (trackId: string, segmentId: string, filePath: string, sourceType: MultiTrackSourceType) => void
+  onReplaceVideo: (trackId: string, segmentId: string, filePath: string, sourceType: MultiTrackSourceType, previewUrl?: string) => void
   onAddTaskSegment: (
     trackId: string,
     startFrame?: number,
@@ -78,6 +79,8 @@ interface TrackAreaProps {
   onSharedReferenceChange?: (trackId: string, segmentId: string, enabled: boolean) => void
   onDistributeTaskSegments: (trackId: string) => void
   onCloneTaskSegment: (trackId: string, segmentId: string) => void
+  canMergeSelectedTaskSegments?: boolean
+  onMergeSelectedTaskSegments?: () => void
   onSplitTaskSegment?: (segmentId: string) => void
   onResizeSegment: (segmentId: string, edge: 'start' | 'end', nextTime: number, brakeDistanceFrames?: number) => void
   onResizeSegmentPreview: (segmentId: string, edge: 'start' | 'end', nextTime: number, brakeDistanceFrames?: number) => void
@@ -199,6 +202,8 @@ export function TrackArea({
   onSharedReferenceChange = () => {},
   onDistributeTaskSegments,
   onCloneTaskSegment,
+  canMergeSelectedTaskSegments = false,
+  onMergeSelectedTaskSegments,
   onSplitTaskSegment = () => {},
   onResizeSegment,
   onResizeSegmentPreview,
@@ -702,6 +707,9 @@ export function TrackArea({
                   onDelete={onDeleteSegment}
                   onDistribute={track.type === 'task' ? () => onDistributeTaskSegments(track.id) : undefined}
                   onClone={track.type === 'task' ? (segmentId) => onCloneTaskSegment(track.id, segmentId) : undefined}
+                  onMerge={track.type === 'task' && selectedSegmentIds.has(segment.id) && canMergeSelectedTaskSegments
+                    ? onMergeSelectedTaskSegments
+                    : undefined}
                   onSplitTask={track.type === 'task' ? onSplitTaskSegment : undefined}
                   cutMode={cutMode}
                   onCut={onCutSegment}

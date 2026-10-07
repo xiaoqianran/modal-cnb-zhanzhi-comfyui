@@ -1945,8 +1945,8 @@
       }
     }
   },
-  "pre_ZImageInpaint_patch": {
-    "display_name": "pre_Zimage重绘补丁",
+  "model_patch_controlnet": {
+    "display_name": "model_patch_controlnet",
     "inputs": {
       "context": {
         "name": "context"

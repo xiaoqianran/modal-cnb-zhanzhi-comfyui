@@ -1,134 +1,253 @@
 # selflift-Avatar
 
-**当前公开版本：`v0.1.1-experimental`** · [发布说明](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.1-experimental) · [下载 ZIP](https://github.com/slmonker/selflift-Avatar/releases/download/v0.1.1-experimental/selflift-Avatar-v0.1.1-experimental.zip) · [更新记录](CHANGELOG.md)
+**Development: `main` (model input naming and layout)** · **Packaged release: `v0.1.4-experimental`** · [中文说明](README_CN.md) · [Changelog](CHANGELOG.md) · [v0.1.4 release](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.4-experimental)
 
-用于 ComfyUI / MiniMax H3 的 **SelfLift 独立实验分支**，重点适配音视频双流遮罩和原始音频保留。与原版节点使用不同的注册 ID，可以并存。
+An independent experimental SelfLift branch for ComfyUI / MiniMax H3. It focuses on H3 audio-video latent masks, preserving source audio during sampling, and a narrowly supported high-resolution tiling path. It registers separate node IDs, so it can coexist with the original SelfLift plugin.
 
-> **实验版本，非官方项目。** v0.1.1 已通过 28 项 CPU 测试；维护者反馈当前工作流试用可用。尚无系统性的口型准确率、性能或多模型组合验证，不保证所有音频与角色都能准确同步。
+> **Experimental, unofficial project.** The current code has passed 53 CPU tests and two frontend suites with stubs. Earlier versions were exercised in the maintainer's H3 workflow; the new controls still need broader real-model and frontend testing. This is not a systematic benchmark of lip-sync accuracy, speed, or every model/plugin combination. Results can vary by character, audio, prompt, sampler, latent upscaler, and seed.
 
-## v0.1.1 的重点
+## Main-branch update: model input naming and layout (2026-10-05)
 
-上一版能够解析遮罩并保留输出音频，但缺少 H3 原生音频条件标签和模型输入侧的已知音频注入。本版补齐这条路径：让音频在低清与高清采样时都参与条件输入，而不只是最终恢复声音。
+**Dual-model sampling was already supported through `model` and `model_hires`; this update does not introduce that capability.** Both the MiniMax H3 and Image samplers now use clearer names: `model` → `low_res_model`, and `model_hires` → `high_res_model`. The optional high-resolution input retains its existing fallback to the low-resolution model.
 
-同时分离高清阶段的带噪恢复状态和干净音频约束。此修复解决的是条件传递问题，不代表上采样器、模型、提示词或其他设置对口型的影响已经消除。
+This update groups the two sockets together, corrects the high-resolution sampling call to use the selected model's load device, validates that model's sampler compatibility, and adds regression tests. It does not add forced model unloading or an OOM-prevention guarantee.
 
-## 安装
+| Input | Required | Used for |
+| --- | --- | --- |
+| `low_res_model` | Yes | The first `transition_step` low-resolution denoiser evaluations. |
+| `high_res_model` | No | Remaining evaluations after the resolution lift. If disconnected, reuses `low_res_model`. |
 
-需要一套已经能够运行 MiniMax H3 的 ComfyUI，以及该工作流本来需要的模型、VAE 和可选 latent upscaler。此项目不包含模型权重，也不安装新的依赖。
+The two sockets appear together, with `high_res_model` directly below `low_res_model`. No extra switch or sampler node is needed.
 
-在 `ComfyUI/custom_nodes` 下执行：
-
-```bash
-git clone https://github.com/slmonker/selflift-Avatar.git
+```text
+Model A ── low_res_model  → low-resolution prefix
+Model B ── high_res_model → high-resolution continuation (optional)
 ```
 
-或下载 Release 中的 ZIP，将其中的 `selflift-Avatar` 文件夹放入 `ComfyUI/custom_nodes`。之后重启 ComfyUI 后端并刷新页面。
+For a single-model workflow, connect only `low_res_model`. High-resolution tiling and masking use the selected high-resolution model. Model loading/offloading remains managed by ComfyUI; this does not guarantee that both models reside in VRAM simultaneously.
 
-## 更新
+### Upgrade / reconnect existing workflows
 
-**Git 安装：**在本插件目录执行 `git pull --ff-only`，然后重启 ComfyUI 后端。若有自己的代码修改，请先备份或提交，不要强制覆盖。
+**Breaking input rename:** `model` is now `low_res_model`, and `model_hires` is now `high_res_model`; the old input names are no longer accepted. Back up your workflow before updating, restart the ComfyUI backend, and hard-refresh the browser. Re-add the sampler if stale sockets remain, then reconnect:
 
-**ZIP 安装：**先将旧版备份到 `custom_nodes` 之外，再把新版 `selflift-Avatar` 文件夹放回 `custom_nodes` 并重启。不要将两个 Avatar 副本同时放在 `custom_nodes` 下，以免节点重复注册。原版 SelfLift 使用不同的节点 ID，可以保留。
+- Previous `model` connection → `low_res_model`.
+- Previous `model_hires` connection → `high_res_model` (if used).
+- Reconnect the remaining inputs and restore your sampler settings before running.
 
-从 v0.1.0 升级时，已有 Avatar 节点的 ID 和输入接口不变，不需要重新接线；只刷新网页不足以加载新的 Python 代码。
+The separate H3 TST patch node still uses its original `model` socket. Socket ordering does not migrate obsolete workflow inputs automatically.
 
-## 使用
+### Compatibility and validation
 
-1. 搜索 `selflift-Avatar`，添加 **selflift-Avatar Sampler (MiniMax H3)**。
-2. 把原 SelfLift 采样器的输入和输出改接到新节点。原节点和工作流不会自动替换。
-3. 使用标准 **Euler**；带 `noise_mask` 时设置 **`highres_tiling=false`**。
-4. 建议复制工作流，以固定 seed、短片段、相同其他参数进行对比。
-5. 如果采用外部 H3 latent upscaler，可保留 `rho=0`；`upscaler_model=none` 时，H3 节点仍要求 `rho>0`。
+Both stages share the VAE, positive/negative conditioning, CFG, sampler and sigma schedule. Use compatible architectures, latent formats and sampling parameterizations, such as different checkpoints or LoRA stacks for the same backbone—not arbitrary model families. The switch follows the **resolution transition**, not an independent high-noise/low-noise threshold.
 
-| 注册 ID | 显示名称 |
+**53 CPU tests** and both Node.js frontend suites pass. Coverage includes model selection, single-model fallback, stage boundaries, masks/tiling, socket ordering and preserving link targets when reordering. These are synthetic-denoiser and stub-frontend tests; real dual-model output quality, peak VRAM and all frontend/subgraph combinations remain unverified.
+
+This update is available from the repository's `main` branch. The existing `v0.1.4-experimental` release archive does **not** contain it; no new release archive is created with this update.
+
+## Previous upgrade: v0.1.4
+
+**Automatic mode now shows the actual tile count on the first line of the node status panel, not just `auto`.**
+
+- Before high-resolution preparation: **Actual tiles: pending**. Auto planning is not available during the low-resolution prefix.
+- Once planned: **Actual tiles: N**, including odd counts selected by auto mode. **1 tile** is explicitly labeled **full frame / no split**.
+- The completed result stays visible; changing tiling controls or starting a new run clears the old count.
+- Actual results are delivered as structured plan data for live events and completed/cached node UI results. Older cached text is still recognized.
+- Add a numeric-node-ID lookup fallback for live updates. This is not a general subgraph-routing fix.
+- The manual **2 / 4 / 6 / 8** dropdown is never overwritten by auto results.
+
+**No sampling algorithm change:** tile selection, spatial overlap, audio-mask constraints, temporal upscaler windows and VRAM estimation remain unchanged. **47 CPU tests** plus extended frontend callback tests with a stub DOM passed. Restart the ComfyUI backend and hard-refresh the browser after updating. These tests are not a full browser or real-model benchmark.
+
+[Download v0.1.4](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.4-experimental) · [Full changelog](CHANGELOG.md)
+
+## Previous upgrade: v0.1.3
+
+**This upgrade makes spatial tiling selectable and visible directly on the H3 sampler node.**
+
+| Area | v0.1.2 | v0.1.3 |
+| --- | --- | --- |
+| Tile count | Automatic memory-based planning only | Choose **auto** or **manual**; manual dropdown offers **2 / 4 / 6 / 8**, default **2** |
+| Direction | Automatically use the longer patch-grid side | Choose **auto / width / height**, in either count mode |
+| Plan display | Read console logs | Read-only **in-node status panel** with actual count, direction, ranges, overlap and largest tile |
+| Memory feedback | Console estimates | Estimated available/minimum workspace and insufficient-memory warnings on the node; **not measured VRAM peaks** |
+| Tests | 34 CPU tests | **47 CPU tests** plus frontend callback tests with a stub DOM |
+
+**Unchanged:** auto mode still searches **1–8** tiles, including odd counts; overlap is automatic; temporal upscaler windows are unaffected. Masked tiling still requires **video mask all 1 / audio mask all 0**. Manual mode does not silently increase the count and has no automatic OOM retry. This release does not claim a measured speedup, VRAM-saving percentage or improved lip-sync accuracy.
+
+**After upgrading:** restart the backend and hard-refresh the browser. If an existing sampler does not show the new controls, recreate that node. If an older experimental workflow stored 1 or an odd manual count, re-select **2 / 4 / 6 / 8**. Existing published v0.1.2 workflows default to auto.
+
+[Full changelog](CHANGELOG.md) · [v0.1.3 release and installation ZIP](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.3-experimental)
+
+## Selectable spatial tiling — v0.1.3
+
+The H3 sampler now exposes optional controls. Existing workflows keep the old defaults.
+
+| Control | Values | Meaning |
+| --- | --- | --- |
+| `highres_tiling` | false / true | Enable spatial tiling; off ignores the controls below. |
+| `tiling_mode` | auto / manual | Auto selects the first estimated fitting count from 1–8. Manual uses the requested count without silently increasing it. |
+| `tiling_tiles` | 2 / 4 / 6 / 8 (default 2) | Manual dropdown. Turn off highres_tiling for full-frame processing. Tiny dimensions may reduce the effective count. |
+| `tiling_axis` | auto / width / height | Auto uses the longer patch-grid side. Width creates left/right strips; height creates top/bottom strips. Applies in both modes. |
+
+The node includes a read-only status panel: current settings, last actual plan, effective tile count, spatial ranges, overlaps, maximum latent tile, and estimated available/minimum workspace. It updates at high-resolution preparation; before that the automatic result is unknown. Root-graph nodes receive a live event; completion/cached execution uses the ordinary node UI result. Subgraph live-event routing is not verified. Changing controls invalidates the displayed previous plan. Values are estimates, not measured VRAM peaks; manual mode does not guarantee fit or retry on OOM.
+
+Overlap remains automatic; these controls do not change the latent upscaler's temporal windows. The video-all-1/audio-all-0 mask restriction and existing ControlNet/TST limitations remain. Restart the backend and hard-refresh the frontend after updating. If an old node does not show new controls, recreate that H3 sampler node. The 47 CPU tests include the old workflow defaults, manual direction/count, effective-count reporting, insufficient-memory warnings, and node UI results. Frontend callbacks are tested with a stub DOM; this is not a full browser or real-model benchmark.
+
+## Inherited audio-only tiling support (v0.1.2)
+
+- Allows high-resolution tiling when the video is fully generated (`video mask = 1` everywhere) and the source audio is fully preserved (`audio mask = 0` everywhere).
+- Automatically chooses the spatial tile count and direction from available workspace; the current planner can select 1–8 tiles.
+- Every spatial tile receives the complete audio latent and complete H3 audio conditioning. Audio is not split by the visual tile boundary.
+- Keeps rejecting partial video preservation, partial/soft audio masks, and other mask combinations that have not been validated with tiling.
+- Adds tests for tile stitching, full-audio preservation, H3 audio mask forwarding, invalid mask combinations, and the no-mask path.
+
+## Demo
+
+[![H3 audio-driven demo preview](docs/assets/demo-preview.gif)](https://github.com/slmonker/selflift-Avatar/releases/download/v0.1.2-experimental/selfliftAvatar_00011-audio.mp4)
+
+**H3 audio-driven demo:** [Download / watch the full 13.67-second MP4](https://github.com/slmonker/selflift-Avatar/releases/download/v0.1.2-experimental/selfliftAvatar_00011-audio.mp4) · [open the v0.1.2 release](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.2-experimental)
+
+The preview above is a muted excerpt; click it for the complete video with audio. The demo was provided by the maintainer and is published as a public Release asset.
+
+[![SelfLift Avatar workflow demo preview](docs/assets/demo-selflift-avatar-preview.gif)](https://github.com/slmonker/selflift-Avatar/releases/download/v0.1.2-experimental/selflift-Avatar-demo-selflift-avatar.mp4)
+
+**SelfLift Avatar workflow demo:** [Download / watch the full 10.05-second MP4](https://github.com/slmonker/selflift-Avatar/releases/download/v0.1.2-experimental/selflift-Avatar-demo-selflift-avatar.mp4)
+
+This second preview is also muted; click it for the complete video with audio. Both videos are examples of the maintainer's workflows, not universal lip-sync benchmarks. The repository does not include model weights.
+
+## Installation
+
+You need a working MiniMax H3 ComfyUI setup and the models, VAE, LoRA, and optional latent upscaler required by your workflow. This project adds no dependencies and does not include model weights.
+
+### Git installation
+
+```bash
+git clone https://github.com/slmonker/selflift-Avatar.git ComfyUI/custom_nodes/selflift-Avatar
+```
+
+To update an existing Git installation:
+
+```bash
+cd ComfyUI/custom_nodes/selflift-Avatar
+git pull --ff-only
+```
+
+Restart the ComfyUI backend after updating. A browser refresh alone does not reload Python nodes.
+
+### ZIP installation
+
+Download the latest ZIP from the [Releases page](https://github.com/slmonker/selflift-Avatar/releases), back up the old `selflift-Avatar` folder outside `custom_nodes`, replace it with the new folder, and restart ComfyUI. Do not keep two copies of this plugin in `custom_nodes`.
+
+The original `comfyui-SelfLift` folder can remain installed; this project uses different node IDs.
+
+## Nodes
+
+| Node ID | Display name |
 | --- | --- |
 | `SelfLiftAvatarH3Sampler` | selflift-Avatar Sampler (MiniMax H3) |
 | `SelfLiftAvatarImageSampler` | selflift-Avatar Sampler (Image) |
 | `SelfLiftAvatarH3TST` | selflift-Avatar H3 TST |
 
-音频遮罩仍通过 latent 字典的 `noise_mask` 提供，没有新增单独的 mask 输入端口。
+The sampler uses the standard `sampler` and `sigmas` inputs. Use the standard Euler sampler with `s_churn=0`.
 
-## 使用输入音频驱动角色
+## Audio-driven H3 workflow
 
-典型连接方式如下（节点显示名称可能随 ComfyUI 版本变化）：
+A typical source-audio path is:
 
 ```text
-输入音频 → 裁剪到目标片段 → H3 音频 VAE 编码
-                                ↓
+source audio → trim to target clip → H3 audio VAE encode
+                                             ↓
 SolidMask(value=0) → SetLatentNoiseMask
-                                ↓
-H3 视频 latent ──────────→ 合并音视频 latent
-                                ↓
-                 selflift-Avatar Sampler (MiniMax H3)
+                                             ↓
+H3 video latent ───────────────→ concatenate AV latent
+                                             ↓
+                         selflift-Avatar H3 sampler
 ```
 
-- 音频 mask 为 0 时，保留输入音频；为 1 时，允许生成音频。视频和音频可以使用不同遮罩。
-- 音频长度、视频帧数和最终输出 FPS 应对应同一目标片段。编码音频与最终合成的音频也应来自同一次裁剪。
-- 若最终合成节点直接使用原音频，听到正确声音不等于采样时音频条件正确；判断口型需要看实际生成的视频。
-- 与 H3 条件节点配套连接模型、正负条件及视频 VAE；本插件不是独立的后期对口型工具。
+- Audio mask `0` preserves the source audio; audio mask `1` allows audio generation. Values between 0 and 1 are soft constraints.
+- The encoded audio, video frame range, and final output FPS must refer to the same clip.
+- If the final video node uses the original audio directly, hearing the correct soundtrack does not prove that H3 used it to drive the mouth during generation. Evaluate the generated frames.
+- The sampler is not a standalone post-production lip-sync tool.
 
-## 遮罩支持
+## High-resolution tiling
 
-- 普通视频/图片 Tensor：BHW、BCHW、BCTHW；通道为 1 或实际 latent 通道数。
-- H3 `NestedTensor(video_mask, audio_mask)`：分别解析音视频，保留多通道权重。
-- 严格匹配音视频展平尺寸的 `[B,1,N]` 遮罩。
-- 音频 T、BT、BST、BCST 布局；维度为 1 可广播。
-- 视频空间尺寸不匹配时进行双线性缩放；不猜测时间轴、不对音频时间轴自动重采样。
-- 普通 Tensor 默认只约束视频，缺省音频遮罩按全 1 处理。
+Set `highres_tiling=true` to enable high-resolution spatial tiling. Choose `tiling_mode=auto` for estimated-memory planning, or `tiling_mode=manual` for a **2 / 4 / 6 / 8** tile dropdown. Auto mode still considers counts from 1–8 (including odd counts) and may choose one tile, meaning no split. `tiling_axis` can override the direction in either mode. Disable `highres_tiling` for full-frame processing without the tiling planner.
 
-**0=保留原内容，1=生成，0~1=软约束。** 必须有对应的已初始化 latent 才能保留实际内容。
+Example: `highres_tiling=true`, `tiling_mode=manual`, `tiling_tiles=4`, `tiling_axis=width` requests four left/right spatial strips. Overlap remains automatic. Manual mode warns if the estimate exceeds available workspace, but does not silently increase the count and does not retry on OOM.
 
-### SolidMask 加到音频的兼容处理
+### VRAM estimates are not fixed GPU requirements
 
-`SolidMask → SetLatentNoiseMask → 合并音视频 latent` 可能给音频附加图像尺寸的恒定遮罩，例如 `[1,1,928,1664]` 全零。
+There is no reliable mapping such as “2 tiles = 32 GB” or “4 tiles = 24 GB”. The planner combines current free VRAM and estimated reclaimable weights, subtracts reservations, then compares that estimated workspace against the model's estimated minimum needs. Resolution, duration, batch, references, audio, model offloading, and overlapping tiles all affect the result. The node panel shows these **estimates**, not measured peaks. Planning happens before high-resolution sampling, not continuously at every step. No percentage-saving or speed guarantee is claimed.
 
-本版本确认每个批次/通道在空间上严格恒定后，压缩为 `[B,C,1,1]` 广播到音频 latent。全零保留整段输入音频，全一生成音频，恒定软权重也不变。非恒定图像图案不擅自解释为音频时间遮罩。
+### Supported masked tiling mode
 
-## 采样约束与修复
+The currently validated masked mode is deliberately narrow:
 
-- 低清和高清阶段分别应用对应视频 mask；音频 mask 不随空间分辨率缩放。
-- v0.1.1 在条件构建前通过 ModelPatcher 的 OUTER_SAMPLE wrapper 传入正确打包的 mask，让 H3 生成 `audio_denoise_mask` 条件标签。
-- 使用原生 `KSamplerX0Inpaint` 和 H3 `scale_latent_inpaint` 在模型输入侧注入已知音频，不再只在预测后恢复音频。
-- 高清阶段把带噪 resume 状态与干净 inpaint anchor 分开，保留原始采样状态，避免将残余噪声当成原音频。
-- 约束原内容时调用实际采样模型的 `process_latent_in`，包含 H3 的音频尺度转换。
-- 返回前仅对 `mask==0` 的位置恢复原始 latent，不重复混合软遮罩。
-- 修复纯像素 anchor 模式（`rho=w_min=w_max=1`）带 mask 时的 None 运算问题。
-- 报错包含实际 mask 类型、各流形状和 latent 形状。
+```text
+video mask: all 1 → generate the complete video
+ audio mask: all 0 → preserve the complete source audio
+```
 
-## 口型效果排查
+Every video tile receives the complete audio latent and complete H3 audio conditioning. The tiles are stitched in the video spatial dimension; audio is not spatially tiled.
 
-音频保留不等于口型质量保证。外部 latent upscaler 包含时间卷积且不直接接收目标音频，放大过程和剩余高清采样步数可能影响嘴部细节；当前没有量化归因。
+### Still rejected with tiling
 
-固定模型、音频片段、seed、提示词、帧数及输出 FPS，先与原生全分辨率采样比较，再分别测试更多高清采样步数或不使用外部 upscaler 的像素 anchor 路径，避免同时更改多个参数。不同路径随机数消耗可能不同，需多个 seed 复核。
+- Any video mask containing 0 or soft values.
+- Partial or soft audio masks.
+- ControlNet with the H3 tiling path.
 
-## 已知限制
+Static masks only: upstream dynamic `denoise_mask_function` schedules are ignored with a warning in both modes. Disabling tiling does not restore dynamic-mask support. Disable `highres_tiling` for the unsupported spatial-mask/ControlNet combinations above. Removing the validation would not make those combinations correct because their masks would also need to be cropped, transformed, and aligned with each tile.
 
-- 带 mask 时不支持 `highres_tiling`。
-- 只应用静态输入遮罩，不执行上游 `denoise_mask_function` 的动态调度；检测到时会警告。
-- `model_hires` 必须使用兼容架构、latent 格式和采样尺度设置；跨架构/尺度切换未验证。
-- 保留的是输出 latent 区域，不承诺 VAE 解码后像素或波形逐点相同。
-- TST、分块和外部 upscaler 继承上游的实验限制；没有重新验证这些功能的所有组合。
+Look for these console messages to confirm the planner:
 
-## 测试
+```text
+[selflift-Avatar plan] automatic high-resolution tiling enabled
+[SelfLift tiling plan] mode=manual axis=W tiles=4 requested=4 ...
+```
 
-从安装在 ComfyUI 下的插件目录运行，使用 ComfyUI 对应的 Python：
+`axis=H` or `axis=W` is the actual spatial direction. `tiles=N` is the effective tile count; `requested` is the manual request or `auto`. Tiny dimensions can reduce the effective count. The node status panel reports the same actual plan once high-resolution preparation begins.
+
+## Mask support without tiling
+
+- Regular image/video tensors: BHW, BCHW, and BCTHW; one channel or the actual latent channel count.
+- H3 `NestedTensor(video_mask, audio_mask)` with separate video/audio handling.
+- Packed masks whose flattened size matches the AV latent streams.
+- Audio masks in T, BT, BST, and BCST layouts; dimensions of 1 broadcast.
+- Spatial video masks are resized to the latent grid. Audio time is not guessed or automatically resampled.
+- A constant image-sized `SolidMask` attached to audio, such as `[1,1,928,1664]`, is recognized as a constant audio constraint and broadcast to the audio latent.
+
+Mask semantics: **0 = preserve, 1 = generate, 0–1 = soft constraint**. A meaningful preserve result requires an initialized latent containing the content to preserve.
+
+## Native H3 audio conditioning
+
+The sampler passes the packed mask into ComfyUI's native H3 conditioning path before sampling. It uses H3's `audio_denoise_mask` and input-side `scale_latent_inpaint` behavior instead of only restoring audio after the model prediction. The high-resolution resume state and the clean audio anchor are kept separate so residual sampling noise is not treated as source audio.
+
+This fixes mask/conditioning transport. It does not guarantee perfect lip sync. The external H3 latent upscaler has temporal convolutions and does not directly receive the target audio; the low-resolution prefix and the number of high-resolution correction steps can also affect mouth detail.
+
+For a controlled comparison, keep the same model, audio clip, prompt, frame count, FPS, and seed. Compare the native baseline, the current SelfLift route, different `transition_step` values, and the `upscaler_model=none` pixel-anchor route one variable at a time.
+
+## Testing
+
+Run with the ComfyUI Python environment:
 
 ```bash
 python tests/test_avatar.py
 ```
 
-28 项 CPU 测试包括音视频打包、真实 H3 音频尺度转换、全零/全一遮罩、前段保留、软遮罩、多通道、恒定图像尺寸音频遮罩和两阶段流程。
+Optional frontend callback checks (Node.js, no npm packages):
 
-两阶段测试使用真实 Euler、原生 inpaint 调用链、合成 denoiser 与模拟 VAE lift。新增检查确认低清/高清阶段均产生音频遮罩条件，且模型输入在撤销音频 carry 变换后与被保留的音频一致。测试不加载大模型权重，也不衡量实际口型质量。
+```bash
+node tests/test_tiling_ui.mjs
+node tests/test_model_input_order.mjs
+```
 
-## 来源与许可说明
+The current suite contains 53 CPU tests covering AV packing, H3 audio scaling, full/partial masks, constant audio SolidMask conversion, native audio conditioning, two-stage sampling, automatic tile planning, tile stitching, complete-audio forwarding to every tile, invalid masked-tiling combinations, and the unmasked tiling path. The tests do not load a large H3 checkpoint or measure final video lip-sync quality.
 
-基于 [facok/comfyui-SelfLift](https://github.com/facok/comfyui-SelfLift) 的本地副本修改，保留[上游说明](docs/upstream/README.md)和[中文说明](docs/upstream/README_CN.md)。来源哈希见 `PROVENANCE.json`。
+## Source and licensing
 
-上游包含 SelfLift、TST 和可选 MiniMax H3 latent upscaler 的参考与致谢；这些研究和权重不由本项目声明所有权。本次上传检查时，上游未声明许可证；本项目未擅自新增开源许可证，不能仅凭本仓库存在推断获得原代码或模型的再分发授权。
+This is based on a local snapshot of [facok/comfyui-SelfLift](https://github.com/facok/comfyui-SelfLift). The upstream documentation is preserved under [`docs/upstream/`](docs/upstream/), and source hashes are recorded in [`PROVENANCE.json`](PROVENANCE.json).
 
-## 回退
+The upstream repository did not declare a license at the time this project was prepared. This repository does not add a license on behalf of the upstream author and does not imply permission to redistribute upstream code or model weights beyond the applicable rights. Research papers, third-party code, and model checkpoints remain the responsibility of their respective authors.
 
-[v0.1.0-experimental](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.0-experimental) 保留供对比和回退，但不包含本版原生音频条件修复。也可在工作流中换回原版 SelfLift 节点。
+## Rollback
 
-卸载时关闭 ComfyUI，将本文件夹移出 `custom_nodes`。本项目不会修改原版插件或 ComfyUI 核心文件。
+[v0.1.2-experimental](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.2-experimental) remains available for comparison. You can also reconnect the original SelfLift node in the workflow. To uninstall, stop ComfyUI and move this folder out of `custom_nodes`.

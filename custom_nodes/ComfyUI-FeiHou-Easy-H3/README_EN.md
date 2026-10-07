@@ -1,5 +1,7 @@
 # ComfyUI-FeiHou-Easy-H3
 
+Standard-edition experimental feature: [Production Pack Loader](docs/production-packs.md#english-quick-start). Read a folder/ZIP Shotlist, apply per-shot prompts, audio ranges and referenced images, and advance with native queue increment.
+
 **English** | [中文](README.md)
 
 A MiniMax H3 custom-node package with all reference-media loading embedded directly in the main node.
@@ -37,27 +39,13 @@ Place the LoRA stack to the left of `FeiHou Easy H3 Loader` and connect its `lor
 
 Prompt configuration is shown directly in the dedicated `🐵Easy H3` page in ComfyUI Settings, without secondary dialogs. Base URLs are editable, pasted API keys save automatically, and preset providers contain neither keys nor models. The same page contains the single prompt-optimization rule list. The main node shows the API and scheme controls only when Advanced options is enabled; the scheme is ignored until a configured API provider is selected. The final prompt is carried in H3 Context and can be connected from `FeiHou Easy H3 Output` to the bundled Prompt Preview node.
 
-### Custom API host allow-list
+### Custom APIs
 
-The built-in Zhipu, xFlow, Alibaba Cloud Bailian, and DeepSeek hosts are already allowed. Ollama is limited to local `localhost`, `127.0.0.1`, or `::1`. Before configuring a new third-party API, start ComfyUI once so the plugin creates this local file:
+Custom APIs can be entered directly as complete HTTPS URLs, such as https://api.example.com/v1; no domain allow-list file is required. Configure the API key and models in the Easy H3 settings page. API keys remain in the local ComfyUI user directory and are not exported with workflows.
 
-`ComfyUI/user/default/ComfyUI-FeiHou-Easy-H3/allowed_api_hosts.json`
+External prompt APIs still require HTTPS. Local Ollama may use http://localhost:11434, 127.0.0.1, or ::1. API settings, model discovery, and immediate prompt-optimization routes remain available only from the machine running ComfyUI.
 
-Add the API **hostname only** to its `hosts` array—do not enter `https://`, a path, port, wildcard, or IP address:
-
-```json
-{
-  "version": 1,
-  "hosts": [
-    "api.example.com",
-    "llm.company.cn"
-  ]
-}
-```
-
-Save the file and restart ComfyUI. You can then enter `https://api.example.com/v1`, its API key, and models in the Custom API panel. The allow-list is intentionally maintained in a local file and cannot be changed from the Settings page: it prevents an exposed ComfyUI server from being induced to request private-network addresses or send API keys to a malicious server. Settings, model discovery, and immediate prompt-optimization routes also accept requests only from the host running ComfyUI.
-
-The package uses unique `FeiHouEasyH3*` node IDs and dedicated prompt-optimizer routes, so it can be installed alongside the original project.
+The package uses unique FeiHouEasyH3* node IDs and dedicated prompt-optimizer routes, so it can be installed alongside the original project.
 
 ## Attribution, changes, and license
 

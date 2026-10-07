@@ -6,6 +6,8 @@
 
 > **模型分工：**本项目的 GGUF 只负责**改写提示词**。实际出图还需要 Qwen Image 2.1 的扩散模型、文本编码器和 VAE；它们不包含在本节点中。
 
+> **首次运行前还要安装两样东西：**至少一套 PE GGUF 模型，以及独立的 llama.cpp `llama-server.exe`。ComfyUI Manager / Registry 安装的只是节点代码，**不包含 GGUF 或 EXE**。缺少 EXE 时，请直接看下方的 [Windows 安装步骤](#install-llama-server-windows)。
+
 [GGUF 模型镜像](https://huggingface.co/t8star/qwen-image-2.1-comfy) · [ComfyUI Registry 页面](https://registry.comfy.org/zh/publishers/t8star/nodes/qwen-image-prompt-rewrite-t8) · [示例工作流](workflows/) · [反馈问题](https://github.com/T8mars/Comfyui-Qwen-Image-Prompt-Rewrite-T8/issues/new)
 
 ## 快速安装
@@ -18,13 +20,13 @@
    cd Comfyui-Qwen-Image-Prompt-Rewrite-T8
    ```
 
-2. 在节点目录中，用 **ComfyUI 所使用的 Python** 下载三个 Q4_K_M 主模型和一个 I2I 视觉组件：
+2. 在节点目录中，用 **ComfyUI 所使用的 Python** 下载四个 Q4_K_M 主模型和两个 I2I 视觉组件：
 
    ```bash
    python tools/download_models.py
    ```
 
-   下载器会校验文件大小和 SHA256，并支持断点续传。也可以从[模型镜像](https://huggingface.co/t8star/qwen-image-2.1-comfy)手动下载以下四个文件，保持文件名不变，放入 `models/llm/qwenimage-pe/`：
+   下载器会校验文件大小和 SHA256，并支持断点续传。也可以从[基础模型镜像](https://huggingface.co/t8star/qwen-image-2.1-comfy)与 [Heretic I2I 来源仓库](https://huggingface.co/pottokao/Qwen-Image-2.1-PE-I2I-Heretic-GGUF)手动下载以下六个文件，保持文件名不变，放入 `models/llm/qwenimage-pe/`：
 
    | 用途 | 文件 |
    | --- | --- |
@@ -32,18 +34,39 @@
    | 图像编辑 | `Qwen-Image-2.1-PE-I2I.Q4_K_M.gguf` |
    | 图像编辑的视觉组件 | `Qwen-Image-2.1-PE-I2I.mmproj-bf16.gguf` |
    | 可选的 Heretic 文生图模型 | `pe_t2i_heretic-Q4_K_M.gguf` |
+   | 可选的 Heretic 图像编辑模型 | `pe_i2i_heretic-Q4_K_M.gguf` |
+   | Heretic 图像编辑的视觉组件 | `pe_i2i_heretic.mmproj-bf16.gguf` |
 
    视觉组件的来源仓库没有 Q4 版本，因此使用 BF16 文件。模型目录也可以是 `ComfyUI/models/llm/qwenimage-pe/`，或通过 `QWEN_PE_MODEL_DIR` 指定。模型权重不随 GitHub 源码或 Registry 安装包提供。
 
-3. 安装兼容的 `llama-server`。Windows 可在节点目录运行：
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File tools/download_runtime.ps1
-   ```
-
-   该脚本获取 llama.cpp 的 Windows CUDA 12.4 运行包。其他平台请自行安装兼容的 `llama-server`，并用 `QWEN_PE_LLAMA_SERVER` 指向其可执行文件。ComfyUI 的 Python 环境需有 `torch`、`numpy`、`Pillow`。
+3. 按下一节安装 `llama-server.exe`。ComfyUI 的 Python 环境需有 `torch`、`numpy`、`Pillow`。
 
 启动后，在 **Qwen Image 2.1 / Prompt Rewrite** 分类中查找节点。Registry 的发布状态可能变化；如果 Manager 尚未提供安装入口，请使用上面的仓库安装方式。
+
+## Install llama-server (Windows)
+
+本节点会启动 llama.cpp 官方的 **`llama-server.exe`** 在本机改写提示词。它不是 GGUF 模型，也不包含在 `llama-cpp-python` 的 wheel 里；单独执行 `pip install llama-cpp-python` **不能**解决“找不到 EXE”的报错。
+
+**Windows x64 + NVIDIA：**从 [llama.cpp 官方 b11068 发布页](https://github.com/ggml-org/llama.cpp/releases/tag/b11068)下载下面**两个**预编译 ZIP（CUDA 12.4 版本）：
+
+1. [llama-b11068-bin-win-cuda-12.4-x64.zip：主程序，含 `llama-server.exe`](https://github.com/ggml-org/llama.cpp/releases/download/b11068/llama-b11068-bin-win-cuda-12.4-x64.zip)
+2. [cudart-llama-bin-win-cuda-12.4-x64.zip：配套 CUDA DLL](https://github.com/ggml-org/llama.cpp/releases/download/b11068/cudart-llama-bin-win-cuda-12.4-x64.zip)
+
+找到**实际安装的节点目录**（里面有 `pe_runtime.py` 和 `tools/`；Manager 安装时目录名可能不同），在其中创建 `runtime/llama-b11068/`，把两个 ZIP 的**内容解压到同一个文件夹**。完成后应能看到：
+
+```text
+<节点目录>/runtime/llama-b11068/llama-server.exe
+<节点目录>/runtime/llama-b11068/cudart64_12.dll
+<节点目录>/runtime/llama-b11068/cublas64_12.dll
+```
+
+不要把 `llama-server.exe` 留在 ZIP 内、放到 GGUF 模型目录，或多套一层 ZIP 同名文件夹。也可打开 PowerShell，进入节点目录后一键下载并解压同样的两个官方包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\download_runtime.ps1
+```
+
+确认安装：在节点目录的 PowerShell 运行 `Test-Path .\runtime\llama-b11068\llama-server.exe`，应返回 `True`；随后重启 ComfyUI。若运行包放在别处，可设置 `QWEN_PE_LLAMA_SERVER` 为 `llama-server.exe` 的**完整文件路径**，再重启 ComfyUI。Linux/macOS 请从[官方发布页](https://github.com/ggml-org/llama.cpp/releases/tag/b11068)选择对应平台程序，并设置该环境变量。下载受限时，请先在浏览器中打开上述官方链接；勿从不明来源下载 EXE。
 
 ## 使用节点
 
@@ -57,11 +80,12 @@
 在 **PE Rewrite T8** 中输入 `user_prompt`，然后选择：
 
 - `task`：`auto` 根据**实际有图**的输入选择文生图或编辑；`t2i` 只接受文字；`edit` 至少需要一张图。
-- `t2i_model` / `edit_model`：分别用于文生图与编辑。编辑还需要匹配的 `vision_model`，通常保持 `Auto`。
+- `t2i_model` / `edit_model`：分别用于文生图与编辑。可在 `edit_model` 中选择 `pe_i2i_heretic-Q4_K_M.gguf`；其配套视觉组件会在 `vision_model=Auto` 时自动匹配。
 - `aspect_ratio`：`auto` 或 `1:1`、`1:2`、`2:3`、`3:4`、`4:5`、`16:9`、`9:16`、`21:9`、`9:21`、`5:4`、`4:3`、`2:1`。指定比例会覆盖模型建议，并传给 PE Canvas。
-- `output_language`：`auto`、`中文`、`English`。指定语言时，节点会检查改写结果；必要时使用当前本地模型翻译，图内明确要求的引号文字保持原样。
+- `output_language`：`auto`、`中文`、`English`。指定语言时，节点会检查改写结果；必要时使用当前本地模型翻译。语言限制针对**描述文字**；用户指定的引号文字和参考图中可见的英文标题、广告牌、标签等文字会保留原文并加引号。
 - `transparent_rgba`：在最终提示词中加入 RGBA、alpha 通道和透明背景要求。**它控制提示词，不保证下游生成的图片一定带 alpha 通道。**
 - `model_lifetime`：`after_run` 在每次完成或报错后卸载；`keep_loaded` 便于连续调用，之后可接 **PE Unload T8**。
+- `startup_timeout`：等待模型启动的秒数，默认 `900`（15 分钟），范围 `30–7200`。低配置机器或慢硬盘可设为 `1800`（30 分钟）；此项只控制模型加载等待时间。旧工作流未设置时也使用新的 900 秒默认值。
 
 `image_1` 至 `image_10` 每个端口只接一张 IMAGE，不接受批次。输出为 `None` 的端口会跳过，剩余图片按端口顺序连续编号。例如 `image_1` 有图、`image_2` 为 `None`、`image_9` 有图时，前一张是 `<image1>`，后一张是 `<image2>`；`PE_RESULT.image_input_ports` 记录它们原本来自哪些端口。单图编辑可自然描述或使用 `<image1>`；多图编辑的改写结果必须包含全部 `<image1>` 至 `<imageN>`。连接下游 `TextEncodeQwenImage21` 时，务必给它同一批图片、同一顺序。
 
@@ -84,13 +108,18 @@
 | 现象 | 检查方法 |
 | --- | --- |
 | 模型列表为空或提示找不到 GGUF | 确认模型文件名和目录；可用 **PE Local Models T8** 查看扫描结果。 |
+| `llama-server.exe not found` | 这是缺少独立推理程序，不是缺少模型；按 [Windows 安装步骤](#install-llama-server-windows)下载两个官方 ZIP，解压到节点的 `runtime/llama-b11068/`。 |
+| `llama-server did not become healthy within 180 seconds`，日志仍在加载模型 | 更新到 1.0.14 或更高版本，默认已延长到 900 秒；仍加载较慢时，将 `startup_timeout` 设为 `1800`。等待期间控制台每 30 秒提示一次；检查节点目录的 `runtime/server.log`。若日志有显存不足、缺少 DLL 等错误，应先解决对应错误。连续调用可用 `keep_loaded` 避免重复加载。 |
 | 编辑模式提示缺少 mmproj | 确认 I2I 主模型和视觉文件同目录，或在 `vision_model` 中选择匹配文件。 |
 | `model response reached the generation or context limit` | 节点会关闭思考重试一次；仍失败时查看错误中的 token 用量，减少输入图片或缩短原始要求。多图模式会占用更多显存。 |
 | `model failed format validation` | 模型两次都未返回合规的 JSON、比例、语言或图片编号；查看报错详情。成功运行时可用 `diagnostics` 核对任务及图片端口映射。 |
+| `llama-server did not become healthy`，但日志显示已监听 | 更新到 1.0.11 或更高版本；本地健康检查和推理请求会绕过 `HTTP_PROXY`/`HTTPS_PROXY`。旧版可临时设置 `NO_PROXY=127.0.0.1,localhost`。 |
+| 中文输出报 `Chinese descriptive prose contains English words` | 更新到 1.0.11 或更高版本；翻译回退现在会根据残留英文词反馈再试。若仍失败，查看错误中的词及 `diagnostics`。 |
+| 选择中文时，参考图里的英文标题或广告牌文字触发语言校验错误 | 更新到 1.0.13 或更高版本；图中可见文字可保留原文，普通描述仍须使用中文。 |
 | 找不到 `TextEncodeQwenImage21` | 更新到支持 Qwen Image 2.1 的 ComfyUI；纯改写示例不需要该节点。 |
 | 透明图最终仍是不透明 PNG | 检查下游图像模型、VAE 和保存流程；PE 节点只生成透明图提示词。 |
 
-本地 `llama-server` 只监听 `127.0.0.1`。输入图会缩小为最多约 100 万像素、最长边 4096 像素的视觉副本；PE Canvas 仍使用原图尺寸。模型返回内容经过 JSON、图片引用、语言及模式校验，失败时会重试一次并报告原因。
+本地 `llama-server` 只监听 `127.0.0.1`，节点请求会绕过环境代理。输入图会缩小为最多约 100 万像素、最长边 4096 像素的视觉副本；PE Canvas 仍使用原图尺寸。模型返回内容经过 JSON、图片引用、语言及模式校验，失败时会重试一次并报告原因；翻译回退还会单独校验并最多重试两次。
 
 ## 可选：Viggle Turbo 4 步 LoRA
 

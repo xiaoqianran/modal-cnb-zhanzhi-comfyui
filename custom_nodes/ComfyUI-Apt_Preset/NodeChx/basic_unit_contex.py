@@ -757,7 +757,14 @@ class UC_ContextCache:
         return {
             "required": {
                 "context": ("RUN_CONTEXT",),
-                "cache_images": ( "BOOLEAN", { "default": False, }, ),
+                "retain_images": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "是否在输出 context 中保留图片；关闭后图片可在没有其他引用时自然回收。",
+                }),
+                "unload_clip": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "卸载 CLIP 的显存驻留并从输出 context 移除 CLIP；已生成的条件不受影响。",
+                }),
             },
         }
 
@@ -767,10 +774,15 @@ class UC_ContextCache:
     CATEGORY = "Apt_Preset/AD"
     CATEGORY = "Apt_Preset/unit_context"
 
-    def checkpoint(self, context, cache_images=False):
+    def checkpoint(self, context, retain_images=False, unload_clip=False):
         if not isinstance(context, collections.abc.Mapping):
             raise ValueError("AD_Ref2_ContextCache needs a RUN_CONTEXT mapping")
         checkpoint_context = dict(context)
-        if not cache_images:
+        if not retain_images:
             checkpoint_context["images"] = None
+        if unload_clip:
+            clip = checkpoint_context.get("clip")
+            if clip is not None:
+                comfy.model_management.unload_model_and_clones(clip.patcher)
+            checkpoint_context["clip"] = None
         return (checkpoint_context,)

@@ -40,11 +40,11 @@ echo "隐藏ComfyUI的.git目录"
 
 # 激活虚拟环境
 source /workspace/venv312/bin/activate
-pip install -r /workspace/ComfyUI/requirements.txt
-# uv pip install -U comfy-cli
-# uv pip install -U comfyui-frontend-package
-# uv pip install -U comfyui-workflow-templates
-# uv pip install -U comfyui-embedded-docs
+pip install -r /workspace/ComfyUI/requirements.txt -i https://pypi.org/simple/
+uv pip install -U comfy-cli -i https://pypi.org/simple/
+uv pip install -U comfyui-frontend-package -i https://pypi.org/simple/
+uv pip install -U comfyui-workflow-templates -i https://pypi.org/simple/
+uv pip install -U comfyui-embedded-docs -i https://pypi.org/simple/
 
 # 恢复自定义的.gitignore
 rm -rf .gitignore

@@ -9,6 +9,28 @@ function getWidget(node, name) {
     return node.widgets?.find((widget) => widget.name === name);
 }
 
+function hideWidget(node, name, fixedValue) {
+    const widget = getWidget(node, name);
+    if (!widget) return;
+    if (fixedValue !== undefined) widget.value = fixedValue;
+    widget.type = "hidden";
+    widget.computeSize = () => [0, -4];
+    widget.serializeValue = async () => fixedValue ?? widget.value;
+}
+
+function hideImageCompareWidgets(node) {
+    hideWidget(node, "split_position");
+    hideWidget(node, "opacity");
+}
+
+function removeVideoCompareWidgets(node) {
+    const obsolete = new Set(["split_position", "autoplay", "loop"]);
+    for (let index = (node.widgets?.length || 0) - 1; index >= 0; index -= 1) {
+        if (obsolete.has(node.widgets[index]?.name)) node.widgets.splice(index, 1);
+    }
+    node.setDirtyCanvas?.(true, true);
+}
+
 function videoUrl(info) {
     const params = new URLSearchParams({
         filename: info.filename,
@@ -98,6 +120,27 @@ function createCompareUI(node) {
 
     const applySplit = () => {
         const value = Math.max(0, Math.min(100, Number(split) || 0));
+        if (direction === "双屏") {
+            videoA.style.inset = "0 50% 0 0";
+            videoA.style.width = "50%";
+            videoA.style.clipPath = "none";
+            videoB.style.inset = "0 0 0 50%";
+            videoB.style.width = "50%";
+            videoB.style.clipPath = "none";
+            divider.style.display = "none";
+            labelA.style.left = "8px";
+            labelA.style.bottom = "8px";
+            labelB.style.right = "8px";
+            labelB.style.top = "auto";
+            labelB.style.bottom = "8px";
+            return;
+        }
+        videoA.style.inset = "0";
+        videoA.style.width = "100%";
+        videoA.style.clipPath = "none";
+        videoB.style.inset = "0";
+        videoB.style.width = "100%";
+        divider.style.display = "block";
         if (direction === "上下") {
             videoB.style.clipPath = `inset(0 0 ${100 - value}% 0)`;
             divider.style.left = "0";
@@ -128,6 +171,7 @@ function createCompareUI(node) {
     };
 
     const setSplitFromPointer = (event) => {
+        if (direction === "双屏") return;
         const rect = stage.getBoundingClientRect();
         split = direction === "上下"
             ? ((event.clientY - rect.top) / rect.height) * 100
@@ -164,6 +208,7 @@ function createCompareUI(node) {
     };
 
     stage.addEventListener("pointerdown", (event) => {
+        if (direction === "双屏") return;
         if (event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) return;
         dragPointerId = event.pointerId;
         stopPointerEvent(event);
@@ -228,13 +273,9 @@ function createCompareUI(node) {
     videoA.addEventListener("seeked", () => syncVideoB(true));
     videoA.addEventListener("pause", () => { videoB.pause(); playButton.textContent = "▶"; });
     videoA.addEventListener("ended", () => {
-        if (getWidget(node, "loop")?.value) {
-            videoA.currentTime = 0;
-            videoB.currentTime = 0;
-            playBoth();
-        } else {
-            pauseBoth();
-        }
+        videoA.currentTime = 0;
+        videoB.currentTime = 0;
+        playBoth();
     });
 
     const bindWidget = (name, callback) => {
@@ -260,14 +301,12 @@ function createCompareUI(node) {
         empty.style.display = "none";
         applySplit();
         updateTime();
-        if (data.autoplay) {
-            videoA.muted = true;
-            muteButton.textContent = "🔇";
-            Promise.all([
-                new Promise((resolve) => videoA.addEventListener("canplay", resolve, { once: true })),
-                new Promise((resolve) => videoB.addEventListener("canplay", resolve, { once: true })),
-            ]).then(playBoth);
-        }
+        videoA.muted = true;
+        muteButton.textContent = "🔇";
+        Promise.all([
+            new Promise((resolve) => videoA.addEventListener("canplay", resolve, { once: true })),
+            new Promise((resolve) => videoB.addEventListener("canplay", resolve, { once: true })),
+        ]).then(playBoth);
     };
 
     const destroy = () => {
@@ -311,7 +350,7 @@ function createImageCompareUI(node) {
     const labelA = document.createElement("span");
     const labelB = document.createElement("span");
     labelA.textContent = "图片 A";
-    labelB.textContent = "图片 B（上层）";
+    labelB.textContent = "图片 B";
     for (const label of [labelA, labelB]) {
         label.style.cssText = "position:absolute;z-index:4;bottom:8px;padding:3px 7px;border-radius:4px;background:#000a;color:#fff;pointer-events:none;";
         stage.appendChild(label);
@@ -344,9 +383,43 @@ function createImageCompareUI(node) {
 
     let split = 50;
     let direction = "左右";
+    let comparing = false;
+    let splitPointerId = null;
 
     const applySplit = () => {
+        if (!comparing) {
+            imageA.style.inset = "0";
+            imageA.style.width = "100%";
+            imageA.style.clipPath = "none";
+            divider.style.display = "none";
+            opacityRow.style.display = "none";
+            return;
+        }
         const value = Math.max(0, Math.min(100, Number(split) || 0));
+        if (direction === "左右图平铺") {
+            imageA.style.inset = "0 50% 0 0";
+            imageA.style.width = "50%";
+            imageA.style.clipPath = "none";
+            imageB.style.inset = "0 0 0 50%";
+            imageB.style.width = "50%";
+            imageB.style.clipPath = "none";
+            imageB.style.opacity = "1";
+            divider.style.display = "none";
+            labelA.style.left = "8px";
+            labelA.style.bottom = "8px";
+            labelB.style.right = "8px";
+            labelB.style.top = "auto";
+            labelB.style.bottom = "8px";
+            opacityRow.style.display = "none";
+            return;
+        }
+        imageA.style.inset = "0";
+        imageA.style.width = "100%";
+        imageA.style.clipPath = "none";
+        imageB.style.inset = "0";
+        imageB.style.width = "100%";
+        divider.style.display = "block";
+        opacityRow.style.display = "grid";
         if (direction === "上下") {
             imageB.style.clipPath = `inset(0 0 ${100 - value}% 0)`;
             divider.style.left = "0";
@@ -376,13 +449,13 @@ function createImageCompareUI(node) {
 
     const applyOpacity = (value) => {
         const opacity = Math.max(0, Math.min(1, Number(value) || 0));
-        imageB.style.opacity = String(opacity);
+        imageB.style.opacity = direction === "左右图平铺" ? "1" : String(opacity);
         opacitySlider.value = String(opacity);
         opacityValue.textContent = `${Math.round(opacity * 100)}%`;
     };
 
-    let dragging = false;
     const setSplitFromPointer = (event) => {
+        if (!comparing) return;
         const rect = stage.getBoundingClientRect();
         split = direction === "上下"
             ? ((event.clientY - rect.top) / rect.height) * 100
@@ -394,18 +467,27 @@ function createImageCompareUI(node) {
         node.setDirtyCanvas?.(true, true);
     };
     stage.addEventListener("pointerdown", (event) => {
-        dragging = true;
-        stage.setPointerCapture(event.pointerId);
+        if (!comparing || direction === "左右图平铺" || event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) return;
+        splitPointerId = event.pointerId;
+        event.preventDefault();
+        event.stopPropagation();
+        stage.setPointerCapture?.(event.pointerId);
         setSplitFromPointer(event);
     });
     stage.addEventListener("pointermove", (event) => {
-        if (dragging) setSplitFromPointer(event);
+        if (event.pointerId !== splitPointerId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setSplitFromPointer(event);
     });
-    stage.addEventListener("pointerup", (event) => {
-        dragging = false;
-        stage.releasePointerCapture(event.pointerId);
-    });
-    stage.addEventListener("pointercancel", () => { dragging = false; });
+    const finishSplitDrag = (event) => {
+        if (event.pointerId !== splitPointerId) return;
+        splitPointerId = null;
+        event.preventDefault();
+        event.stopPropagation();
+    };
+    stage.addEventListener("pointerup", finishSplitDrag);
+    stage.addEventListener("pointercancel", finishSplitDrag);
 
     opacitySlider.addEventListener("input", () => {
         const widget = getWidget(node, "opacity");
@@ -424,18 +506,35 @@ function createImageCompareUI(node) {
             callback(value);
         };
     };
-    bindWidget("direction", (value) => { direction = value; applySplit(); });
+    bindWidget("direction", (value) => { direction = value; applySplit(); applyOpacity(opacitySlider.value); });
     bindWidget("split_position", (value) => { split = value; applySplit(); });
     bindWidget("opacity", applyOpacity);
 
     const load = (data) => {
         direction = data.direction || getWidget(node, "direction")?.value || "左右";
         split = data.split_position ?? getWidget(node, "split_position")?.value ?? 50;
-        imageA.src = videoUrl(data.image_a);
-        imageB.src = videoUrl(data.image_b);
-        empty.style.display = "none";
+        const hasImageA = Boolean(data.image_a);
+        const hasImageB = Boolean(data.image_b);
+        const hasImage = hasImageA || hasImageB;
+        comparing = hasImageA && hasImageB;
+
+        imageA.removeAttribute("src");
+        imageB.removeAttribute("src");
+        if (hasImageA) imageA.src = videoUrl(data.image_a);
+        else if (hasImageB) imageA.src = videoUrl(data.image_b);
+        if (comparing) imageB.src = videoUrl(data.image_b);
+
+        imageA.style.display = hasImage ? "block" : "none";
+        imageA.style.opacity = "1";
+        imageB.style.display = comparing ? "block" : "none";
+        divider.style.display = comparing ? "block" : "none";
+        labelA.style.display = hasImage ? "block" : "none";
+        labelA.textContent = hasImageA ? "图片 A" : "图片 B";
+        labelB.style.display = comparing ? "block" : "none";
+        empty.style.display = hasImage ? "none" : "flex";
+
         applySplit();
-        applyOpacity(data.opacity ?? getWidget(node, "opacity")?.value ?? 1);
+        if (comparing) applyOpacity(data.opacity ?? getWidget(node, "opacity")?.value ?? 1);
     };
 
     direction = getWidget(node, "direction")?.value || direction;
@@ -453,6 +552,7 @@ app.registerExtension({
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 onNodeCreated?.apply(this, arguments);
+                hideImageCompareWidgets(this);
                 const updateButton = this.addWidget("button", "update", "queue", () => queueOutputNodes([this]));
                 updateButton.options = { ...updateButton.options, class: "queue-button" };
                 const ui = createImageCompareUI(this);
@@ -463,6 +563,13 @@ app.registerExtension({
                 });
                 widget.computeSize = (width) => [width, 370];
                 this.setSize([Math.max(this.size[0], 540), Math.max(this.size[1], 500)]);
+            };
+
+            const onConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onConfigure = function () {
+                const result = onConfigure?.apply(this, arguments);
+                hideImageCompareWidgets(this);
+                return result;
             };
 
             const onExecuted = nodeType.prototype.onExecuted;
@@ -479,6 +586,9 @@ app.registerExtension({
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             onNodeCreated?.apply(this, arguments);
+            removeVideoCompareWidgets(this);
+            const updateButton = this.addWidget("button", "update", "queue", () => queueOutputNodes([this]));
+            updateButton.options = { ...updateButton.options, class: "queue-button" };
             const ui = createCompareUI(this);
             this._videoCompareUI = ui;
             const widget = this.addDOMWidget("video_compare", "video_compare", ui.root, {
@@ -487,6 +597,16 @@ app.registerExtension({
             });
             widget.computeSize = (width) => [width, 370];
             this.setSize([Math.max(this.size[0], 540), Math.max(this.size[1], 500)]);
+            removeVideoCompareWidgets(this);
+            setTimeout(() => removeVideoCompareWidgets(this), 0);
+        };
+
+        const onConfigure = nodeType.prototype.onConfigure;
+        nodeType.prototype.onConfigure = function () {
+            const result = onConfigure?.apply(this, arguments);
+            removeVideoCompareWidgets(this);
+            setTimeout(() => removeVideoCompareWidgets(this), 0);
+            return result;
         };
 
         const onExecuted = nodeType.prototype.onExecuted;

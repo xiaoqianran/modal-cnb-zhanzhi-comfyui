@@ -81,6 +81,7 @@ class EasyMediaExtension(ComfyExtension):
             EasyGetAudioFromVideo,
             EasyMergeVideos,
             EasyMergeVideosFromPaths,
+            EasyRTXVideoSuperResolution,
             # Split
             SplitImages,
             SplitAudios,
@@ -106,8 +107,10 @@ class EasyMediaExtension(ComfyExtension):
             EasyMiniMaxH3SelfLiftSampler,
             EasyH3SegmentSaveEnd,
             EasyH3ContextMediaTrim,
+            EasyH3PassthroughVideo,
             EasyH3AudioContextLatent,
             EasyH3LockedAudioDurationAlign,
+            EasyH3LockedAudioSelect,
             EasyH3ProjectArtifact,
             EasyH3ProjectStaticPrepare,
             EasyMultiTrackProject,

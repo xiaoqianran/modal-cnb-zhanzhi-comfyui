@@ -467,6 +467,18 @@ export function PreviewArea({
     })))
   }
 
+  function handleActiveTaskImageMutedChange(imageId: string, muted: boolean) {
+    if (!activeTaskImages) return
+    onTrackSegmentsContentChange?.([{
+      segmentId: activeTaskImages.segmentId,
+      patch: {
+        images: activeTaskImages.allImages.map((image) => (
+          image.id === imageId ? { ...image, muted } : image
+        )),
+      },
+    }])
+  }
+
   function hasDraggedImageFile(dataTransfer: DataTransfer): boolean {
     const files = Array.from(dataTransfer.files)
     if (files.some((file) => file.type.startsWith('image/'))) return true
@@ -678,7 +690,7 @@ export function PreviewArea({
     if (!activeTaskImages) return null
     const imageName = image.file_name ?? image.file_path ?? image.local_path ?? image.url ?? image.slot_name ?? image.id
     const borderClass = image.shared_reference
-      ? 'border-highlight'
+      ? (image.muted === true ? 'border-highlight opacity-50' : 'border-highlight')
       : selected
         ? 'border-primary'
         : 'border-border'
@@ -712,8 +724,8 @@ export function PreviewArea({
             imageName,
             imageIndex,
             layout === 'flow' && url
-              ? 'h-full w-auto max-w-full object-contain'
-              : 'h-full w-full object-contain',
+              ? `h-full w-auto max-w-full object-contain transition-opacity ${image.muted === true ? 'opacity-40' : ''}`
+              : `h-full w-full object-contain transition-opacity ${image.muted === true ? 'opacity-40' : ''}`,
           )}
         </Button>
         {showControls ? renderActiveTaskImageControls(image, imageName, layout === 'flow' ? 'flow' : 'split', Boolean(url)) : null}
@@ -895,20 +907,16 @@ export function PreviewArea({
   function renderActiveTaskImageControls(
     image: MultiTrackTaskImage,
     imageName: string,
-    layout: 'split' | 'corner' | 'flow',
+    layout: 'split' | 'flow',
     previewAvailable = true,
   ) {
     if (!activeTaskImages) return null
-    const wrapperClassName = layout === 'corner'
-      ? 'absolute right-2 top-2 flex gap-1'
-      : layout === 'flow'
-        ? 'absolute right-1 top-1 flex gap-0.5 opacity-0 transition-opacity group-hover/task-image:opacity-100 group-focus-within/task-image:opacity-100'
-      : `absolute left-0 top-0 ${image.panorama_view ? '' : ' opacity-0 transition-opacity group-hover/task-image:opacity-100 group-focus-within/task-image:opacity-100'}`
-    const deleteWrapperClassName = layout === 'corner'
-      ? ''
-      : 'absolute right-0 top-0 opacity-0 transition-opacity group-hover/task-image:opacity-100 group-focus-within/task-image:opacity-100'
-    const controlClassName = layout === 'corner' ? 'h-7 w-7' : 'h-5 w-5'
-    const iconClassName = layout === 'corner' ? '[&_svg]:!size-4' : '[&_svg]:!size-3'
+    const wrapperClassName = layout === 'flow'
+      ? 'absolute right-0 top-1 flex gap-1 opacity-0 transition-opacity group-hover/task-image:opacity-100 group-focus-within/task-image:opacity-100'
+      : 'absolute right-0 top-0 flex gap-0.5 opacity-0 transition-opacity group-hover/task-image:opacity-100 group-focus-within/task-image:opacity-100'
+    const controlClassName = 'h-auto w-auto'
+    const iconClassName = '[&_svg]:!size-4'
+    const actionSize = image.shared_reference ? 16 : 18
     const sharedImageSegments = taskSegments && taskSegments.length > 0
       ? taskSegments
       : data.tracks.filter((track) => track.type === 'task').flatMap((track) => track.segments)
@@ -916,8 +924,7 @@ export function PreviewArea({
       || canEnableSharedTaskImage(sharedImageSegments, image)
 
     return (
-      <>
-        <div className={wrapperClassName}>
+      <div className={wrapperClassName}>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -926,6 +933,7 @@ export function PreviewArea({
                 size="icon"
                 variant={image.shared_reference === true ? 'secondary' : 'ghost'}
                 className={`${controlClassName} cursor-pointer rounded-none bg-background/70 hover:bg-background/90 ${iconClassName} ${image.shared_reference === true ? 'text-highlight' : 'text-muted-foreground'}`}
+                style={{ width: actionSize, height: actionSize }}
                 aria-label={image.shared_reference === true
                   ? t('multitrack.disableSharedReference')
                   : t('multitrack.enableSharedReference')}
@@ -946,58 +954,79 @@ export function PreviewArea({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className={`${controlClassName} cursor-pointer rounded-none bg-background/70 text-foreground hover:bg-background/90 ${iconClassName}`}
-            aria-label={t('multitrack.previewImage')}
-            disabled={!previewAvailable}
-            onClick={(event) => {
-              event.stopPropagation()
-              setExpandedTaskImageTarget({
-                imageId: image.id,
-                segmentId: activeTaskImages.segmentId,
-                source: 'active',
-              })
-            }}
-          >
-            <Eye />
-          </Button>
-          {layout !== 'split' ? (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className={`${controlClassName} cursor-pointer rounded-none bg-background/70 text-destructive hover:bg-background/90 hover:text-destructive ${iconClassName}`}
-              aria-label={`${t('multitrack.deleteImage')} ${imageName}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                handleActiveTaskImageDelete(image.id)
-              }}
-            >
-              <X />
-            </Button>
-          ) : null}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={image.muted === true ? 'secondary' : 'ghost'}
+                  data-testid={`task-preview-image-muted-${image.id}`}
+                  className={`${controlClassName} cursor-pointer bg-background/70 text-[14px] font-bold hover:bg-background/90 ${image.muted === true ? 'text-destructive hover:text-destructive' : 'text-muted-foreground'}`}
+                  style={{ width: actionSize, height: actionSize }}
+                  aria-label={image.muted === true ? t('multitrack.includeImage') : t('multitrack.bypassImage')}
+                  aria-pressed={image.muted === true}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleActiveTaskImageMutedChange(image.id, image.muted !== true)
+                  }}
+                >
+                  M
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {image.muted === true ? t('multitrack.includeImageTooltip') : t('multitrack.bypassImageTooltip')}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className={`${controlClassName} cursor-pointer bg-background/70 font-bold text-muted-foreground hover:bg-background/90 ${iconClassName}`}
+                  style={{ width: actionSize, height: actionSize }}
+                  aria-label={t('multitrack.previewImage')}
+                  disabled={!previewAvailable}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setExpandedTaskImageTarget({
+                      imageId: image.id,
+                      segmentId: activeTaskImages.segmentId,
+                      source: 'active',
+                    })
+                  }}
+                >
+                  <Eye />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t('multitrack.previewImage')}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className={`${controlClassName} cursor-pointer rounded-none bg-background/70 text-destructive hover:bg-background/90 hover:text-destructive ${iconClassName}`}
+                  style={{ width: actionSize, height: actionSize }}
+                  aria-label={`${t('multitrack.deleteImage')} ${imageName}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleActiveTaskImageDelete(image.id)
+                  }}
+                >
+                  <X />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t('multitrack.deleteImage')}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
-        {layout === 'split' ? (
-          <div className={deleteWrapperClassName}>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className={`${controlClassName} cursor-pointer rounded-none bg-background/70 text-destructive hover:bg-background/90 hover:text-destructive ${iconClassName}`}
-              aria-label={`${t('multitrack.deleteImage')} ${imageName}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                handleActiveTaskImageDelete(image.id)
-              }}
-            >
-              <X />
-            </Button>
-          </div>
-        ) : null}
-      </>
     )
   }
 
@@ -1081,7 +1110,7 @@ export function PreviewArea({
           </div>
         )}
         <span className="shrink-0 px-1 text-[9px] leading-4 text-secondary">|</span>
-        {resolutionInput.format === 'MiniMax' && activeTaskPrompt.index > 0 && (
+        {resolutionInput.format === 'MiniMax' && activeTaskPrompt.taskMode !== 'passthrough' && activeTaskPrompt.index > 0 && (
           <>
             <Select
               value={activeTaskPrompt.content.continuity_mode ?? MULTITRACK_DEFAULT_CONTINUITY_MODE}
@@ -1180,7 +1209,7 @@ export function PreviewArea({
             </Tooltip>
           </TooltipProvider>
           <SelectContent>
-            {MULTITRACK_TASK_MODES.map((taskMode) => (
+            {MULTITRACK_TASK_MODES.filter((taskMode) => taskMode !== 'passthrough' || resolutionInput.format === 'MiniMax').map((taskMode) => (
               <SelectItem key={taskMode} value={taskMode}>
                 <span className="text-[10px]">
                   {getMultiTrackTaskModeLabel(taskMode, t)}
@@ -1416,6 +1445,7 @@ export function PreviewArea({
                 playbackNonce={playbackNonce}
                 muted
                 volume={0}
+                frameRate={data.frame_rate}
                 className={selectedSubtitleStyle ? 'absolute inset-0 h-full w-full' : undefined}
               >
                 {activeSubtitleSegments.map((segment) => (

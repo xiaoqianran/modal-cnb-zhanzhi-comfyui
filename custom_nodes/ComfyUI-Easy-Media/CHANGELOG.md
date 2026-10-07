@@ -2,11 +2,31 @@
 
 ---
 
-## [1.3.3] - PreRelease
+## [1.3.4] - 2026-09-30
 
 ### ✨ New Features
 
+- **RTX-VSR Video Super-Resolution**: Added the `easy rtxVideoSuperResolution` node for video super-resolution using the Nvidia RTX-VSR model to enhance video frames. The node operates directly on `VIDEO` and does not require conversion to tensors.
+
+### 🐛 Bug Fixes
+
+- **MultiTrack Editor**: Fixed mouse wheel being unable to scroll within the time range when zooming tracks.
+- **MultiTrack Editor**: Renamed the previous `context_swap` to `context_drift`.
+
+## [1.3.3] - 2026-09-25
+
+### ✨ New Features
+
+- **RTX-VSR Video Super-Resolution**: Added the `easy rtxVideoSuperResolution` node for video super-resolution using the Nvidia RTX-VSR model to enhance video frames. The node operates directly on `VIDEO` and does not require conversion to tensors.
 - **Multi-Image Loader**: Added the `easy multiImagesLoader` node, supporting loading up to 25 images.
+
+### 🐛 Bug Fixes
+
+- **MultiTrack Project**: Fixed TE being executed an extra time in `Dual` mode.
+- **MultiTrack Editor**: When a single segment covers the entire task window, crop and resize it directly instead of recomputing through the reference path, fixing [#84](https://github.com/yolain/ComfyUI-Easy-Media/issues/84). The media loading timeout in this path is set to 60 seconds.
+- **MultiTrack Editor**: [Motion transfer & subject replacement] When the source video frame rate differs from the editor frame rate, smart-split segments now split using the editor frame rate, and when paused or stepping frame-by-frame the requested frame is returned via ffmpeg's `fps` filter as the preview image.
+- **MultiTrack Project**: [Motion transfer & subject replacement] Locked videos now use uniform temporal resampling. Previously, when the locked duration did not conform to the `17k+5` frame pattern, the value was rounded up and padded to fit the current frame count, which caused some frames to freeze early. Resampling now uses a uniform temporal distribution so added frames are spread evenly across the timeline rather than clustered at the tail, eliminating the freeze.
+- **Audio Lock**: Fixed redundant repeated encoding/loading when locking audio across multiple segments of long videos. Due to the multitrack project design, all audio locks are processed before the reference video generation node, so when video is present, ffmpeg is used to extract and cache the audio. Videos without audio and muted tracks no longer lock audio or repeat audio probing, while their video timeline timing remains unchanged. The `audio` input on `easy minimaxH3AudioLock` is now optional; leaving it disconnected passes the latent through unchanged instead of erroring.
 
 ## [1.3.2] - 2026-09-20
 

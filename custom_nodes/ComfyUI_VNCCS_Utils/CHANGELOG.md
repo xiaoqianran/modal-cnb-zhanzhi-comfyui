@@ -1,3 +1,923 @@
+# Version 0.6.9
+## Registry Compliance Fix
+
+### Fixes
+
+* **Comfy Registry flag**: Version 0.6.8 was flagged for network-request patterns in the vendored Draco decoder. The unused `XMLHttpRequest` readers were removed from `draco_wasm_wrapper.js`, and the asm.js fallback `draco_decoder.js` was dropped. 3D Factory now always uses the WASM Draco decoder, and glTF/GLB loading is otherwise unchanged.
+* **Security gate**: The security scan now rejects `XMLHttpRequest` in shipped JavaScript, including vendored code.
+* **Pose library sync**: Syncing a pose repository no longer re-downloads and deletes the same asset on every run on Windows, where the manifest category casing differs from the existing folder. A failed preview download also no longer deletes files that are already present locally.
+* **Pose Studio image import**: Importing a pose from an image now refreshes the pose capture, so the node outputs the imported pose instead of the previous one.
+
+# Version 0.6.8
+## UniCanvas Overhaul: Faster Editing, Pose Layers, and More Models
+
+### UniCanvas
+
+* **Live pose layers**: Pose Studio poses are now real layers on the canvas. Edit a pose in an embedded editor, save it, and move or edit it again at any time. The editor shows only the character, with the layers below acting as a flat backdrop.
+* **Faster and smoother**: Editing, dragging and posing no longer slow the canvas down, and the pose preview is no longer re-captured on every frame.
+* **More editing tools**: Free transform, several background removers, local color match, crop-and-stitch inpainting, PSD export/import, a panorama view, and a fullscreen or standalone tab with its own settings.
+* **Safer undo and keyboard**: Undo/Redo and keyboard shortcuts stay inside UniCanvas in fullscreen, so ComfyUI no longer reloads the workflow by accident. Deleting a layer can be undone.
+* **Prompt help and clearer settings**: A `?` button next to the prompt explains how to write prompts for the selected model and task. Other settings have short `?` tips, and Inference scale is a slider with a live size preview.
+* **Canvases survive a restart**: Canvas state is kept in the user folder, so it is still there after restarting ComfyUI.
+* **VNCSS Config**: The config node can override model settings, and the sidebar hides the controls it takes over.
+* **Prompt enhance**: A magic wand in the Prompt and Negative boxes rewrites the prompt with a Qwen3-VL text encoder and a system prompt written for the selected model family. The system prompts are editable per family (UniCanvas settings or ComfyUI settings > VNCCS > UniCanvas > Prompt enhance). **Always enhance when I press Generate** rewrites both prompts in the background with the model family's own CLIP, so it needs no extra VRAM and the wand is hidden while it is on. The wand's tooltip simply reads "Enhance Prompt".
+* **One settings section at a time**: Opening a section in UniCanvas settings closes the one that was open.
+* **Panorama import**: Importing a panorama over existing layers now warns that they are scaled into the 1024 × 1024 editing window. The new **Keep layers at their native resolution** option (UniCanvas settings > Panorama) grows the window to the largest layer (up to 4096 px) instead of scaling anything down.
+* **Sharper panorama layers**: Layers no longer get dark fringes and soft edges when they pass through the spherical view.
+* **Panorama output**: Preview Image and other outputs receive one flattened image, every visible layer cropped to the generation box, instead of the huge spherical layers.
+* **Fixed "UniCanvas state cache is missing"**: The node now reads the canvas cache from the same folder the editor saves it to, so queueing no longer fails after a state sync.
+* **Opacity slider** in the Layers panel no longer runs over the panel border.
+
+### UniCanvas Models
+
+* **Qwen-Image-2.1 (QI2.1)**: New preset with a 6-step Turbo LoRA (turn it off for the full-quality profile). Output is transparent by default; a single **Transparent output** switch under Steps turns it off. The separate 2K aspect preset was removed - use Inference scale for the size.
+* **MiniMax H3**: New still-image preset with a 3-step Turbo LoRA.
+* **Krea2 presets**: Clearer names and descriptions.
+* Removed the Spectrum acceleration option.
+
+### Under the Hood
+
+* The UniCanvas backend is split into small modules, and new models are added as self-contained families. See `docs/agents/ADDING_A_MODEL.md`.
+* Added a browser test suite and a Docker test platform.
+
+# Version 0.6.7
+## 3D Factory Mesh Workflows, Conditioning Outputs, and Pose Studio Reliability
+
+### 3D Factory — Generation and Assets
+
+* **Pixal3D and TRELLIS.2 generators**: Added textured GLB generation alongside TripoSplat Gaussian PLY, with generator-specific model setup, runtime availability checks, quality presets, sampling controls, and generation diagnostics.
+* **Unified Import 3D**: Added GLB/glTF, FBX, OBJ/MTL, and STL import alongside Gaussian PLY. Models can include companion materials, textures, binary resources, or a ZIP package. Imported meshes retain their hierarchy, materials, UVs, and skinning and are normalized for scene placement.
+* **Mesh-aware model library**: Object and scene packages preserve imported models, their resources, procedural recipes, and material assignments. Gaussian scene PLY export includes Gaussian objects; mesh objects remain available in scene packages and rendered images.
+* **Procedural shapes and terrain**: Added editable boxes, ellipsoids, cylinders, cones, ramps, stairs, gable-roof wedges, and seeded terrain with relief, resolution, and base-thickness controls. Surface placement uses primitive geometry beneath the selected object's footprint.
+
+### 3D Factory — Scene Editing
+
+* **Configurable workspace**: Added six layout presets, resizable docks, an Assets drawer, expanded editing, and a searchable command palette opened with Cmd/Ctrl+K. Objects, Inspector, and Export have separate panels with independent scroll positions.
+* **Live numeric editing**: Transform, light, camera, wall, and procedural-object controls support continuous slider feedback, numeric scrubbing, unit-aware values, relative edits, per-field reset, and gesture cancellation. Completed gestures produce one undo step; incomplete numeric input preserves the last valid result.
+* **Polygon rooms**: Plan mode supports concave room contours with point removal and explicit completion. Each valid contour creates linked walls, floor, and ceiling as one undoable operation.
+* **Openings in 3D**: Doors, windows, and empty openings can be placed directly on visible walls with live previews and width dragging. Placement respects rotated buildings, wall dimensions, existing openings, and locked structures.
+* **Room materials**: Walls, floors, and ceilings support independent material assignments, UV scale/offset/rotation, and optional normal and roughness maps. Shared textures are reused and unused maps are not loaded.
+* **Lighting and shadows**: Local lights continue illuminating when the shadow budget is exhausted. The object list and Inspector show which lights have active or deferred shadows. Shadow allocation respects visibility, floor/building state, and per-light settings; solid geometry and point/spot-light bias handling reduce self-shadow artifacts.
+* **Plan navigation and readability**: Plan Fit uses scene XZ extents without changing the export camera; panning accounts for ComfyUI node scaling. Inspector controls retain usable typography and sliders at narrow widths. Selection, property edits, and panel updates preserve scrolling.
+* **Scene persistence and undo**: Scene saves are serialized, renderable architecture-only scenes produce previews, and undo retains up to 200 commands within a 128 MiB history budget. Adding procedural content to an older scene creates a compatible scene copy while preserving the original.
+
+### 3D Factory — Rendering and Graph Outputs
+
+* **360° panorama export**: Saved cameras can render 2:1 equirectangular PNG images at 2048 × 1024 or 4096 × 2048.
+* **Factory Render node**: Added a `scene` output to 3D Factory and a connected renderer producing RGB, depth previews, view-space normals, foreground alpha, object-ID images, camera metadata, and a reusable capture handle. Output lists follow the current view and then saved-camera order; the existing `preview` output remains in slot 0.
+* **Factory Mask node**: Generate masks from selected entity IDs, with inversion, grow/erode, and feather controls. The editor can provide selection keys for the node.
+* **Persistent conditioning captures**: Captures retain metric depth, camera data, and source identity. Incomplete or stale jobs do not replace completed captures. Fresh captures require the matching open Factory widget in 3D view; exact cached captures can be reused without it. Gaussian conditioning requires explicitly selected coarse bounding-box geometry rather than native splat depth.
+
+### Pose Studio
+
+* **Animation image batches**: Animation can output a single ComfyUI IMAGE batch instead of VIDEO, with the output socket and execution contract following the selected mode.
+* **Capture Image Size**: Output dimensions can follow the connected reference image, with validation of the resulting browser captures.
+* **Consistent camera state**: Reset and Age update the visible model, zoom controls, and saved state together. Undo/Redo, pose switching, clipboard operations, and JSON import/export preserve the associated pose and character state.
+* **Position marker and Re-center**: The marker represents the visible model's center in the frame. Moving it and using Re-center share the same projection calculation, including deformed and posed geometry. The marker refreshes after the viewport renders, including after reload.
+* **Animation translations and history**: Bone/root translations are recorded and evaluated alongside rotations, including imported samples and manual keys. Continuous gestures commit one history operation, and undoing animation Reset restores body proportions as well as the clip.
+* **Continuous body previews**: Completed morph updates remain visible during ongoing input, while stale results cannot replace newer applied state. Delayed Age fitting respects subsequent manual camera edits.
+* **Pose Manager output consistency**: Changes invalidate affected preview cards, and execution waits for the current preview generation instead of returning outdated images.
+* **Lighting and reference images**: Keep Original Lighting survives scene restoration. Lighting colors and timeline numeric settings update during input. Reference-image changes update the existing scene, ignore superseded loads, and release replaced textures.
+
+### Downloads, Compatibility, and Packaging
+
+* Model Manager, library downloads, and UniCanvas preset assets use public Hugging Face repository files. Direct model/preset URLs, stored download credentials, and remote library publishing are disabled; manifests must identify repository assets with `hf_repo` and `hf_path`.
+* UniCanvas state and temporary assets use ComfyUI's temporary directory, with a project-local fallback when ComfyUI is unavailable.
+* Updated scene/editor migrations and bundled model loaders for the expanded 3D asset formats. Added regression coverage for geometry, state restoration, interactions, output contracts, and capture lifecycle.
+* Added a protected source-scanning CI gate and excluded development tests and scripts from the Comfy Registry runtime archive.
+
+# Version 0.6.6
+## 3D Factory Interior Planning, Camera Paths, and Production Editing
+
+### New Features
+
+*   **Top-down interior Plan mode**: Added a dedicated orthographic workspace for designing interiors directly in the 3D Factory viewport.
+    *   Walls, rectangular rooms, wall openings, and saved cameras use press-drag-release creation with live geometry previews.
+    *   The configurable plan grid supports independent visibility, spacing, major-line intervals, and optional snapping to the grid, angles, wall endpoints, wall midpoints, and orthogonal directions.
+    *   Plan navigation includes corrected two-axis panning, mouse-wheel zoom, persistent framing, live room movement, shift selection, and scale-correct marquee selection inside zoomed ComfyUI nodes.
+
+*   **Persistent architectural scenes**: Added floor levels, walls, rooms, floors, ceilings, doors, windows, empty openings, materials, and complete structure transforms to saved scenes and workflow state.
+    *   A room is edited as one envelope: its perimeter walls, floor, and ceiling move, resize, change level, visibility, lock state, height, thickness, and material together.
+    *   Wall endpoints, height, thickness, elevation offset, side materials, cap materials, and attached openings remain editable after creation.
+    *   Opening controls are constrained by the host wall and prevent overlaps or geometry outside the available wall span.
+    *   Buildings are optional hierarchy containers. New blank scenes contain no synthetic `Building 1`; moving or rotating an existing building transforms its architecture, assigned Gaussian objects, cameras, paths, and lights as one unit. Deleting it removes its architecture and safely unassigns or reassigns the remaining scene objects without creating a replacement building.
+
+*   **Architectural materials and textures**: Added reusable solid, glass, and uploaded texture materials for wall sides, wall caps, floors, ceilings, and window panes.
+    *   JPEG, PNG, and WebP textures are validated, converted to scene-owned PNG assets, exposed through bounded scene routes, and support UV scale and rotation.
+
+*   **Production camera workflow**: Reworked viewport and saved-camera control for precise scene navigation and repeatable shots.
+    *   The Cameras panel now contains perspective, front, right, and top projections plus adjustable mouse-wheel zoom speed for both large scenes and close interior work.
+    *   In-place FPV look preserves camera position and world-up orientation, while framing commands establish an explicit orbit target instead of implicitly rotating around the world origin.
+    *   Saved cameras can be placed and aimed in Plan mode, entered non-destructively, updated from the current view, assigned to levels or buildings, and edited through exact position, rotation, FOV, and focus-distance fields.
+    *   Added persistent camera paths with editable points, timing, linear or centripetal Catmull-Rom interpolation, easing, optional constant-speed traversal, looping, playback, and exact per-point camera values.
+
+*   **Floor-aware object placement**: Added one-action surface dropping for individual or grouped selections.
+    *   Objects stop on the active floor or on the highest colliding object beneath them instead of passing through scene geometry.
+    *   Automatic, custom-box, and disabled collision proxies are available per object, including control over whether an object can support other objects.
+
+*   **Local point lights and occlusion shadows**: Added scene-owned spherical point lights with editable position, level, building, color, strength, range, visibility, and shadow casting.
+    *   Light helpers are selectable objects in Plan and 3D views but are excluded from current-view and saved-camera exports.
+    *   Directional and local lights now cast configurable occlusion shadows from closed architectural geometry and opaque Gaussian collision proxies, while transmissive objects and glass openings allow light through.
+    *   Low, Medium, High, and Ultra shadow presets use bounded active-light budgets and tuned bias values to control browser cost while keeping distant wall lighting stable.
+
+*   **Viewport-only interior cutaway**: Added separate Plan and 3D cutaway state that hides ceilings and the nearest horizontally blocking wall for interior editing.
+    *   Cutaway never changes scene data and is automatically disabled during camera and node-output captures, so exported views retain the complete architecture.
+
+### Workflow and UX Improvements
+
+*   **Task-oriented workspace layout**: Reorganized the editor into Generate/Cameras tabs on the left, a clear central viewport, and Objects/Inspector/Export tabs on the right, removing controls that previously competed with the viewport.
+*   **Unified scene selection**: Gaussian objects, rooms, walls, openings, buildings, saved cameras, and local lights participate in consistent selection, visibility, locking, inspection, and object-tree workflows.
+    *   Plan Select mode supports shift-additive selection and drag marquee selection across rooms, architecture, Gaussian objects, cameras, and lights.
+    *   Copy, paste, Delete/Backspace, Undo, and Redo are scoped to the active Factory editor and ignore text, numeric, select, and content-editable controls.
+    *   Copied rooms retain their perimeter walls and openings; pasted architecture, cameras, lights, and Gaussian objects receive independent IDs and a visible placement offset.
+*   **Live precision Inspector**: Transform gizmos remain available for coarse editing while paired sliders and exact numeric fields provide hundredth-step model, group, architecture, camera, and light control.
+    *   Continuous changes update the viewport during interaction, remain usable across repeated drags, and commit one bounded history operation when editing finishes.
+*   **Contextual level controls**: The level panel appears only while an architectural drawing tool is active and provides level creation, selection, elevation, height, slab thickness, visibility, and deletion without occupying the normal 3D workspace.
+
+### Fixes
+
+*   **Pose Manager proportion-only analysis**: Fixed **Auto-analyze proportions** allowing the temporary SAM-detected pose to replace the active Pose Manager card. Both the initial SAM import and the subsequent mesh-overlay fitting now suppress pose-change synchronization during proportion analysis, so only body proportions are transferred and every managed pose is preserved.
+
+### Persistence and Compatibility
+
+*   Added strict shared normalization and validation for levels, optional buildings, room perimeters, wall openings, materials, textures, object collision and light-transport properties, camera paths, local lights, and shadow settings.
+*   Added an independent edit revision so concurrent or stale editors cannot silently overwrite newer scene work, while render revisions continue to invalidate only affected captures and exports.
+*   Extended `.vnccs3d` scene packages to preserve architecture, floor levels, texture assets, camera paths, local lights, shadows, and object assignments; restored packages remap scene-owned IDs and validate every reference.
+*   Existing 3D Factory scenes remain loadable. Migration removes only the recognizable empty synthetic `Building 1` created by the temporary mandatory-building schema and preserves every user-created or transformed structure.
+
+### Packaging and Validation
+
+*   Bumped the package version to `0.6.6` and advanced the 3D Factory backend, editor-state, frontend, and viewer schemas required by the new persistent scene model.
+*   Expanded frontend, backend, node-state, library-package, camera, architecture, placement, lighting, shadow, cutaway, multi-selection, and scaled Plan-marquee regression coverage.
+
+# Version 0.6.5
+## Pose Manager Reference Proportions and SAM Camera Reliability
+
+### New Features
+
+*   **Reference-image proportions in Pose Manager**: The PoseStudio `pose_image` input is now available in Pose Manager.
+    *   When the node runs, SAM 3D Body analyzes the connected image and transfers its body proportions to the character used by every pose in the current manager set.
+    *   The reference pose is not applied and does not replace any pose in the manager set.
+    *   After the proportions are updated, every pose is normalized with the same full-frame fitting used after an age change and its preview is regenerated before output.
+
+*   **Automatic analysis toggle**: Added an **Auto-analyze proportions** checkbox to the Pose Manager header.
+    *   The option is enabled by default and saved with the workflow.
+    *   When disabled, `pose_image` remains visible and connected, but the image is not sent to SAM for analysis.
+
+### Improvements
+
+*   **Matching proportion results across PoseStudio modes**: Pose Manager uses the same body-proportion fitting as the standard PoseStudio image analysis, providing consistent limb and torso proportions while preserving all managed poses.
+*   **Unchanged standard PoseStudio workflow**: Outside Pose Manager, `pose_image` continues to apply the analyzed pose and body proportions as before.
+
+### Fixes
+
+*   **SAM camera setting is now respected**: Fixed SAM imports re-enabling detector-camera matching and replacing the user's framing even when **SAM Import: Apply Camera Angle** was disabled.
+    *   Camera matching is now disabled by default and remains available as an explicit option.
+    *   Turning the option off while a SAM camera view is active restores the user-controlled camera.
+*   **Identical SAM and standard-mode framing**: Fixed the analyzed character rendering at a different scale when **SAM Import: Apply Camera Angle** was disabled.
+    *   Standard mode now reuses the recovered SAM camera position with PoseStudio's fixed 30-degree FOV and an exactly equivalent perspective zoom.
+    *   Compact and seated poses retain the same scale and position in both modes, including images where the visible body extends beyond the frame; PoseStudio no longer attempts to reveal or fit off-frame anatomy.
+
+### Packaging and Validation
+
+*   Bumped the package version to `0.6.5`.
+*   Added regression coverage for Pose Manager analysis control, pose preservation, proportion application across the manager set, preview normalization, and standard-mode isolation.
+*   Added a browser-free end-to-end SAM camera regression using the ComfyUI Python environment, the production SAM 3D Body bridge, PoseStudio's MakeHuman rig and retargeting path, and a headless Node renderer.
+    *   All six repository image examples produce identical SAM-camera and fixed-FOV standard-mode mannequin projections, with zero projected-vertex error and zero differing output pixels.
+
+# Version 0.6.4
+## PoseStudio Male Anatomy Visibility Control
+
+### New Features
+
+*   **Opt-in genital visibility for male characters**: Added a **Show Genitals** checkbox to PoseStudio's **Gender Settings** section.
+    *   The control is available when **Male** is selected and is unchecked by default.
+    *   The setting is stored independently for each character and preserved in PoseStudio scene and workflow data.
+
+### Improvements
+
+*   **Safer default character display**: Male genital geometry is now excluded from the rendered model unless **Show Genitals** is explicitly enabled.
+*   **Backward-compatible workflow loading**: Existing workflows and library scenes that do not contain the new `show_genitals` setting open with genital visibility disabled.
+*   **Immediate topology updates**: Enabling or disabling the option updates the live character mesh without requiring PoseStudio or the node to be reloaded.
+
+### Validation
+
+*   Added regression coverage for the default hidden state, explicit male opt-in, female exclusion, and the PoseStudio checkbox integration.
+
+# Version 0.6.3
+## PoseStudio SAM 3D Body Retargeting and Video Stability
+
+### Improvements
+
+*   **Stable SAM video proportions**: Video analysis now estimates body proportions across the sequence, selects robust median measurements, and retargets every frame onto one fixed MakeHuman rig.
+    *   Hip placement, limb lengths, and character proportions no longer pulse between independently fitted frames.
+    *   The final pass preserves SAM's dense joint rotations instead of replacing head and foot orientation with ambiguous image-space landmark alignment.
+*   **SAM mocap-compatible frame recovery**: An isolated frame without a valid body detection now holds the previous valid pose instead of aborting the complete video import.
+*   **Complete pose persistence**: PoseStudio now stores and restores the bone-local translations produced by SAM retargeting, including pelvis and upper-leg placement, across pose commits, tab changes, scene serialization, and playback.
+
+### Fixes
+
+*   **Missing feet during video playback**: Fixed pose-derived foot bone scale accumulating across frames and eventually collapsing the rendered feet.
+*   **Rear-view head flips**: Fixed dense SAM head rotations being overwritten by eye-midpoint alignment, which could turn the head backward and rotate it by 180 degrees when the subject faced away from the camera.
+*   **Standing leg alignment**: Fixed saved and reapplied SAM poses losing translated hip-root positions, which caused the legs to drift apart or no longer match the analyzed image.
+*   **Video pose jitter**: Fixed each frame changing the shared character rig before playback, a major source of visible jumping even when the underlying SAM detections were consistent.
+*   **Morph compatibility**: Body-shape edits now invalidate stale SAM bone translations before the character is rebuilt, preventing imported offsets from leaking into a newly proportioned mesh.
+
+### Validation
+
+*   Added regression coverage for translated-bone serialization, fixed-rig video retargeting, missing-frame fallback, foot-scale stability, and rear-view head orientation.
+*   Validated the standalone analysis and playback path with the repository's image samples and all 73 frames of its test video using the ComfyUI environment, without launching the ComfyUI server.
+*   The SAM 3D Body model and its inference results are unchanged; these fixes are limited to PoseStudio's pose application, persistence, and video playback behavior.
+
+# Version 0.6.2
+## Pose Library Repository Sync, Publishing, and Pose Manager Reliability
+
+### New Features
+
+*   **Fast external Pose Library synchronization**: Public Hugging Face pose repositories now use a one-shot shallow Git clone instead of downloading every changed file through a separate HTTP request.
+    *   The complete repository is transferred with `git clone --depth 1 --single-branch --no-tags`, providing a substantial speedup for libraries containing hundreds or thousands of small pose and preview files.
+    *   The clone exists only in the operating system's temporary directory on the machine running ComfyUI. It is used as the import source and removed immediately after synchronization, without creating a nested Git checkout in `custom_nodes`, PoseLibrary, or `ComfyUI/user`.
+    *   Manifest paths, file boundaries, declared SHA-256 hashes, size limits, symbolic links, and Git LFS/Xet pointers are validated before files are imported into PoseLibrary.
+    *   Private repositories and unsupported Git/LFS transfers continue through the authenticated bounded HTTP path.
+
+*   **Automatic repository installation**: Adding a Pose Library repository is now a complete single action.
+    *   Both `owner/repository` identifiers and Hugging Face repository URLs are accepted.
+    *   Clicking Add registers the repository, immediately downloads its manifest, poses, animations, and previews, refreshes the library, and makes the new assets available without another user action.
+    *   Inline progress reports the current transfer, file count, imported, unchanged, and removed totals.
+
+*   **Second default Pose Library repository**: Added [`Totemistyk/General_Poses_PoseStudio`](https://huggingface.co/Totemistyk/General_Poses_PoseStudio) as the enabled second built-in repository after `MIUProject/VNCCS_PoseLibrary_Main`.
+    *   Existing installations receive it automatically after updating and restarting the node.
+    *   Its project title is fixed as **General Poses PoseStudio**, independently of generic legacy titles stored in a remote manifest.
+
+### Improvements
+
+*   **Repository diagnostics and recovery**: Git failures no longer disappear when the HTTP fallback begins.
+    *   The Git exit code and relevant stderr lines are retained in repository state, written to the ComfyUI log, and displayed in an expandable diagnostics block in Library settings.
+    *   Settings remain open after a fallback so the error can be inspected instead of being overwritten by per-file download progress.
+    *   Successfully cloned repositories are imported directly from their temporary checkout; the Windows directory-promotion step that could fail with `WinError 5` has been removed.
+
+*   **Reliable local-library publishing**: Publishing now binds every operation to the repository selected in the current dialog.
+    *   Switching between Create New and Use Existing keeps separate input drafts and cannot silently retain the previous target.
+    *   Create New requires and creates exactly the requested repository, while malformed requests can no longer fall back to the previously saved repository.
+    *   The active target is shown throughout upload, concurrent publish attempts are blocked, and the saved repository link changes only after the requested publish succeeds.
+
+*   **Explicit pose versus pose-set semantics**: Multi-character scene data and Pose Manager pose sets now use separate axes and separate loading paths.
+    *   A scene containing `characters[]` remains one library pose even when a character contains runtime `poses[]`; only an asset explicitly marked `type: "pose_set"` replaces the complete Pose Manager list.
+    *   Loading a single library pose updates the selected pose without deleting the other Pose Manager entries or switching the interface to Studio.
+    *   Loading an animation remains the only library operation that automatically switches to Studio and its animation timeline.
+    *   Saving Current Pose stores only the selected pose for every scene character; All Poses (Set) remains the explicit path for exporting the complete set.
+
+*   **Pose Manager preview and execution consistency**: Shape changes now produce one authoritative set of visible pose images.
+    *   Age, head size, and other supported mesh changes restart preview generation from the first card after the updated model is ready.
+    *   Every deformed pose is fitted and centered independently, and captures wait for the real skin texture before replacing a card.
+    *   RUN in Pose Manager uploads an immutable snapshot of the images already displayed in the cards. It performs no second camera fit or render reinterpretation that could change their scale or position.
+    *   Execution fails explicitly if a required Pose Manager card is incomplete instead of substituting a differently framed image.
+
+*   **Library camera and scene preservation**: Static library poses retain the framing that was visible when they were saved.
+    *   Scene-format poses restore the active character's exact saved transform rather than applying the legacy camera-pivot conversion a second time.
+    *   SAM projection FOV and camera position are normalized, serialized, published, downloaded, and restored alongside ordinary pose camera data.
+    *   Legacy flat poses continue to use the compatible camera-framing conversion path.
+
+### Fixes
+
+*   **Repository identity**: Fixed different third-party repositories inheriting the same generic `VNCCS Pose Library` title.
+*   **Stale publication target**: Fixed publish progress initially displaying the old repository and fixed Create New uploads that could create an empty repository while sending files to the previous target.
+*   **Repository installation timing**: Fixed newly added repositories remaining empty until a later enable, refresh, or restart action.
+*   **Pose Manager mode stability**: Fixed loading a static multi-character pose switching the UI back to standard Pose Studio.
+*   **Pose Manager set replacement**: Fixed a single scene pose being mistaken for a pose set and replacing the complete current pose list.
+*   **Pose Manager RUN framing**: Fixed execution recapturing correctly fitted cards with neutral or stale camera values, causing poses to become tiny, oversized, cropped, or displaced.
+*   **Saved pose framing**: Fixed library poses losing SAM projection zoom and camera position between save, publication, download, and reload.
+*   **Reset scope**: Reset now restores all head, limb, hand, foot, shoulder, hip, and spine mesh-proportion controls while leaving gender, age, weight, muscle, height, and other character attributes unchanged.
+
+### Packaging and Documentation
+
+*   Bumped the package version to `0.6.2`.
+*   Expanded Pose Library backend, publication, Git transport, character-schema, camera-framing, Pose Manager, and widget-hardening regression coverage.
+
+# Version 0.6.1
+## 3D Factory Cameras, Gaussian PLY Import, and Per-Pose Framing
+
+### New Features
+
+*   **Gaussian PLY import for 3D Factory**: Existing Gaussian models can now be added directly to the active scene from the Factory UI.
+    *   Binary little-endian Gaussian PLY files up to 2 GiB are streamed to temporary storage, fully inspected, and validated before the scene is changed; invalid, oversized, empty, and polygon-mesh payloads are rejected without leaving partial objects behind.
+    *   Imported coordinates are normalized into Factory's canonical source convention so the live SPLAT viewport and later object export preserve the model's expected world orientation.
+    *   Each import becomes a persistent visible layer with source metadata, checksums, validation statistics, a generated card thumbnail, and the same transform, duplication, library, cache, and PLY export support as generated objects.
+    *   A successful import immediately loads, selects, and frames the new object in the live viewport.
+
+*   **Saved scene cameras in 3D Factory**: Added a dedicated Camera block and one persistent Cameras group for up to 32 viewpoints.
+    *   The graphical look pad and keyboard arrows rotate yaw and pitch in place while preserving camera position, target distance, vertical FOV, and a normalized up vector.
+    *   Cameras can be added from the current view, selected for exact viewport inspection, adjusted with the look pad, and deleted.
+    *   Leaving a saved-camera view by selecting it again, clicking empty viewport space, or selecting a scene object, group, or skydome restores the previous editor camera.
+    *   Current and saved cameras persist in scene manifests and workflow snapshots; scene-list summaries now expose the saved-camera count.
+
+*   **Multi-camera 3D Factory output**: Changed `preview` to an ordered ComfyUI `IMAGE` LIST.
+    *   Item 0 is the current viewport, followed by every saved camera in Cameras-group order.
+    *   Every frame is a clean PNG at the shared Scene Export dimensions, without the editor grid, selection bounds, or transform gizmos, while retaining its camera's own position, orientation, up vector, and FOV.
+    *   Scenes containing only an environment or saved cameras can participate in the same capture path; scenes with no renderable content still return one empty image.
+
+### Improvements
+
+*   **Atomic execution capture sets**: Current-view and saved-camera renders are now uploaded and committed as one token-, scene-revision-, render-revision-, dimension-, and camera-order-bound set.
+    *   The backend validates every frame before publishing any of them and rejects captures if the scene, export frame, or camera list changed during rendering.
+    *   Node execution waits for the complete requested set, reports viewport failures explicitly, and can reuse only a complete saved set that still matches the current scene revision.
+    *   Old capture directories are pruned after a successful atomic replacement, while internal capture manifests are omitted from public scene payloads and library packages.
+
+*   **Camera-aware PLY export and scene packages**: Updated Gaussian scene metadata to `vnccs-3d-factory-gaussian-scene/v2`.
+    *   Scene PLY headers now include the current camera plus every saved camera's stable ID, name, position, target, normalized up vector, and vertical FOV, alongside shared render dimensions and aspect metadata.
+    *   `.vnccs3d` scene packages preserve current and saved cameras; loaded copies receive fresh camera IDs so they remain independent of the source scene.
+
+*   **Pose Studio per-pose framing**: Image-mode pose tabs now retain independent camera framing.
+    *   Each character stores its own X/Y position and zoom for every pose, while yaw and pitch remain shared across all characters on that pose tab.
+    *   Switching, adding, deleting, resetting, copying, pasting, importing, exporting, saving to the library, loading a scene, and reopening a workflow now preserve the appropriate pose camera values.
+    *   Full-scene and active-pose captures apply the correct framing for each pose and restore the active tab's camera afterward; Animation mode continues to use animated character transforms and its shared capture camera.
+    *   Legacy poses without camera data are migrated from their character transform and existing camera settings.
+
+*   **Skydome library previews**: Skydome capture now temporarily removes every Gaussian root from the Spark scene, renders the environment alone, and restores object parents, order, visibility, selection, camera, and viewport state afterward.
+
+### Fixes
+
+*   **3D Factory FPV camera stability**: Reworked look-pad rotation around world-up yaw and a clamped local pitch axis so repeated adjustments cannot accumulate unintended roll or flip at the poles.
+*   **Pose Studio preview camera restoration**: Temporary Pose Manager fitting and batch captures now restore the active pose's camera instead of leaking preview framing into Studio or saved library poses.
+
+### Packaging and Documentation
+
+*   Bumped the package version to `0.6.1` and advanced the 3D Factory scene, export, workflow-state, frontend, and viewer schema/build revisions.
+*   Updated the README and 3D Factory guide for PLY import, saved cameras, camera-aware PLY/library persistence, and ordered multi-camera node output.
+*   Expanded backend, node, frontend, library, Pose Studio bootstrap, character-scene, and widget-hardening regression coverage for the new workflows.
+
+# Version 0.6.0
+## VNCCS 3D Factory, Pose Studio Animation, and Multi-Character Scenes
+
+### New Features
+
+*   **VNCCS 3D Factory**: First release of a scene-oriented image-to-3D Gaussian workspace inside ComfyUI.
+    *   Runs the open-source [`VAST-AI-Research/TripoSplat`](https://github.com/VAST-AI-Research/TripoSplat) pipeline locally through ComfyUI's PyTorch device, without an external inference service or API key.
+    *   Includes graphical discovery and download of the required diffusion, VAE, DINOv3, Flux VAE, and BiRefNet weights from the standard ComfyUI model folders and `extra_model_paths`.
+    *   Provides background removal, fixed or randomized seeds, sampling-step and guidance controls, Gaussian counts from 32K to 262K, experimental 524K/1.05M densities, 1024 conditioning, experimental 1536/2048 conditioning, and optional native-resolution input capping.
+    *   Reports generation progress, supports cancellation, and stores downloadable per-job logs.
+
+*   **Persistent 3D scenes and object editing**: Added host-backed scene management and multi-object composition.
+    *   Scenes can be created, reopened, renamed, and deleted; their references, objects, generation settings, transforms, visibility, camera, render settings, lighting, skydome, and exports are retained.
+    *   The layer list supports drag-and-drop ordering, visibility, inline rename, duplication, deletion, grouping, ungrouping, and group transforms.
+    *   Viewport selection and gizmos provide object and group translation, rotation, and uniform scaling.
+
+*   **Native Gaussian viewport and scene output**: Added a bundled SparkJS/Three.js viewport that renders multiple Gaussian objects together.
+    *   Supports orbit, pan, detailed zoom, adaptive clipping, selection bounds, an optional grid, and quality LOD.
+    *   The node returns a clean `preview` image of the complete scene without editor overlays.
+    *   Canonical PLY assets are converted lazily into a shared, bounded, content-addressed SPLAT cache for viewport rendering.
+
+*   **3D Factory lighting and environments**: Added persistent realtime lighting presets and custom scene lighting.
+    *   Includes Off, Day, Night, Dawn, Sunset, and Custom presets, with intensity, color, azimuth, elevation, ambient, and background controls.
+    *   JPEG, PNG, and WebP skydomes support visibility, horizontal rotation, horizon tilt, roll, exposure, blur, horizon leveling, and alignment reset.
+
+*   **Gaussian PLY export and model library**: Added reusable object and scene assets.
+    *   Object and combined-scene PLY exports bake position, rotation, and uniform scale into Gaussian centers and covariance while preserving opacity, color, and available spherical-harmonic data.
+    *   Scene export includes persistent dimensions, aspect presets, FOV, camera metadata, and an optional camera-frame overlay.
+    *   The local and Hugging Face-backed library stores objects, complete `.vnccs3d` scenes, and skydomes with generated previews.
+    *   Scene packages preserve layer order, groups, visibility, transforms, camera, render settings, lighting, and environment data; remote entries load as independent scene copies.
+
+*   **Pose Studio Animation mode**: Added a complete keyframe editor alongside the existing Image mode.
+    *   Provides a dope-sheet timeline with FPS and duration controls, playback, looping, playhead scrubbing, Auto-Key, snapping, per-bone tracks, model-rotation tracks, and anatomical track groups.
+    *   Adds Hold, Linear, Ease In, Ease Out, Easy Ease, and Smooth interpolation using normalized local quaternions and shortest-path SLERP.
+    *   Keys can be created, updated, dragged, deleted, range-selected, moved as a group, copied, pasted at the playhead, and restored through animation-aware Undo/Redo.
+    *   Dense timelines virtualize offscreen rows and key markers; hand tracks use compact collapsible finger groups.
+    *   Animation mode changes the first Pose Studio output to ComfyUI's native `VIDEO` datatype while Image mode retains the existing LIST/GRID `IMAGE` behavior.
+    *   Animation data is retained in a bounded host-side cache referenced by the workflow, including multi-character clips.
+
+*   **Mixamo FBX animation import**: Importing a Mixamo clip switches Pose Studio to Animation mode and retargets the motion into one keyed clip with automatically configured timing, including body, fingers, and toe-base landmarks.
+
+*   **Video-to-pose animation import**: Added video files as Pose Studio animation sources.
+    *   Supports common browser video formats with an interactive preview, IN/OUT range, playhead, timeline zoom, pan, fit-selection, source-FPS detection, requested capture FPS, and keyframe interval controls.
+    *   Supports up to 600 pose samples, capped by the detected source frame rate.
+    *   Includes Off, Light, Medium, and Strong quaternion stabilization plus Conservative, Balanced, and Aggressive adaptive key reduction.
+
+*   **Multi-character Pose Studio scenes**: Added support for up to four independently editable characters in one node.
+    *   Characters have stable scene slots, names, colors, body/mesh settings, X/Y/Zoom transforms, static poses, and animation clips.
+    *   The selected character exposes the existing body, pose, camera-position, and animation controls while all other characters remain visible and are included in every capture.
+    *   Pose tabs, output framing, camera angle, timeline FPS, duration, loop state, and playhead are shared across the scene; each character retains its own keyed motion.
+    *   Legacy single-character workflows migrate automatically to one Main Character.
+
+*   **Scene- and animation-aware Pose Library**: Added complete multi-character static scenes and animation scenes to local and remote pose repositories.
+    *   Animation assets support WebM/video previews, animation counts, categories, deletion, loading, repository synchronization, and publishing.
+    *   Local and Hugging Face manifests track animation JSON and preview hashes for incremental synchronization and publishing.
+
+*   **Directional Skydome for Pose Studio**: Added an optional transparent rainbow wire-grid environment for camera-direction references.
+    *   Enabling it exposes a `camera_prompt` input intended for VNCCS Visual Camera Control.
+    *   Every execution parses its resolved azimuth and elevation, rotates the skydome for that queued run, captures the updated view, and appends normalized camera wording to the lighting prompt.
+    *   Disabling the feature removes the socket, prompt merge, interface overlay, and exported skydome.
+
+### Changes to Existing Features
+
+*   **Pose Studio SAM 3D Body and Mixamo retargeting**: Source body proportions are applied before IK target generation; limb and foot fitting use measured source segments, and camera fitting accounts for the resulting character proportions and view direction.
+
+*   **Shared custom selectors**: Added one accessible dropdown implementation across Pose Studio, the animation timeline, UniCanvas, Model Manager, and 3D Factory.
+    *   Keeps native controls for serialization while replacing unreliable browser popups with themed, viewport-aware menus.
+    *   Supports keyboard navigation, disabled-option skipping, active selection highlighting, long values, and closing when the active selector is clicked again.
+
+*   **VNCCS Visual Camera Control**: Added per-execution random camera generation.
+    *   Random mode can use the complete 360° azimuth range or restrict it to Front ±45°, while elevation and distance remain randomized.
+
+*   **Pose Studio Debug Mode**: Each execution selects one complete loaded library pose; random lighting can be enabled independently while Original and Manual lighting modes remain available.
+
+*   **UniCanvas presets**: Preset mode applies the selected preset's generation backend, loader, model, CLIP, and VAE in both frontend and backend.
+    *   Runtime parameters such as steps are remembered independently for each preset.
+    *   Preset cards display the actual primary model filename, while Custom mode continues to preserve explicitly selected models.
+
+*   **Model Manager repositories**: Download progress and installed-version selection are namespaced by repository.
+    *   Repositories may contain models with the same display name without sharing status or selecting each other's installed version.
+    *   Existing non-namespaced registry keys remain available as compatibility aliases for older workflows and frontends.
+
+### Packaging
+
+*   **Pose Studio runtime assets**: Replaced the source MakeHuman asset tree and Python-side preview builder with a versioned compressed browser runtime asset while retaining live body morph controls.
+*   **Dependencies and registry metadata**: Added PyAV for animation/video handling, TripoSplat progress dependencies, and Comfy Registry entries for UniCanvas and 3D Factory.
+
+### Documentation
+
+*   Added the [VNCCS 3D Factory setup and workflow guide](docs/VNCCS_3D_FACTORY.md).
+*   Expanded the [Pose Studio usage guide](docs/VNCCS_POSE_STUDIO_USAGE.md) for Animation mode, Mixamo and video import, multi-character scenes, native VIDEO output, Directional Skydome, and camera-prompt integration.
+*   Updated the README and Model Manager guide for 3D Factory, Visual Camera Control random ranges, Directional Skydome integration, and repository behavior.
+
+# Version 0.5.3
+## Z-Image Fun ControlNet Crash Mitigation
+
+### Fixes
+
+*   **Z-Image masked generation stability**: Moved Fun ControlNet patch loading earlier in the UniCanvas draw pipeline for z-image inpaint/outpaint.
+    *   The patch is now loaded before prompt encoding, VAE preload, source-latent encoding, and batch expansion, reducing peak memory pressure at the start of sampling.
+    *   The direct Fun ControlNet path still avoids global patch caching, preserving the model asset cloning and memory-safety behavior introduced in `0.5.2`.
+    *   A compatibility fallback remains for cases where the preloaded patch is unavailable, with an explicit debug log entry.
+
+### Improvements
+
+*   **Z-Image memory cleanup**: Added the preloaded Fun ControlNet patch object to UniCanvas sampling-reference cleanup.
+    *   Empty masked-mode requests that are converted to `img2img` now release the preloaded patch immediately and clear available CUDA cache.
+    *   This keeps the `0.5.2` source-latent, VAE preload/unload, batch generation, and smaller tiled decode fixes intact while avoiding a late high-memory patch allocation that could crash ComfyUI on Windows.
+
+# Version 0.5.2
+## UniCanvas Batch Generation, Z-Image Latent Flow, and VAE Memory Handling
+
+### New Features
+
+*   **UniCanvas batch generation**: Added a batch-size control next to the Generate button.
+    *   Batch size is persisted in UniCanvas settings and clamped to the supported `1-99` range.
+    *   Empty latents for SDXL, Anima, Flux Klein, Qwen Image Edit, and Z-Image now respect the selected batch size.
+    *   Source latents, `noise_mask`, reference latents, concat masks, and other conditioning metadata are repeated for batch generation when needed.
+    *   Draw responses can now return multiple generated images, and the frontend stages every returned image as a separate candidate.
+    *   Generation status now displays the batch multiplier during active draws.
+
+### Improvements
+
+*   **Z-Image Fun ControlNet latent source**: In z-image inpaint/outpaint, Fun ControlNet now starts from the current VAE-encoded source latent instead of an empty SD3 latent.
+    *   The encoded latent keeps the denoise mask attached, improving masked workflows that should remain anchored to the current canvas content.
+    *   Fun ControlNet image, mask, and VAE patch inputs remain in place for structure guidance.
+
+*   **Z-Image VAE handling**: Improved direct z-image masked generation memory behavior.
+    *   Preloads the VAE before z-image masked sampling when ComfyUI exposes the needed model-management hook.
+    *   Releases sampling-only references before decode to reduce retained tensors.
+    *   Unloads the directly used VAE after decode and clears available CUDA cache.
+    *   Uses smaller tiled VAE decode tiles for z-image modes to reduce peak memory.
+
+*   **Model asset cloning safety**: Z-Image now uses the shared model/CLIP clone helper before applying runtime patches.
+    *   Cached model patches now return clones when possible.
+    *   Fun ControlNet patch loading avoids keeping the patch object cached in the direct inpaint/outpaint path.
+
+# Version 0.5.1
+## UniCanvas Layout, Model Selection, and Interaction Fixes
+
+### Improvements
+
+*   **UniCanvas responsive layout stabilization**: Reworked UniCanvas UI scaling so the widget keeps consistent proportions across node resize and canvas zoom.
+    *   Added layout diagnostics for measuring panel, stage, toolbar, and control proportions during resize.
+    *   Added a square default node size for new UniCanvas nodes.
+    *   Improved initial fit behavior so the generation bbox is centered after the DOM stage has real dimensions.
+    *   Fit now accounts for the floating tool palette so the generation square does not sit underneath the tools.
+
+*   **UniCanvas dropdown usability**: Replaced unreliable native select popups with a controlled DOM dropdown for UniCanvas selectors.
+    *   Dropdowns now use the widget's dark styling, readable font sizing, active selection highlighting, and viewport-aware positioning.
+    *   Long option values are no longer clipped to the select field width.
+    *   Re-clicking the active selector closes the dropdown.
+
+*   **ComfyUI canvas navigation passthrough**: Added PoseStudio-style wheel and middle-mouse forwarding from empty UniCanvas DOM areas to the main ComfyUI graph canvas.
+    *   Background wheel/trackpad gestures can zoom/pan the ComfyUI canvas through the widget.
+    *   Interactive controls, scrollable panels, the drawing canvas, tool palette, modals, and dropdown menus keep their own input handling.
+
+### Fixes
+
+*   **Custom model selection detection**: Fixed model auto-detection so Qwen/GGUF custom selections are not incorrectly overridden by WAN/Anima matches.
+*   **Flux Klein VAE default**: Updated the Flux Klein preset/default VAE selection to use `flux2-vae.safetensors`.
+*   **Fit button behavior**: Restored the Fit button to use the full fit-view path.
+
+# Version 0.5.0
+## VNCCS UniCanvas Initial Release and Model Workflow Updates
+
+### New Features
+
+*   **VNCCS UniCanvas**: Added the first public release of the integrated canvas workflow for layer-based generation, editing, masking, and object-focused image work directly inside ComfyUI.
+    *   Supports prompt-driven generation, inpaint/outpaint workflows, mask editing, object selection, layer compositing, undo/redo, snapping, resizing, and draw progress feedback.
+    *   Includes model presets and custom model selection for SDXL/Illustrious, Anima, Flux Klein, Z-Image, and Qwen Image Edit 2511 workflows.
+    *   Adds Turbo LoRA support, LoRA Stack controls, sampler/scheduler controls, and automatic model asset download for bundled presets.
+    *   Includes SAM-based object mask tooling with first-use model download.
+
+### Improvements
+
+*   **UniCanvas model workflow support**: Added dedicated handling for Anima, Anima LLLite inpainting, Z-Image Fun ControlNet, Flux Klein edit/outpaint, and Qwen Image Edit 2511 reference-latent workflows.
+*   **Configuration and asset management**: Added local UniCanvas preset configuration and cleaned up obsolete workflow/config files used during development.
+*   **Project maintenance**: Added safer private JSON writes for user configuration paths used by the Pose Library and Model Manager.
+
+# Version 0.4.29
+## Pose Studio Live Morph Performance and Pose Manager Stability
+
+### Improvements
+
+*   **Pose Studio live morphing moved to the browser**: Added a dedicated browser-side morph data pipeline for realtime body-parameter previews.
+    *   MakeHuman base vertices, morph targets, joint data, and skeleton metadata are exposed through a compact binary endpoint for the live worker.
+    *   Age, Gender, Weight, Muscle, Height, breast, firmness, and genital morph parameters can now update the visible mesh without a full Python preview rebuild on every slider input.
+    *   A shared morph worker is reused across Pose Studio widgets so multiple active nodes do not each create their own heavy morph worker and duplicate morph-data downloads.
+    *   Worker messages are routed by client id so concurrent Pose Studio widgets receive only their own live morph results.
+
+*   **Pose Manager realtime preview updates**: Reworked manager-mode body-slider updates so all pose cards refresh during live morph changes.
+    *   Pose Manager now updates every visible pose preview during realtime Age/Weight/Muscle/Height edits instead of waiting for a final Python sync.
+    *   Preview refresh work is chunked across animation frames to keep the UI responsive while multiple cards are being recaptured.
+    *   Stale worker results are ignored by sequence id so quick slider movement cannot apply older mesh states over newer ones.
+
+*   **Non-blocking Pose Studio startup load**: Reworked the MakeHuman preload path used by the preview API to cooperate with ComfyUI's async server loop.
+    *   Startup model loading still happens when the Pose Studio widget opens, but OBJ and target-file reads now yield between chunks instead of monopolizing the server handler.
+    *   Preview payload building runs off the aiohttp request path after the shared Pose Studio data cache is loaded.
+    *   Cache loading remains serialized so parallel widget startup does not create partially initialized shared MakeHuman state.
+
+### Fixes
+
+*   **Age and Height live skinning**: Fixed live Age/Height morph updates that could temporarily detach the mesh from the skeleton while dragging.
+    *   Live morph results now include updated bone/joint positions so the frontend can keep skinned geometry aligned during realtime body-size changes.
+    *   The final Python sync remains available for full authoritative mesh rebuilds after dragging, without hammering the server on every input event.
+
+*   **Pose Manager card flicker**: Reduced manager-card flicker after final body-scale recalculation.
+    *   Pose cards preserve measured preview dimensions while captures are refreshed.
+    *   Capture replacement updates existing card images instead of forcing avoidable full-grid layout churn.
+    *   Deleted/reordered poses keep their card metrics aligned with the correct pose index during subsequent live morph refreshes.
+
+*   **Pose Manager lighting restore**: Fixed Pose Manager reloads that could show black/unlit model previews until any parameter was changed.
+    *   Lighting is now applied when model data is loaded so restored cards match the configured light state immediately.
+
+*   **Preview API cleanup**: Removed obsolete unreachable preview-generation code left behind during the live morph refactor.
+    *   Removed the rejected subprocess preload experiment and all related helper code.
+    *   Removed the remaining synchronous data-load fallback from the new preview payload path.
+
+# Version 0.4.28
+## Security Hardening, Pose Studio Fixes, and XPU BiRefNet
+
+### Improvements
+
+*   **Pose Studio API and capture hardening**: Added request-size limits, safe ID normalization, and payload validation around preview updates, pose capture cache uploads, SAM3D pose import, mesh-overlay generation, and synchronized pose captures.
+    *   Capture uploads are limited by image count and total payload size before entering the cache.
+    *   SAM3D image imports now reject oversized uploads and excessive pixel counts before decoding into tensors.
+    *   Server-side captured image decoding now validates list shape, per-image size, total payload size, and image dimensions before tensor conversion.
+
+*   **Pose Library safety pass**: Hardened pose repository and local pose save flows.
+    *   Added request-size limits to repository management, repository refresh, local pose save, and sync-capture upload endpoints.
+    *   Added SHA256 verification for downloaded repository files.
+    *   Added per-file and total sync download limits for pose repositories.
+    *   Local pose saves now write JSON and preview files through temporary files before replacing the final files.
+    *   User config files are saved with restricted file permissions where supported.
+
+*   **Model Manager download hardening**: Tightened model manifest download/install behavior.
+    *   Model `local_path` values are now constrained to the ComfyUI `models/` directory.
+    *   Direct model download URLs must be HTTPS and cannot resolve to local/private hosts.
+    *   Downloads now use request timeouts, a safety size cap, unique temporary files, and cleanup for failed partial downloads.
+    *   Model Selector now rejects unsafe manifest paths instead of returning them.
+
+*   **BiRefNet XPU support**: BiRefNet mask loading now selects `xpu` when CUDA is unavailable and `torch.xpu.is_available()` returns true, falling back to CPU otherwise.
+
+*   **SAM3D preset-pack fallback**: Added local preset-pack path helpers for the vendored SAM3D bridge so optional blendshape preset assets can be absent without breaking imports.
+
+*   **Pose Studio ComfyUI navigation passthrough**: Added cautious middle-mouse drag and wheel forwarding from non-interactive Pose Studio background areas to the main ComfyUI canvas.
+    *   The passthrough intentionally skips controls, sliders, inputs, tabs, scroll containers, the 3D viewer, camera/light radars, hand popovers, manager grids, and library/modals so existing node interactions keep priority.
+
+### Fixes
+
+*   **Pose Studio camera radar coordinates**: Fixed camera/light radar pointer mapping under ComfyUI node zoom and Pose Studio UI scaling.
+    *   Pointer handling now uses a shared canvas-coordinate helper based on `clientX/clientY` plus `getBoundingClientRect()`.
+    *   Dragging now uses pointer capture, improving behavior when dragging outside the radar canvas.
+    *   Added an opt-in debug log via `window.VNCCS_POSE_RADAR_DEBUG = true` for future coordinate edge-case reports.
+
+*   **Pose Manager input behavior**: `pose_image` is now hidden and disconnected while Pose Studio is in Pose Manager mode.
+    *   The backend also ignores `pose_image` when serialized `pose_data` indicates Manager mode, preventing unintended SAM3D pose import execution.
+
+*   **Pose Studio cache initialization**: Protected MakeHuman mesh/target/skeleton loading with a cache lock and atomic cache update to avoid partially initialized shared state.
+
+*   **VNCCS Position Control trigger toggle**: Fixed `include_trigger` so `<sks>` is only emitted when the option is enabled.
+
+# Version 0.4.25
+## Pose Studio: Pose Manager Grid and Hand Control Options
+
+### New Features
+
+*   **Hand control mode toggle**: Added a Settings option to enable or disable the newer floating hand-control interface introduced in `0.4.18`.
+    *   When disabled, hand editing returns to the pre-`0.4.18` direct-joint workflow with individual finger joints visible and selectable.
+    *   The option is persisted in `pose_data` so workflows reopen with the selected hand-control behavior.
+
+*   **Foot Size proportion control**: Added a `Foot Size` slider to Mesh Proportions.
+    *   Scales both feet live in the Pose Studio viewer.
+    *   Persists with the other mesh proportion settings.
+
+### Improvements
+
+*   **Pose Manager preview grid**: Reworked Pose Manager card layout using the same adaptive image-grid strategy as `VNCCS Character Generator`.
+    *   Preview images are measured by their real dimensions before layout.
+    *   The grid now chooses rows, columns, and cell sizes to maximize usable preview area across different pose counts and output aspect ratios.
+    *   Pose cards stay centered and scale more consistently in wide, tall, compact, and sparse layouts.
+
+*   **Settings toggle visibility**: Improved active-state styling for segmented controls in Settings so the selected option remains clearly visible against the dark background.
+
+# Version 0.4.24
+## Pose Studio: Pose Manager, Age Camera Fit, and Character Creator Sync
+
+### New Features
+
+*   **Pose Manager interface**: Added a dedicated Pose Manager mode for managing multi-pose projects from a card/grid view.
+    *   Pose cards show per-pose previews and provide faster switching, adding, and deleting poses.
+    *   Added a detail-strip workflow for editing a pose while keeping the rest of the pose set visible.
+    *   Added manager-side mesh and export controls so common body and output settings can be adjusted without returning to the full Studio layout.
+
+*   **External CharacterCreatorV2 synchronization**: Pose Studio can now detect and sync age/gender values from a `CharacterCreatorV2` node in the graph.
+    *   Supports both serialized `widget_data` and ordinary `age`/`sex`/`gender` widgets.
+    *   Registers and unregisters Pose Studio widgets as nodes are created, loaded, configured, or removed.
+    *   Applies initial values without forcing unnecessary capture updates.
+
+*   **Age camera fit**: Changing Age can now trigger an automatic camera refit so the mannequin remains framed after body-size changes.
+    *   Added model-fit zoom computation in the Pose Studio core.
+    *   Mesh parameter updates now queue and coalesce more safely before applying the age refit.
+
+### Improvements
+
+*   **Pose Manager layout refinement**: Improved card dimensions, sidebar layout, detail strip behavior, and responsive scaling for compact and large nodes.
+*   **Capture performance in manager mode**: Lightweight syncs from manager controls can skip unnecessary preview captures, reducing UI lag while editing values.
+*   **State persistence**: Pose Studio now persists the selected interface mode in `pose_data` so workflows can reopen into the expected Studio or Manager view.
+
+# Version 0.4.23
+## Security Cleanup and Compatibility Hardening
+
+### Fixes
+
+*   **Security-sensitive request cleanup**: 
+*   **Token handling cleanup**: 
+*   **Debug flag cleanup**:
+*   **Frontend security compatibility**: 
+
+# Version 0.4.22
+## SAM3D Dependency Cleanup and Installation Docs
+
+### Improvements
+
+*   **SAM3D dependency cleanup**: Removed optional SciPy/tqdm-style dependency usage from SAM 3D Body processing paths.
+    *   Face blend-shape region matching now uses the built-in NumPy fallback path directly.
+    *   SAM3D download progress now uses the lightweight internal progress wrapper without importing `tqdm`.
+    *   DINOv3 hub exports were reduced to the backbone imports used by this extension.
+
+*   **Installation guide refresh**: Updated README installation instructions with the recommended ComfyUI Manager flow plus manual `git clone` and `pip install -r requirements.txt` steps.
+
+# Version 0.4.21
+## Dependency Cleanup and Pose Library Packaging
+
+### Improvements
+
+*   **Removed `braceexpand` dependency**: Replaced the external package with an internal brace expansion helper for SAM 3D Body URL/path expansion.
+    *   Supports comma options and numeric ranges, including padded ranges and nested expansion.
+    *   Keeps SAM3D URL expansion working while reducing install friction.
+
+*   **Dependency list cleanup**: Removed `braceexpand` from both `pyproject.toml` and `requirements.txt`.
+*   **Package cleanup**: Removed bundled local user pose files from `PoseLibrary/local_user_poses` so personal/generated pose data is not shipped with the extension package.
+
+# Version 0.4.20
+## Model Manager Width Sync and Workflow Refresh
+
+### Fixes
+
+*   **Model Manager DOM width sync**: Added width synchronization for the `ModelList` DOM widget so it follows node resizing and workflow restore correctly.
+    *   Handles node creation, resize, and configure flows.
+    *   Prevents stale restored DOM widget widths from breaking the Model Manager layout.
+
+*   **Model Selector DOM width sync**: Added the same width binding for the `SelectorWidget`, improving model selector card sizing after resize or graph load.
+*   **Pose Studio workflow refresh**: Updated the bundled Klein9b Pose Studio workflow metadata/layout for the current node setup.
+
+# Version 0.4.19
+## Pose Studio: SAM 3D Body Import, Proportion Controls, and Showcase Refresh
+
+### New Features
+
+*   **Pose Image input for Pose Studio**: Added an optional `pose_image` input to the `VNCCS_PoseStudio` node.
+    *   When an image is connected, Pose Studio can run the SAM 3D Body pipeline and use the detected body pose as the source for the active Pose Studio rig.
+    *   The backend sends the detected SAM pose to the frontend and waits for the widget to apply and sync the resulting Pose Studio state before execution continues.
+    *   Pose image changes now participate in `IS_CHANGED`, so ComfyUI correctly re-executes when the connected pose reference image changes.
+
+*   **SAM 3D Body pose import and retargeting**: Expanded Pose Studio's import pipeline to handle SAM3D-style body data.
+    *   Added SAM keypoint, joint, face, hand, foot, and dense MHR joint mapping into the Pose Studio core.
+    *   Added conversion from SAM3D body data into MakeHuman/Pose Studio bone targets.
+    *   Added IK-based fitting for pelvis, torso, arms, legs, head, hands, and feet using imported SAM targets.
+    *   Added support for SAM3D JSON/image import from the Pose Studio UI path.
+
+*   **SAM debug and fitting tools**: Added dedicated controls for inspecting and tuning SAM imports.
+    *   **Show SAM Helper Skeleton** displays the imported SAM3D reference skeleton in the viewport for alignment debugging.
+    *   **Show SAM Render Mesh Overlay** displays the postprocessed SAM3D body render mesh as a translucent overlay against the Pose Studio mannequin.
+    *   SAM helper overlays are hidden during final capture so they do not leak into output images.
+
+*   **SAM-aware camera matching**: Added camera fitting logic for imported SAM poses.
+    *   Pose Studio can compute framing from SAM3D projection data, render-frame bounds, projected vertices, or fallback bbox data.
+    *   Added `cam_yaw_deg` and `cam_pitch_deg` capture parameters so imported camera angles can be represented in Pose Studio state.
+    *   Added **SAM Import: Apply Camera Angle** setting to either match the detected SAM camera angle or keep the user's current camera view and compensate via model rotation.
+
+*   **Detailed body proportion controls**: Expanded the mesh/proportion system beyond the previous broad arm/hand controls.
+    *   Added per-side upper arm length controls.
+    *   Added per-side forearm length controls.
+    *   Added per-side thigh length controls.
+    *   Added per-side shin length controls.
+    *   Added spine length control.
+    *   Preserved compatibility with older saved data that used broader `arm_length`, `upper_arm_length`, `forearm_length`, `leg_length`, `thigh_length`, or `shin_length` fields.
+
+### Improvements
+
+*   **Capture and sync reliability**: Pose Studio now stores only a lightweight `capture_id` in widget state while captured images are kept in memory and uploaded to the server-side capture cache.
+    *   This keeps workflow JSON lighter while still allowing the Python backend to recover captured images from the LRU cache during execution.
+    *   Full-capture mode now carries yaw/pitch camera parameters through pose capture, preview, and queue-time output.
+
+*   **Keep Original Lighting behavior**: The updated capture path more consistently respects `keepOriginalLighting`.
+    *   Final captures can use clean flat ambient lighting while prompt generation avoids adding synthetic lighting text.
+    *   Debug/full-capture paths restore the user's lighting state after temporary capture changes.
+
+*   **Pose Studio example workflow refresh**: Updated the bundled Pose Studio showcase workflow for the new pose-image/SAM import flow.
+    *   Added a dedicated pose-reference image input feeding Pose Studio's `pose_image`.
+    *   Updated the character image and generation path around the Pose Studio output.
+    *   Updated the workflow to newer ComfyUI frontend/core node metadata.
+
+### Credits
+
+*   **Thanks and credits to [Slimy](https://github.com/Slimy-Comfy)** for providing a great fork that made this iteration of the Pose Studio possible!.
+
+# Version 0.4.18
+## Pose Studio: Hand Interaction Pass, Camera Sync Cleanup, and Input Behavior Fixes
+
+### New Features
+
+*   **Contextual Hand Editing UI**: Hand editing was reworked from a permanent sidebar tool into an in-canvas interaction flow.
+    *   Hands can now be targeted directly from the model viewport.
+    *   The hand editor opens as a floating popover near the active hand instead of occupying the right sidebar.
+    *   Built-in hand presets were added in [web/vnccs_hand_presets.js](web/vnccs_hand_presets.js) to drive the hand shaping workflow without requiring an external hand-pose library.
+
+*   **Improved Hand Pose Controls**: The hand slider system was expanded and stabilized.
+    *   Added calibrated hand preset blending for `Spread`, `Grasp`, and per-finger controls.
+    *   Slider defaults are now derived from the actual current hand pose instead of hardcoded placeholder values, reducing the first-use snap/jump when editing a hand.
+
+### Fixes
+
+*   **Camera Preview / Capture Sync Cleanup**:
+    *   Refactored Pose Studio camera handling for clearer internal state flow.
+    *   Updated preview snapping logic to use `snapToCaptureCamera`, improving consistency between viewport framing and capture framing.
+
+*   **Direct Limb Dragging Stability**:
+    *   Added more explicit direct-drag state tracking for bone interactions.
+    *   Improved click-versus-drag handling around IK/direct manipulation so interaction state is more predictable.
+
+*   **Hand Popover Input Behavior**:
+    *   Added dedicated pointer-event handling for the floating hand popover.
+    *   Outside-click closing behavior is now safer and better isolated from other pointer interactions in the Pose Studio viewport.
+
+### Credits
+
+*   **Thanks and credits to [Slimy](https://github.com/Slimy-Comfy)** for providing a great fork that made this iteration of the Pose Studio possible!.
+
+# Version 0.4.17
+## Pose Studio: Sakura Design System and Sync Tabs
+
+### New Features
+
+*   **Arm Size and Hand Size sliders**: Two new sliders in the Character Mesh section (below Head Size).
+    *   `Arm Size` — scales the `upperarm_l` / `upperarm_r` bones, affecting the full arm length and thickness.
+    *   `Hand Size` — scales the `hand_l` / `hand_r` bones independently from arm size.
+    *   Both work client-side (no server roundtrip), persist in the workflow, and are re-applied automatically after mesh rebuilds (age/weight/etc. changes).
+
+*   **Sakura Design System**: Redesigned the entire Pose Studio node UI with the Sakura Archive premium dark-anime aesthetic.
+    *   All CSS variables are now scoped to `.vnccs-pose-studio` instead of `:root` — no style leakage to other ComfyUI tabs or extensions.
+    *   Deep dark backgrounds (`#0a0a0f`) with glassmorphic panels and translucent surfaces.
+    *   Sakura pink (`#ff8fa3`) accent with glow effects replacing the previous blue accent.
+    *   Section headers feature a luminous top highlight gradient and a left accent bar.
+    *   Slider thumbs have a sakura glow, primary buttons include a shimmer animation.
+    *   Canvas area uses a subtle sakura dot-grid background.
+    *   Loading spinner upgraded to a dual-ring sakura/lavender design.
+    *   Typography updated to Sora (UI) and JetBrains Mono (values/numbers).
+
+*   **Sync Zoom to All Tabs**: New button in the Camera section that appears only when more than one pose tab is active.
+    *   Sets the current Zoom level to all tabs simultaneously.
+    *   Automatically re-renders previews for all tabs after syncing.
+
+# Version 0.4.16
+## Pose Studio: OpenPose Import and Workflow Size Fix
+
+### New Features
+
+*   **OpenPose Import**: Import `.json` and image files (`.png`, `.jpg`, `.webp`) directly into the Pose Studio to import poses from OpenPose-compatible sources.
+    *   Supports both OpenPose JSON format (body, hand, face keypoints) and OpenPose-rendered images via keypoint extraction.
+    *   Converts OpenPose skeleton to MakeHuman bone rotations automatically.
+    *   Includes a round-trip angle validation test to verify conversion accuracy.
+    * STILL WIP, CAN BE BUGS, BROKEN JOINTS, OR JUST WRONG RESULTS. For now it works only with full body poses without heavy body rotations.
+
+### Fixes
+
+*   **Fix: "Failed to save workflow draft" with many active tabs**: Captured images (base64 PNG, ~500 KB each at 1024×1024) were being serialized into the `pose_data` widget on every sync. With many tabs this exceeded ComfyUI's workflow draft size limit. Captured images are now uploaded to a server-side LRU cache (`/vnccs/pose_captures_upload`) keyed by node ID — the widget stores only a lightweight `capture_id` string. The cache holds up to 10 entries with automatic eviction.
+
+# Version 0.4.15
+## Fixes: Pose Studio Tab State and Workflow Size
+
+*   **Fix: Frame zoom and position lost on tab switch**: When adjusting the capture frame (zoom/offset) without moving any bones, the viewer's internal `cameraParams` remained stale. On tab switch, `getPose()` saved these stale params, so returning to the tab restored the wrong frame. Fixed by always reading `exportParams` (the authoritative widget state) as the source of truth when saving a pose — in `switchTab`, `addTab`, and `syncToNode`.
+
+*   **Fix: Copy/Paste ignoring frame settings**: `copyPose` saved the pose using the potentially stale viewer-internal `cameraParams`, and `pastePose` did not restore frame zoom/offset to the widget or viewport. Both are now fixed: copy captures current `exportParams`, paste restores zoom/offset sliders and calls `snapToCaptureCamera`.
+
+*   **Fix: "Failed to save workflow draft" with 4+ poses**: Captured images (base64 PNG, ~500 KB each at 1024×1024) were being serialized into the `pose_data` widget on every sync, quickly exceeding ComfyUI's localStorage limit. Captured images are now kept only in JS memory (`poseCaptures`) and injected directly into the execution upload payload at queue time — the widget no longer stores them.
+
+*   **Fix: All poses captured with wrong frame on queue**: During full capture (`syncToNode(true)`), every pose was rendered using the global `exportParams.cam_zoom/offset` (the active tab's settings) instead of each pose's own saved `cameraParams`. Each pose is now captured with its own frame zoom and offset.
+
+# Version 0.4.14
+## Fix: Root Bone Drift on Age Change
+*   **Fix: Model floating above root bone**: When changing the AGE parameter, the mesh would shrink but the root bone stayed at the old position, causing the model to appear floating. This was caused by stale absolute IK positions (`hipBonePosition`, `ikEffectorPositions`, `poleTargetPositions`) being restored from saved pose data after skeleton rebuild. Now all saved poses are stripped of absolute position data before re-applying after a mesh parameter change.
+
+# Version 0.4.13
+## Architecture: Pose Studio Core Extraction
+*   **Decoupled Viewer Logic**: Extracted the core Three.js 3D viewer, IK solvers, and rendering logic from the ComfyUI widget into a standalone, UI-agnostic module (`vnccs_pose_studio_core.js`).
+*   **External UI Integration**: Established a strict, configurable public API for the new core module, enabling secure embedding and full pose control in external applications without relying on internal variable hacks or ComfyUI dependencies.
+*   **Strict API Contract**: Refactored the internal ComfyUI Node shell (`vnccs_pose_studio.js`) to exclusively consume the new core module via its public API getters/setters (e.g., `setSkinMode`, `setCameraParams`, `isInitialized`), completely isolating the internal rendering state from the UI application.
+
+# Version 0.4.11
+## Improvements: True Screen-Space Limb Dragging (IK)
+*   **Intuitive IK Control**: Completely overhauled the IK interaction model. You can now grab and drag limbs directly in screen-space without gizmos or modifier keys. The limb smoothly follows the mouse cursor.
+*   **FK/IK Seamless Switching**: Clicking without dragging instantly brings up the standard rotation rings (FK mode) for fine-tuning.
+*   **Unified IK Logic**: Consolidated disparate effector update methods into a single parameterized handler and extracted complex pole-target math into a reusable helper.
+*   *Credit*: This elegant interaction system was proposed and conceptualized by [DanzeluS Github](https://github.com/neurodanzelus-cmd) / [DanzeluS Reddit](https://www.reddit.com/user/DanzeluS/).
+
+# Version 0.4.10
+## Fixes: MIME Types and Layout Reliability
+*   **Fix: MIME Type Errors**: 
+    *   Moved Three.js modules to the `web` root directory.
+    *   This ensures the ComfyUI server correctly identifies them as `application/javascript`, resolving "disallowed MIME type" blocking in Firefox.
+*   **UI: Final Radar Scaling**:
+    *   Further reduced the **Positioning Menu** (Camera Radar) size to `140px`.
+    *   This prevents overflow in the 220px sidebar even when vertical scrollbars are visible.
+
+# Version 0.4.9
+## Fixes: CSP Security and Desktop Compatibility
+*   **Security: Three.js Vendoring**:
+    *   Resolved ComfyUI Content Security Policy (CSP) errors by vendoring Three.js and its extensions (`OrbitControls`, `TransformControls`) locally.
+    *   Removed external CDN dependencies (`esm.sh`), ensuring the extension works in offline and restricted environments.
+*   **Fix: Desktop Coordinate Offset**:
+    *   Fixed a critical issue in ComfyUI Desktop where control points were shifted relative to the mouse.
+    *   Removed non-standard CSS `zoom` and replaced it with a 1:1 coordinate mapping system.
+*   **UI: Compactness Refinement**:
+    *   Manually optimized the entire UI layout for space efficiency.
+    *   Reduced font sizes, sidebars (now symmetrical at 220px), and internal component paddings.
+    *   Refined the **Lighting Radar** and mannequin **Positioning Menu** to fit perfectly within the new narrow layout.
+
+# Version 0.4.7
+## Fixes: Workflow Loading and Model Updates
+*   **Critical Fix: Workflow Crash**: Resolved a `TypeError: Attempting to change configurable attribute of unconfigurable property` that occurred when loading workflows. This was caused by a conflict with ComfyUI's internal widget serialization.
+*   **Model Manager: Manual Refresh**:
+    *   The "**Check/Refresh Models**" button now correctly bypasses the server-side 60-minute cache, allowing for instant discovery of new model updates on Hugging Face.
+    *   Added immediate visual feedback (Loading state) when a manual refresh is triggered.
+
+# Version 0.4.5
+## Fixes & Improvements: Node 2.0 Stability and Rendering Quality
+*   **Rendering: Body Contours**:
+    *   Implemented a **Rim Darkening (Fresnel) Shader** for the character mannequin. This darkens the edges of the mesh based on view-space normals, ensuring body details like muscle definition and limb separation are visible even in flat white/ambient lighting modes.
+*   **Defaults: Character Type**:
+    *   Changed default skin type from "Dummy White" to "**Naked**".
+*   **Fixes: Node 2.0 Compatibility**:
+    *   Resolved an infinite node resize loop caused by layout feedback in ComfyUI's new node2.0 (Vue) frontend.
+    *   Implemented robust hiding for the `pose_data` widget compatible with both legacy LiteGraph and node2.0 modes.
+    *   Fixed a `TypeError` related to `serializeValue` redefinition when initializing the node.
+*   **Fixes: Lighting UI Persistence**:
+    *   The "**Keep Original Lighting**" button now correctly restores its visual state (toggle status and color) after a page reload.
+
+# Version 0.4.4
+## Fixes & Improvements: Smart Updates and Control Stability
+*   **Model Manager: Smart HF Updates**:
+    *   Implemented a throttled update strategy (60-minute cycle) to prevent Hugging Face rate limiting (429 errors).
+    *   Added **Hugging Face Token** support in the new Settings menu (⚙️) to significantly increase API rate limits.
+    *   Added automatic 10-minute back-off logic when rate limiting is detected.
+*   **Pose Studio: Improved Bone Selection**:
+    *   Rewrote the selection logic to use marker-based raycasting. Joint markers (yellow dots) are now prioritized over the character mesh, making them much easier to select from any angle, especially from the front.
+*   **Interface: Control Stabilizers**:
+    *   Migrated Visual Camera and Light Radar controls to **Pointer Capture**. This prevents controls from getting "stuck" or "jumping" when the mouse moves outside the node area during a drag.
+    *   Fixed a bug where the camera would jump to "Wide" distance ring when the cursor left the node boundaries; it now locks distance correctly based on proximity.
+*   **Settings: Skin Texture Selector**:
+    *   Added a new "Skin" selector in the Settings menu (⚙️). Toggle between **Dummy White**, **Naked**, and **Marked** textures instantly without rebuilding the mesh. Selection is persisted between sessions.
+*   **Lights: Default Type**:
+    *   Changed the default light type from "Point" to "**Directional**" when adding new light sources.
+*   **Fixes: Background Image**:
+    *   Fixed background image appearing as a grey area upon initial load; it now renders immediately without requiring camera movement.
+    *   Restored "Real Colors" for the background image by increasing opacity to 100% and correctly applying the sRGB color space.
+    *   **Background Persistence**: The background image is now saved within the node state and automatically restored between sessions.
+    *   **Auto-Preview**: Loading a background image now automatically triggers a model preview update to fix the camera frame and alignment.
+*   **Fixes: Node Resize Loop (node2.0)**: Fixed infinite node stretching on systems using ComfyUI's node2.0 mode, caused by a feedback loop between canvas sizing and layout measurement.
+
 # Version 0.4.2
 ## Fixes: Pose Studio Layout Stability
 *   **Eliminated Resize Loop**: Refactored the `onResize` handler to stop modifying container dimensions manually. The layout now fills the node naturally, preventing infinite growth and fluctuations while remaining perfectly synced with the Three.js viewport.

@@ -5950,6 +5950,7 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
                 reference_media_mode, one_pass_sample, seed, stage_prompts,
                 ref_image_size="match", context=None, model=None, stage_info_data1=None, stage_data=None,
                 unique_id=None, workflow_prompt=None, **kwargs):
+        standalone_stage_test = bool(kwargs.pop("_standalone_stage_test", False))
         sampling_profile = kwargs.pop("sampling_profile", "None")
         vae_tile = kwargs.pop("VAE_TILE", "default")
         latent_sample_tile = kwargs.pop("latent_sample_tile", "None：不分块")
@@ -5990,7 +5991,8 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
                 raise ValueError("AD_MinMax_Ref2_generate: stage_info_data1 does not contain a data1 first-pass latent")
 
         deferred_context = bool(
-            isinstance(stage_info, int)
+            not standalone_stage_test
+            and isinstance(stage_info, int)
             and stage_index > 0
             and motion_context_enabled
             and stage_data is None
@@ -6028,6 +6030,15 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
         if len(selected_context_latents) > 1:
             raise ValueError("AD_MinMax_Ref2_generate accepts only one context latent")
         has_selected_context = bool(selected_context_latents)
+        standalone_stage_test = bool(
+            standalone_stage_test
+            and stage_index > 0
+            and stage_data is None
+            and not has_selected_context
+        )
+        if standalone_stage_test:
+            motion_context_frames = 0
+            motion_context_enabled = False
         if not motion_context_enabled and has_selected_context:
             raise ValueError(
                 "AD_MinMax_Ref2_generate: motion_context is disabled but a LATENT media input is selected"
@@ -6125,7 +6136,7 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
             clip=clip,
             vae=vae,
             audio_vae=audio_vae,
-            _allow_empty_references=native_context is not None or deferred_context or text_only_generation,
+            _allow_empty_references=native_context is not None or deferred_context or standalone_stage_test or text_only_generation,
             _allow_context_latent=True,
             **selected_kwargs,
         )
@@ -6157,6 +6168,7 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
             "motion_context_frames": int(motion_context_frames),
             "continuation_method": continuation_method,
             "deferred_context": deferred_context,
+            "standalone_stage_test": standalone_stage_test,
             "exact_audio": exact_audio,
             "continuous_audio": continuous_audio,
             "stage_info": stage_info if isinstance(stage_info, collections.abc.Mapping) else None,
@@ -6415,8 +6427,13 @@ class AD_MinMax_Ref2(AD_MinMax_Ref2_generate):
                 ordered["stage_index"] = ("INT", {"forceInput": True})
         if "stage_index" not in ordered:
             ordered["stage_index"] = ("INT", {"forceInput": True})
+        ordered["stage_index_from_flow"] = ("BOOLEAN", {"default": False})
         optional = ordered
-        return {"required": required, "optional": optional}
+        return {
+            "required": required,
+            "optional": optional,
+            "hidden": dict(inherited.get("hidden", {})),
+        }
 
     def check_lazy_status(self, stage_prompts, prompt="", stage_index=None, **kwargs):
         # 准备节点接 0-based INT stage_index；映射回父类期望的 stage_info_data1 位置，
@@ -6428,7 +6445,21 @@ class AD_MinMax_Ref2(AD_MinMax_Ref2_generate):
     def execute(self, prompt, width, height, single_stage_time, motion_context,
                 reference_media_mode, stage_prompts,
                 ref_image_size="match", context=None, model=None,
-                stage_index=None, stage_data=None, **kwargs):
+                stage_index=None, stage_data=None, stage_index_from_flow=False, unique_id=None,
+                workflow_prompt=None, **kwargs):
+        prompt_node = (
+            workflow_prompt.get(str(unique_id), {})
+            if isinstance(workflow_prompt, collections.abc.Mapping)
+            else {}
+        )
+        prompt_inputs = prompt_node.get("inputs", {}) if isinstance(prompt_node, collections.abc.Mapping) else {}
+        stage_index_connected = isinstance(prompt_inputs.get("stage_index"), (list, tuple))
+        standalone_stage_test = bool(
+            stage_index is not None
+            and int(stage_index) > 0
+            and not stage_index_connected
+            and not stage_index_from_flow
+        )
         prepared_context, _segment_video, _merged_video, text = super().execute(
             prompt,
             width,
@@ -6445,6 +6476,9 @@ class AD_MinMax_Ref2(AD_MinMax_Ref2_generate):
             model=model,
             stage_info_data1=stage_index,
             stage_data=stage_data,
+            unique_id=unique_id,
+            workflow_prompt=workflow_prompt,
+            _standalone_stage_test=standalone_stage_test,
             **kwargs,
         )
         if not isinstance(prepared_context, collections.abc.Mapping):

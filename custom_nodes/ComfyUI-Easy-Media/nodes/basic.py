@@ -47,6 +47,7 @@ from ..utils import (
     merge_video_track_with_ffmpeg,
     canonicalize_multitrack_slot_content,
     multitrack_is_shared_reference,
+    multitrack_is_muted_image,
     multitrack_media_identity,
     multitrack_shared_task_images,
     multitrack_segments_in_window,
@@ -57,6 +58,7 @@ from ..utils import (
     prompt_override_has_frame_ranges,
     prompt_override_has_value,
     resize_image,
+    render_single_video_segment_with_ffmpeg,
     resolve_video_path,
     silence,
     trim_audio,
@@ -80,8 +82,10 @@ from ..utils.multitrack import (
     _resize_multitrack_video,
     _trim_track_audio,
     _video_stream_source,
+    multitrack_audio_lock_is_effective,
     multitrack_runtime_cache,
 )
+from ..utils.video import extract_video_audio
 
 
 # ---------------------------------------------------------------------------
@@ -682,6 +686,40 @@ def _merge_video_track(
     audio_muted: bool = False,
     resize_method: str | None = None,
 ):
+    if len(segments) == 1 and total_length > 0 and frame_rate > 0:
+        segment, video = segments[0]
+        content = segment.get("content", {})
+        if not isinstance(content, dict):
+            content = {}
+        segment_start = int(segment.get("start_frame", 0))
+        segment_end = int(segment.get("end_frame", 0))
+        origin_start = int(segment.get("origin_start_frame", segment_start))
+        if (
+            segment_start == 0
+            and segment_end == total_length
+            and resize_method is not None
+            and tuple(video.get_dimensions()) != (width, height)
+        ):
+            source = _video_stream_source(video)
+            if source is not None:
+                log_node_info(
+                    "MultiTrack Video Track",
+                    "单片段覆盖任务窗口，直接裁剪缩放",
+                )
+                rendered_path = render_single_video_segment_with_ffmpeg(
+                    source,
+                    max(0, segment_start - origin_start),
+                    total_length,
+                    frame_rate,
+                    width,
+                    height,
+                    resize_method,
+                    audio_volume_db=base_volume_db + audio_volume_db(content),
+                    audio_muted=audio_muted or audio_is_muted(content),
+                )
+                if rendered_path is not None:
+                    return InputImpl.VideoFromFile(rendered_path)
+
     file_segments: list[dict] = []
     for segment, video in segments:
         source = _video_stream_source(video)
@@ -902,6 +940,10 @@ def _build_tracks_info_and_media_outputs(
                         if not isinstance(image_item, dict):
                             continue
                         normalized_image = canonicalize_multitrack_slot_content(image_item)
+                        if multitrack_is_muted_image(normalized_image):
+                            normalized_image.pop("media_index", None)
+                            normalized_images.append(normalized_image)
+                            continue
                         panorama_view = image_item.get("panorama_view")
                         shared_cache_key = None
                         if multitrack_is_shared_reference(normalized_image):
@@ -2818,6 +2860,10 @@ class MultiTrackTaskOutput(io.ComfyNode):
         output_full_timeline = requested_index == -1
         index = max(0, requested_index)
         selected_prompt_format = str(_unwrap_list_scalar(prompt_format, "default"))
+        # Share ffmpeg-extracted audio across tracks inside the same execute
+        # call so a video referenced by many locked audio/video tracks (or by
+        # multiple iterations of the timeline loop below) decodes once.
+        video_audio_cache: dict = {}
         task_cache_key = (
             "multitrack_task_output",
             requested_index,
@@ -2924,6 +2970,10 @@ class MultiTrackTaskOutput(io.ComfyNode):
             f"segment {requested_index} / media_loading ｜ "
             f"{info.get('width', 544)}x{info.get('height', 960)}",
         ):
+            log_node_info(
+                "MultiTrack Task Output",
+                f"segment={requested_index} | 开始加载分段媒体",
+            )
             selected_images = [
                 item
                 for item in _as_list_input(preloaded_media.get("images"))
@@ -2940,6 +2990,8 @@ class MultiTrackTaskOutput(io.ComfyNode):
             for task_content, task_content_start in task_content_entries:
                 for image_info in task_content.get("images", []):
                     if not isinstance(image_info, dict):
+                        continue
+                    if multitrack_is_muted_image(image_info):
                         continue
                     shared_identity = (
                         multitrack_media_identity(image_info)
@@ -3033,7 +3085,13 @@ class MultiTrackTaskOutput(io.ComfyNode):
                     if not isinstance(track, dict):
                         continue
                     media_index = _track_output_index(track)
-                    if track.get("audio_locked") is True:
+                    if multitrack_audio_lock_is_effective(
+                        info,
+                        track,
+                        0,
+                        _multitrack_timeline_end(info),
+                        has_solo_track=has_solo_track,
+                    ):
                         lock_priority = 2 if track.get("type") == "audio" else 1
                         if (
                             track.get("type") == "audio"
@@ -3053,7 +3111,10 @@ class MultiTrackTaskOutput(io.ComfyNode):
                             and video_items[media_index] is not None
                             and lock_priority > locked_audio_priority
                         ):
-                            video_audio = video_items[media_index].get_components().audio
+                            video_audio = extract_video_audio(
+                                video_items[media_index],
+                                cache=video_audio_cache,
+                            )
                             if isinstance(video_audio, dict):
                                 locked_audio = video_audio
                                 locked_audio_priority = lock_priority
@@ -3071,10 +3132,6 @@ class MultiTrackTaskOutput(io.ComfyNode):
                     continue
                 media_index = _track_output_index(track)
                 shared_segment = _shared_reference_segment(track) if not output_full_timeline else None
-                locked_audio_track = (
-                    track.get("type") in {"audio", "video"}
-                    and track.get("audio_locked") is True
-                )
                 if shared_segment is not None:
                     shared_content = shared_segment.get("content", {})
                     if track.get("type") == "audio":
@@ -3140,6 +3197,18 @@ class MultiTrackTaskOutput(io.ComfyNode):
                     )
                     if track_media_duration_frames is not None and track_media_duration_frames <= 0:
                         continue
+                lock_duration = (
+                    track_media_duration_frames
+                    if is_minimax
+                    else duration_frames
+                )
+                locked_audio_track = multitrack_audio_lock_is_effective(
+                    info,
+                    track,
+                    start_frame,
+                    start_frame + max(0, int(lock_duration or 0)),
+                    has_solo_track=has_solo_track,
+                )
                 track_media_deferred = (
                     (track.get("type") == "audio" and deferred_audio)
                     or (track.get("type") == "video" and deferred_video)
@@ -3202,6 +3271,11 @@ class MultiTrackTaskOutput(io.ComfyNode):
                         resolved_video_segments.append((local_segment, resolved_video))
                     has_video = has_video or bool(local_segments)
                     if not is_minimax or resolved_video_segments:
+                        log_node_info(
+                            "MultiTrack Task Output",
+                            f"segment={requested_index} | 开始合成视频轨 "
+                            f"({len(resolved_video_segments)} 个片段)",
+                        )
                         merged_video = _merge_video_track(
                             resolved_video_segments,
                             local_duration,
@@ -3214,7 +3288,14 @@ class MultiTrackTaskOutput(io.ComfyNode):
                         )
                         selected_video.append(merged_video)
                         if locked_audio_priority < 1 and locked_audio_track:
-                            video_audio = merged_video.get_components().audio
+                            log_node_info(
+                                "MultiTrack Task Output",
+                                f"segment={requested_index} | 开始提取锁定视频原声",
+                            )
+                            video_audio = extract_video_audio(
+                                merged_video,
+                                cache=video_audio_cache,
+                            )
                             if isinstance(video_audio, dict):
                                 locked_audio = _trim_track_audio(
                                     video_audio,
@@ -3240,7 +3321,10 @@ class MultiTrackTaskOutput(io.ComfyNode):
                 elif track.get("type") == "video" and media_index is not None and 0 <= media_index < len(video_items):
                     track_video = video_items[media_index]
                     if locked_audio_priority < 1 and locked_audio_track:
-                        video_audio = track_video.get_components().audio
+                        video_audio = extract_video_audio(
+                            track_video,
+                            cache=video_audio_cache,
+                        )
                         if isinstance(video_audio, dict):
                             locked_audio = _trim_track_audio(
                                 video_audio,
@@ -4196,7 +4280,14 @@ class EasyMinimaxH3AudioLock(io.ComfyNode):
                     "latent", tooltip="MiniMax H3 joint audio/video latent."
                 ),
                 io.Vae.Input("audio_vae", tooltip="MiniMax H3 audio VAE."),
-                io.Audio.Input("audio", tooltip="Audio to lock into the H3 latent."),
+                io.Audio.Input(
+                    "audio",
+                    optional=True,
+                    tooltip=(
+                        "Audio to lock into the H3 latent. Missing audio leaves "
+                        "the generated audio latent unchanged."
+                    ),
+                ),
                 io.Float.Input(
                     "remix_strength",
                     default=1.0,
@@ -4237,13 +4328,15 @@ class EasyMinimaxH3AudioLock(io.ComfyNode):
         cls,
         latent: dict,
         audio_vae: object,
-        audio: dict,
+        audio: dict | None = None,
         remix_strength: float = 1.0,
         short_audio_mode: str = "silence",
         prepend_frames: int = 0,
         frame_rate: float = 24.0,
     ) -> io.NodeOutput:
         selected_latent = latent
+        if audio is None:
+            return io.NodeOutput(selected_latent)
         selected_audio_vae = audio_vae
         selected_strength = float(remix_strength)
         selected_short_audio_mode = str(short_audio_mode)

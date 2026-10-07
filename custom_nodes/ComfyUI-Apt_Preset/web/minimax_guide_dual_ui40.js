@@ -3,7 +3,7 @@ import { api } from "../../scripts/api.js";
 
 // AD MiniMax Guide frontend.
 
-const AD_GUIDE_UI_VERSION = "2026.09.25-guide-v157-plain-prompt-serialization";
+const AD_GUIDE_UI_VERSION = "2026.09.30-guide-v161-stage-flow-init";
 globalThis.__AD_MINIMAX_GUIDE_UI41_MODULE__ = true;
 console.info(`[ADMiniMaxGuide] frontend ${AD_GUIDE_UI_VERSION} loaded`);
 const NODE_CLASS = "AD_MiniMax_guide";
@@ -962,6 +962,35 @@ function getExclusiveMediaEditor(node) {
         if (isMediaEditorNode(relayNode)) return relayNode;
     }
     return null;
+}
+
+function getControllingMediaEditor(node) {
+    return getExclusiveMediaEditor(node);
+}
+
+function hasMediaEditorPrompt(node) {
+    if (!isMediaEditorNode(node)) return false;
+    if (isFullMediaEditorNode(node) && String(mediaEditorCommonPrefix(node) || "").trim()) return true;
+    const docs = node.properties?.[STAGE_PROMPT_DOCS_PROP];
+    return Array.isArray(docs) && docs.some((doc) => String(doc?.text || "").trim());
+}
+
+function setWidgetGrayed(widget, grayed) {
+    if (!widget) return;
+    widget.disabled = grayed;
+    if (widget._state) widget._state.disabled = grayed;
+    const element = widget.inputEl || widget.element;
+    if (element && "disabled" in element) element.disabled = grayed;
+}
+
+function syncMediaEditorControlState(node) {
+    const editor = getControllingMediaEditor(node);
+    if (isRef2GenerateTarget(node)) {
+        const controlsParameters = isFullMediaEditorNode(editor) || hasMediaEditorPrompt(editor);
+        setWidgetGrayed(getWidget(node, "motion_context"), controlsParameters);
+        setWidgetGrayed(getWidget(node, "single_stage_time"), controlsParameters);
+    }
+    return editor;
 }
 
 function removeRelayFromTarget(targetNode, relayId, removeMentions = true) {
@@ -2125,6 +2154,7 @@ function patchGraphToPrompt() {
                 // 同时检查前端 input.link 和序列化数据（连线在序列化里是 [source_id, slot] 数组）
                 const stageIdxInput = node.inputs?.find((input) => String(input?.name || "") === "stage_index");
                 const serializedStageLink = Array.isArray(promptNode.inputs.stage_index) ? promptNode.inputs.stage_index : null;
+                if (isRef2PrepareTarget(node)) promptNode.inputs.stage_index_from_flow = false;
                 if (isRef2PrepareTarget(node) && serializedStageLink) {
                     const stageSource = app.graph?.getNodeById?.(Number(serializedStageLink[0]));
                     if (String(stageSource?.comfyClass || stageSource?.type || "") === FLOW_STAGE_BEGIN_CLASS) {
@@ -2134,6 +2164,7 @@ function patchGraphToPrompt() {
                             // Remove flow_stage_begin from the prepare node's cache ancestry. The server-side
                             // stage scheduler updates this literal for each automatically queued stage.
                             promptNode.inputs.stage_index = zeroBasedStage;
+                            promptNode.inputs.stage_index_from_flow = true;
                             const boundedStage = Math.min(Math.max(0, docs.length - 1), zeroBasedStage);
                             node.properties[STAGE_PROMPT_INDEX_PROP] = boundedStage;
                             node.properties[PROMPT_DOC_PROP] = docs[boundedStage];
@@ -2141,7 +2172,10 @@ function patchGraphToPrompt() {
                         }
                     }
                 }
-                const stageIdxExternallyLinked = Boolean(stageIdxInput?.link) && Array.isArray(promptNode.inputs.stage_index);
+                const stageIdxExternallyLinked = Boolean(stageIdxInput?.link) && Boolean(serializedStageLink);
+                if (isRef2PrepareTarget(node) && !stageIdxExternallyLinked) {
+                    promptNode.inputs.stage_index = Math.max(0, Number(node.properties?.[STAGE_PROMPT_INDEX_PROP]) || 0);
+                }
                 if (isGuideTarget(node)) {
                     if (!stageIdxExternallyLinked) {
                         promptNode.inputs.stage_index = Math.max(1, Math.min(docs.length, Number(node.properties?.[STAGE_PROMPT_INDEX_PROP]) + 1 || 1));
@@ -2638,6 +2672,7 @@ function watchMediaSourceNode(node) {
         node.onRemoved = function onRemovedH3MediaSource() {
             for (const target of app.graph?._nodes || []) {
                 if (!isTarget(target)) continue;
+                if (isMediaRelayNode(this)) removeRelayFromTarget(target, this.id);
                 const links = ensureLinks(target);
                 for (let index = links.length - 1; index >= 0; index -= 1) {
                     if (Number(links[index]?.source_id) === Number(this.id)) removeVirtualLink(target, index);
@@ -3113,7 +3148,9 @@ function importBatchPrompts(node, link) {
     node.setDirtyCanvas?.(true, true);
     app.graph?.afterChange?.();
     app.graph?.change?.();
-    if (isMediaEditorNode(node)) window.dispatchEvent(new CustomEvent(MEDIA_RELAY_EVENT, { detail: { nodeId: Number(node.id) } }));
+    if (isMediaEditorNode(node)) window.dispatchEvent(new CustomEvent(MEDIA_RELAY_EVENT, {
+        detail: { nodeId: Number(node.id), autoTextStageCount: docs.length },
+    }));
     return docs.length;
 }
 
@@ -3373,6 +3410,13 @@ function createImportedResourceNode(targetNode, mediaType, value, index, sourceN
 }
 
 async function importMaterialFiles(node, files) {
+    const controller = getControllingMediaEditor(node);
+    if (controller) {
+        const controllerName = isSimpleMediaLibraryNode(controller) ? MEDIA_RELAY_CLASS : MEDIA_EDITOR_CLASS;
+        throw new Error(ZH_BROWSER
+            ? `素材已由 ${controllerName} 接管，请在来源节点中导入。`
+            : `Materials are controlled by ${controllerName}. Import them in the source node.`);
+    }
     const owner = materialImportOwner(node);
     const accepted = Array.from(files || []).map((file) => ({ file, type: selectedFileMediaType(file) })).filter((item) => item.type);
     if (!accepted.length) throw new Error("没有选择受支持的图片、视频、音频或 TXT 文件。");
@@ -3476,6 +3520,22 @@ function createMaterialFolderCard(node) {
 function refreshMaterialTray(node, suppliedOptions = null) {
     const tray = node?.__adGuideMaterialTray;
     if (!tray) return;
+    const controller = syncMediaEditorControlState(node);
+    const editorControlled = Boolean(controller);
+    tray.classList.toggle("is-media-editor-controlled", editorControlled);
+    tray.setAttribute("aria-disabled", String(editorControlled));
+    if (editorControlled) {
+        tray.replaceChildren();
+        const controlled = document.createElement("div");
+        controlled.className = "ad-guide-material-controlled";
+        const controllerName = isSimpleMediaLibraryNode(controller) ? MEDIA_RELAY_CLASS : MEDIA_EDITOR_CLASS;
+        controlled.textContent = ZH_BROWSER
+            ? `${controllerName} 已接管素材`
+            : `Materials controlled by ${controllerName}`;
+        tray.append(controlled);
+        resizeMaterialTray(node, 1);
+        return;
+    }
     const filenameLabels = usesMediaEditorFilenameLabels(node);
     if (node.__adMediaEditorNameToggle) node.__adMediaEditorNameToggle.checked = filenameLabels;
     if (node.__adMediaEditorNameModeText) node.__adMediaEditorNameModeText.textContent = filenameLabels ? "原名" : "编号";
@@ -4359,6 +4419,13 @@ function removeMediaEditorRow(node) {
 function syncMediaEditorPromptsToTarget(editorNode, targetNode) {
     if (!isMediaEditorNode(editorNode) || !isStagePromptTarget(targetNode)) return;
     if (editorNode.__adGuideEditor) syncPromptFromEditor(editorNode, false);
+    if (editorNode.properties?.[MEDIA_EDITOR_UNIFIED_MOTION_PROP]) {
+        setConfiguredWidgetValue(targetNode, "motion_context", canonicalMotionContext(editorNode.properties[MEDIA_EDITOR_MOTION_PROP]));
+    }
+    if (editorNode.properties?.[MEDIA_EDITOR_UNIFIED_TIME_PROP]) {
+        setConfiguredWidgetValue(targetNode, "single_stage_time", normalizeStageTime(editorNode.properties[MEDIA_EDITOR_TIME_PROP]));
+    }
+    if (isSimpleMediaLibraryNode(editorNode) && !hasMediaEditorPrompt(editorNode)) return;
     const commonPrefix = mediaEditorCommonPrefix(editorNode);
     const docs = ensureStagePromptDocs(editorNode).map((doc) => promptDocWithCommonPrefix(doc, commonPrefix));
     const index = Math.max(0, Math.min(docs.length - 1, Number(targetNode.properties?.[STAGE_PROMPT_INDEX_PROP]) || 0));
@@ -4366,12 +4433,6 @@ function syncMediaEditorPromptsToTarget(editorNode, targetNode) {
     targetNode.properties[STAGE_PROMPT_DOCS_PROP] = docs;
     targetNode.properties[STAGE_PROMPT_INDEX_PROP] = index;
     targetNode.properties[PROMPT_DOC_PROP] = docs[index];
-    if (editorNode.properties?.[MEDIA_EDITOR_UNIFIED_MOTION_PROP]) {
-        setConfiguredWidgetValue(targetNode, "motion_context", canonicalMotionContext(editorNode.properties[MEDIA_EDITOR_MOTION_PROP]));
-    }
-    if (editorNode.properties?.[MEDIA_EDITOR_UNIFIED_TIME_PROP]) {
-        setConfiguredWidgetValue(targetNode, "single_stage_time", normalizeStageTime(editorNode.properties[MEDIA_EDITOR_TIME_PROP]));
-    }
     setConfiguredWidgetValue(targetNode, "prompt", docs[index].text);
     updateStagePromptsWidget(targetNode);
     renderEditorFromNode(targetNode, true);
@@ -4425,22 +4486,16 @@ function stagePromptMapping(node) {
     return [total, mapping].filter(Boolean).join("  ｜  ");
 }
 
-function syncFlowStageTotal(node, total) {
+function initializeFlowStageTotal(node, total, force = false) {
     if (!getWidget(node, "single_stage_time")) return;
     node.properties ||= {};
     const input = (node.inputs || []).find((item) => ["stage_info", "stage_info_data1", "stage_index"].includes(String(item?.name || "")));
-    if (input?.link == null) {
-        delete node.properties[FLOW_STAGE_TOTAL_INITIALIZED_PROP];
-        return;
-    }
+    if (input?.link == null) return;
     const graph = node.graph || app.graph;
     const link = graphLinkValues(graph).find((item) => String(item?.id) === String(input.link));
     const source = link ? graph?.getNodeById?.(Number(link.origin_id)) : null;
-    if (String(source?.comfyClass || source?.type || "") !== FLOW_STAGE_BEGIN_CLASS) {
-        delete node.properties[FLOW_STAGE_TOTAL_INITIALIZED_PROP];
-        return;
-    }
-    if (node.properties[FLOW_STAGE_TOTAL_INITIALIZED_PROP]) return;
+    if (String(source?.comfyClass || source?.type || "") !== FLOW_STAGE_BEGIN_CLASS) return;
+    if (!force && node.properties[FLOW_STAGE_TOTAL_INITIALIZED_PROP]) return;
     const widget = getWidget(source, "total");
     if (!widget) return;
     node.properties[FLOW_STAGE_TOTAL_INITIALIZED_PROP] = true;
@@ -4449,11 +4504,12 @@ function syncFlowStageTotal(node, total) {
         if (widget._state) widget._state.value = total;
     }
     const stageIndex = getWidget(source, "stage_index");
-    if (stageIndex && Number(stageIndex.value) > total) {
-        stageIndex.value = total;
-        if (stageIndex._state) stageIndex._state.value = total;
+    if (stageIndex && Number(stageIndex.value) !== 0) {
+        stageIndex.value = 0;
+        if (stageIndex._state) stageIndex._state.value = 0;
     }
     source.setDirtyCanvas?.(true, true);
+    app.graph?.change?.();
 }
 
 function updateStagePromptBar(node) {
@@ -4484,7 +4540,6 @@ function updateStagePromptBar(node) {
             if (stageIndex._state) stageIndex._state.value = stageIndex.value;
         }
     }
-    syncFlowStageTotal(node, docs.length);
     updateStagePromptsWidget(node);
 }
 
@@ -6679,7 +6734,7 @@ function pruneTransportInputs(nodeData) {
     const optional = nodeData?.input?.optional;
     if (!optional) return;
     for (const name of Object.keys(optional)) {
-        if (/^media_\d+$/.test(name) || /^media_type_\d+$/.test(name) || /^stage_text_\d+$/.test(name)) delete optional[name];
+        if (/^media_\d+$/.test(name) || /^media_type_\d+$/.test(name) || /^stage_text_\d+$/.test(name) || name === "stage_index_from_flow") delete optional[name];
     }
 }
 
@@ -6692,7 +6747,7 @@ function pruneTransportNodeInstance(node) {
         changed = true;
     }
     if (Array.isArray(node.widgets)) {
-        const transportWidgets = node.widgets.filter((widget) => /^media_type_\d+$/.test(String(widget?.name || "")));
+        const transportWidgets = node.widgets.filter((widget) => /^media_type_\d+$/.test(String(widget?.name || "")) || String(widget?.name || "") === "stage_index_from_flow");
         if (transportWidgets.length) {
             for (const widget of transportWidgets) {
                 widget.inputEl?.remove?.();
@@ -7768,12 +7823,12 @@ function installNode(nodeType, nodeData) {
             scheduleNativeMediaConnectionConversion(this, inputIndex, linkInfo);
         }
         if (["stage_info", "stage_info_data", "stage_info_data1", "stage_index"].includes(String(input?.name || ""))) {
-            this.properties ||= {};
             updateStagePromptBar(this);
             if (!connected) {
+                this.properties ||= {};
                 delete this.properties[FLOW_STAGE_TOTAL_INITIALIZED_PROP];
             } else {
-                setTimeout(() => syncFlowStageTotal(this, ensureStagePromptDocs(this).length), 0);
+                setTimeout(() => initializeFlowStageTotal(this, ensureStagePromptDocs(this).length), 0);
             }
         }
         return result;
@@ -8164,6 +8219,7 @@ function install() {
         }
         const relayId = Number(event?.detail?.nodeId);
         if (!Number.isFinite(relayId)) return;
+        const autoTextStageCount = Number(event?.detail?.autoTextStageCount);
         const relayNode = app.graph?.getNodeById?.(relayId) || { id: relayId };
         if (isMediaEditorNode(relayNode) && !event?.detail?.promptsOnly) {
             normalizeLinks(relayNode);
@@ -8173,6 +8229,9 @@ function install() {
         for (const target of app.graph?._nodes || []) {
             if (!isTarget(target) || !mediaRelayIds(target).some((value) => Number(value) === relayId)) continue;
             syncMediaRelayToTarget(target, relayNode, Boolean(event?.detail?.removed));
+            if (isRef2PrepareTarget(target) && Number.isInteger(autoTextStageCount) && autoTextStageCount > 0) {
+                initializeFlowStageTotal(target, autoTextStageCount, true);
+            }
         }
     });
     for (const delay of [0, 100, 500, 1200]) setTimeout(() => patchCanvas(), delay);
@@ -8203,6 +8262,14 @@ function install() {
         color: var(--ad-guide-native-widget-muted, rgba(255,255,255,.42));
         font-family: Consolas, "Courier New", monospace; font-size: var(--ad-guide-native-widget-text-size, var(--comfy-textarea-font-size, 12px));
         font-weight: 400; line-height: normal; text-align: left; white-space: nowrap;
+      }
+      .ad-guide-material-tray.is-media-editor-controlled {
+        pointer-events: none; opacity: .42; filter: grayscale(1);
+      }
+      .ad-guide-material-controlled {
+        display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; box-sizing: border-box;
+        color: var(--ad-guide-native-widget-muted, rgba(255,255,255,.42));
+        font: 12px/1.4 system-ui, sans-serif; text-align: center;
       }
       .ad-guide-material-card {
         position: relative; display: grid; grid-template-rows: 42px 15px; flex: 0 0 54px; width: 54px; min-width: 54px; height: 62px; padding: 2px;

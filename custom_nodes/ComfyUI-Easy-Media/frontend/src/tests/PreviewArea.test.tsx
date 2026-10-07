@@ -105,6 +105,7 @@ function addActiveTaskTrack(data: TrackData): void {
 describe('PreviewArea', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
     vi.stubGlobal('ResizeObserver', class {
       observe() {}
       unobserve() {}
@@ -115,6 +116,7 @@ describe('PreviewArea', () => {
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
@@ -539,6 +541,7 @@ describe('PreviewArea', () => {
     expect(screen.getByRole('img', { name: 'second.png' }).className).toContain('w-auto')
     expect(screen.getByTestId('task-preview-image-first').className).toContain('h-40')
     expect(screen.getByTestId('task-preview-image-first').className).toContain('group/task-image')
+    expect(screen.getByTestId('task-preview-image-first').className).not.toContain('container-type')
     expect(screen.getByTestId('task-preview-image-second').className).toContain('h-40')
     expect(screen.getByTestId('panorama-image-preview-first').className).toContain('aspect-video')
     expect(screen.queryByLabelText('720° panorama preview')).toBeNull()
@@ -825,6 +828,27 @@ describe('PreviewArea', () => {
     expect(screen.queryByTestId('task-continuity-mode-select')).toBeNull()
   })
 
+  it('hides continuity for an active passthrough task', () => {
+    const { data } = trackData()
+    addActiveTaskTrack(data)
+    data.tracks[0].segments[1].content.task_mode = 'passthrough'
+    render(
+      <PreviewArea
+        data={data}
+        currentTime={36}
+        selectedSegment={null}
+        isPlaying={false}
+        node={{ widgets: [{ name: 'format', value: 'MiniMax' }] }}
+        onGlobalSettingsChange={vi.fn()}
+        onSelectedSegmentContentChange={vi.fn()}
+        onTrackSegmentsContentChange={vi.fn()}
+        onSelectedSegmentDurationChange={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('task-mode-select').textContent).toContain('Passthrough')
+    expect(screen.queryByTestId('task-continuity-mode-select')).toBeNull()
+  })
+
   it('shows an editable active task prompt placeholder and toggles image/video layout', () => {
     const { data } = trackData()
     data.tracks[0].segments[0].end_frame = 48
@@ -1008,8 +1032,9 @@ describe('PreviewArea', () => {
     const deleteButton = screen.getByRole('button', { name: 'Delete image first.png' })
     expect(firstImage.contains(deleteButton)).toBe(true)
     expect(deleteButton.parentElement?.className).toContain('group-hover/task-image:opacity-100')
-    expect(deleteButton.parentElement?.className).toContain('right-1')
-    expect(deleteButton.className).toContain('h-5')
+    expect(deleteButton.parentElement?.className).toContain('right-0')
+    expect(deleteButton.parentElement?.className).toContain('flex')
+    expect(deleteButton.style.width).toBe('18px')
     expect(deleteButton.className).toContain('text-destructive')
 
     fireEvent.click(deleteButton)
@@ -1018,6 +1043,42 @@ describe('PreviewArea', () => {
       segmentId: 'active-task',
       patch: {
         images: [expect.objectContaining({ id: 'second' })],
+      },
+    }])
+  })
+
+  it('bypasses an active task image from the global preview', () => {
+    const { data } = trackData()
+    addActiveTaskTrack(data)
+    const onTrackSegmentsContentChange = vi.fn()
+
+    render(
+      <PreviewArea
+        data={data}
+        currentTime={36}
+        selectedSegment={null}
+        isPlaying={false}
+        node={{ widgets: [] }}
+        onGlobalSettingsChange={vi.fn()}
+        onSelectedSegmentContentChange={vi.fn()}
+        onTrackSegmentsContentChange={onTrackSegmentsContentChange}
+        onSelectedSegmentDurationChange={vi.fn()}
+      />,
+    )
+
+    const muteButton = screen.getByTestId('task-preview-image-muted-first')
+    expect(muteButton.textContent).toBe('M')
+    expect(muteButton.parentElement?.className).toContain('right-0')
+    expect(muteButton.parentElement?.className).toContain('top-1')
+    fireEvent.click(muteButton)
+
+    expect(onTrackSegmentsContentChange).toHaveBeenCalledWith([{
+      segmentId: 'active-task',
+      patch: {
+        images: [
+          expect.objectContaining({ id: 'first', muted: true }),
+          expect.objectContaining({ id: 'second' }),
+        ],
       },
     }])
   })

@@ -1,5 +1,31 @@
 # ComfyUI-RMBG Update Log
 
+## V3.2.0 (2026/09/30)
+### New Features & Model Upgrades
+<img width="800" alt="sm3" src="https://github.com/user-attachments/assets/e01201e2-2871-4a7e-bbbc-2e2930cb2752" />
+
+- **SAM3 Multiplex Upgrade**: Upgraded to the new SAM3 Multiplex node with native support for `safetensors` format models (`sam3.safetensors`, `sam3.1_multiplex_fp16.safetensors`).
+- **Instant VRAM Release (`unload_model`)**: Added an optional `unload_model` toggle across all nodes (`RMBG`, `BiRefNet`, `SAM2`, `SAM3`, `Segment`, `SDMatte`, `YOLOv8`, `LamaRemover`, etc.) to instantly free up GPU memory after execution.
+- **Apple Silicon (MPS) Acceleration**: Added native GPU acceleration support for macOS users across segmentation nodes.
+
+### New Nodes
+- Added `Resolution Selector` node: Pick an aspect ratio and a target megapixel count, and it calculates width and height for you (rounded to your chosen multiple), then outputs an empty latent - so you no longer need to do the math or reach for a separate Empty Latent Image node.
+- Added `Image Compare View` node: An interactive compare view rendered right on the node canvas. Drag the wipe line left/right or up/down, blend two images with adjustable opacity, view a pixel-difference map, or switch between side-by-side and highlight-diff modes. It also outputs a difference mask for further processing. (The original `Side By Side Compare` node is unchanged and still there for labeled multi-image collages.)
+
+<img width="800" alt="new_node" src="https://github.com/user-attachments/assets/9b165789-a291-4df0-a147-67cca8011262" />
+
+### Performance & Startup Speed
+- **Ultra-Fast ComfyUI Startup**: Drastically optimized startup loading time, reducing node registration scan time from ~15s to <0.1s. ([#183](https://github.com/1038lab/ComfyUI-RMBG/pull/183))
+
+### UI Improvements
+- **Modern HSV Color Picker**: Revamped the COLORCODE widget with a custom HSV palette panel and real-time live preview for ComfyUI Vue Node 2.0. ([#204](https://github.com/1038lab/ComfyUI-RMBG/pull/204))
+
+### Bug Fixes & Stability
+- **Transformers 5.x Compatibility**: Fixed compatibility crashes across RMBG-2.0, SAM, SAM2, and GroundingDINO backbones when running on newer `transformers` versions. ([#194](https://github.com/1038lab/ComfyUI-RMBG/pull/194), [#207](https://github.com/1038lab/ComfyUI-RMBG/issues/207))
+- **RMBG Batch Processing Stability**: Enhanced batch inference reliability and resolved image dimension mismatch issues. ([#202](https://github.com/1038lab/ComfyUI-RMBG/pull/202))
+- **SDMatte Node Resilience**: Resolved crashes on unmasked inputs with automatic fallback and improved multi-shape mask handling.
+- **ImageCrop & SAM3 Conflicts**: Fixed tensor dimension errors in `ImageCrop` when splitting and resolved naming conflicts with other SAM3 custom nodes. ([#206](https://github.com/1038lab/ComfyUI-RMBG/issues/206), [#209](https://github.com/1038lab/ComfyUI-RMBG/issues/209))
+
 ## V3.1.0 (2026/07/21)  
 ### New Model
 - Added `Lucida` model to BiRefNet node

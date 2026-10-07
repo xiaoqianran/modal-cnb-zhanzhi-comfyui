@@ -15,6 +15,7 @@ import { HistoryCacheService, TagCacheService } from './services/cache.js';
 import { imageCaption, ImageCaption } from './modules/imageCaption.js';
 import { nodeHelpTranslator } from './modules/nodeHelpTranslator.js';
 import { nodeMountService, RENDER_MODE } from './services/NodeMountService.js';
+import { tUI } from "./utils/uiI18n.js";
 import './node/captionFrame.js'; // 导入视频手动抽帧功能
 
 
@@ -70,7 +71,7 @@ app.registerExtension({
             });
 
             // 注册设置选项
-            registerSettings();
+            await registerSettings();
 
             // 初始化自动翻译拦截器（独立于提示词小助手）
 
@@ -159,6 +160,23 @@ app.registerExtension({
 
         // 暴露 _injectUniversalHooks 供外部使用
         app.registerExtension._injectUniversalHooks = this._injectUniversalHooks.bind(this);
+
+        // --- 监听后端警告事件 (如帧数截断) ---
+        app.api.addEventListener("prompt_assistant.warning", ({ detail }) => {
+            if (detail?.type === "frame_truncated") {
+                const summary = tUI("帧数已截断", "⚠️ Frames Truncated");
+                const detailMsg = tUI("帧数截断详情", "Model supports max {max} frames, {truncated} frame(s) ignored")
+                    .replace("{max}", detail.max_images)
+                    .replace("{truncated}", detail.truncated);
+                
+                app.extensionManager?.toast?.add({
+                    severity: "warn",
+                    summary: summary,
+                    detail: detailMsg,
+                    life: 8000,
+                });
+            }
+        });
     },
 
     /**
@@ -179,6 +197,9 @@ app.registerExtension({
             writable: true,
             configurable: true
         };
+        
+        // 备份以便调试恢复
+        window.__PA_ORIG_GRAPH_DESC__ = originalDescriptor;
 
         // 保存原始值
         let _graphValue = app.canvas.graph;
@@ -293,6 +314,9 @@ app.registerExtension({
 
         // 【新增】如果需要重置标记（子图切换场景），立即扫描现有节点
         if (resetFlags) {
+            // 切换图时，先清理当前 UI 实例（不清理缓存），防止 ID 冲突的残留
+            promptAssistant.cleanup(null, true);
+
             const isVueMode = typeof LiteGraph !== 'undefined' && LiteGraph.vueNodesMode === true;
             const delay = isVueMode ? 300 : 100;
 
@@ -313,7 +337,8 @@ app.registerExtension({
                 });
 
                 if (nodes.length > 0) {
-                    logger.debug(`[graphSwitch] 自动扫描完成 | 节点数: ${nodes.length}`);
+                    const gId = graph.id || graph._workflow_id || 'main';
+                    logger.debug(`[graphSwitch] 自动扫描完成 | 节点数: ${nodes.length} | Graph: ${gId}`);
                 }
             }, delay);
         }
@@ -358,7 +383,7 @@ app.registerExtension({
 
     // ---其他方法保持不变---
     async _setupOtherMethods() {
-
+        const self = this;
         // 仅保留工作流ID识别功能，不处理工作流切换事件
         try {
             const LGraph = app.graph.constructor;
@@ -392,7 +417,7 @@ app.registerExtension({
                         if (app.graph && app.graph._nodes) {
                             app.graph._nodes.forEach(node => {
                                 if (node && node.id !== -1) {
-                                    this._handleNodeActive(node, { delay: false });
+                                    self._handleNodeActive(node, { delay: false });
                                 }
                             });
                         }

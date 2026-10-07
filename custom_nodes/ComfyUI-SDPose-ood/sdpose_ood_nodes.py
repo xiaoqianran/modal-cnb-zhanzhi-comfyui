@@ -387,7 +387,8 @@ def restore_keypoints_to_original(keypoints, crop_info, input_size, original_siz
     keypoints_restored[:, 1] = keypoints[:, 1] * scale_y + y1
     return keypoints_restored
 
-def convert_to_loader_json(all_keypoints, all_scores, image_width, image_height, keypoint_scheme="body", threshold=0.3):
+def convert_to_loader_json(all_keypoints, all_scores, image_width, image_height, keypoint_scheme="body", threshold=0.3, enable_filter=True):
+
     """
     将关键点转换为编辑器可读的 "Loader" JSON 格式 (OpenPose-18 body only)。
     无论输入是 Body (17点) 还是 WholeBody (134点)，都统一输出为 OpenPose 18点格式。
@@ -436,7 +437,7 @@ def convert_to_loader_json(all_keypoints, all_scores, image_width, image_height,
             # 3. 扁平化 [x, y, score]
             for i in range(18):
                 score = float(op_scores[i])
-                if score < threshold:
+                if enable_filter and score < threshold:
                     pose_kpts_18.extend([0.0, 0.0, 0.0])
                 else:
                     pose_kpts_18.extend([float(op_keypoints[i, 0]), float(op_keypoints[i, 1]), score])
@@ -450,7 +451,7 @@ def convert_to_loader_json(all_keypoints, all_scores, image_width, image_height,
                 
             for i in range(18):
                 score = float(scores[i])
-                if score < threshold:
+                if enable_filter and score < threshold:
                     pose_kpts_18.extend([0.0, 0.0, 0.0])
                 else:
                     pose_kpts_18.extend([float(keypoints[i, 0]), float(keypoints[i, 1]), score])
@@ -527,29 +528,32 @@ def convert_to_openpose_json(all_keypoints, all_scores, image_width, image_heigh
                 for i in range(18, 24):
                     foot_kpts.extend(format_kpt(keypoints[i, 0], keypoints[i, 1], scores[i]))
 
-            # 3. Face (24-92) -> 原生 68 点
+            # 3. Face (24-92) -> 70 点 (68 面部标志 + 双眼)
             face_kpts = []
             if len(keypoints) >= 92:
+                # 68 面部标志点
                 for i in range(24, 92):
                     face_kpts.extend(format_kpt(keypoints[i, 0], keypoints[i, 1], scores[i]))
+                # 添加右眼 (body[14]) 和左眼 (body[15])
+                face_kpts.extend(format_kpt(keypoints[14, 0], keypoints[14, 1], scores[14]))
+                face_kpts.extend(format_kpt(keypoints[15, 0], keypoints[15, 1], scores[15]))
 
-            # 4. Left Hand (92-113)
-            # OpenPose JSON 里的 "hand_left_keypoints_2d" 对应人的左手
-            left_hand_kpts = []
+            # 4. Right Hand (92-113) - 官方规范：92-112 = 右手
+            right_hand_kpts = []
             if len(keypoints) >= 113:
                 for i in range(92, 113):
-                    left_hand_kpts.extend(format_kpt(keypoints[i, 0], keypoints[i, 1], scores[i]))
+                    right_hand_kpts.extend(format_kpt(keypoints[i, 0], keypoints[i, 1], scores[i]))
 
-            # 5. Right Hand (113-134)
-            right_hand_kpts = []
+            # 5. Left Hand (113-134) - 官方规范：113-133 = 左手
+            left_hand_kpts = []
             if len(keypoints) >= 134:
                 for i in range(113, 134):
-                    right_hand_kpts.extend(format_kpt(keypoints[i, 0], keypoints[i, 1], scores[i]))
+                    left_hand_kpts.extend(format_kpt(keypoints[i, 0], keypoints[i, 1], scores[i]))
 
             person_data["pose_keypoints_2d"] = pose_kpts
             person_data["face_keypoints_2d"] = face_kpts
-            person_data["hand_left_keypoints_2d"] = left_hand_kpts
             person_data["hand_right_keypoints_2d"] = right_hand_kpts
+            person_data["hand_left_keypoints_2d"] = left_hand_kpts
             person_data["foot_keypoints_2d"] = foot_kpts
 
         people.append(person_data)
@@ -838,7 +842,7 @@ class SDPoseOODProcessor:
             "required": {
                 "sdpose_model": ("SDPOSE_MODEL",),
                 "images": ("IMAGE",),
-                "score_threshold": ("FLOAT", {"default": 0.3, "min": 0.1, "max": 0.9, "step": 0.05}), 
+                "score_threshold": ("FLOAT", {"default": 0.3, "min": 0.1, "max": 0.9, "step": 0.05}),
                 "overlay_alpha": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 64}),
             },
@@ -857,6 +861,11 @@ class SDPoseOODProcessor:
                 "scale_for_xinsr": ("BOOLEAN", {"default": False, "label_on": "Xinsr CN Scale", "label_off": "Default Scale"}),
                 # --- 核心修复：找回 Pose Scale 参数 ---
                 "pose_scale_factor": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 10.0, "step": 0.1, "label": "Pose Size Scale"}),
+                "enable_confidence_filter": ("BOOLEAN", {
+                    "default": True,
+                    "label_on": "Filter Low Confidence",
+                    "label_off": "Keep All Keypoints"
+                }),
             }
             
         }
@@ -884,8 +893,10 @@ class SDPoseOODProcessor:
         keep_hands=True,
         keep_feet=True,
         scale_for_xinsr=False,
-        pose_scale_factor=1.0 # <--- 必须包含此参数
+        pose_scale_factor=1.0, # <--- 必须包含此参数
+        enable_confidence_filter=True
     ):
+
         import gc 
 
         device = sdpose_model["device"]
@@ -1123,7 +1134,7 @@ class SDPoseOODProcessor:
                     data_to_save = convert_to_loader_json(
                         frame_data[frame_idx]["all_keypoints"],
                         frame_data[frame_idx]["all_scores"],
-                        W, H, keypoint_scheme, score_threshold
+                        W, H, keypoint_scheme, score_threshold, enable_confidence_filter
                     )
                     
                     output_dir = folder_paths.get_output_directory()

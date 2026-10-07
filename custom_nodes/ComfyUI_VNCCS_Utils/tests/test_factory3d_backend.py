@@ -1,0 +1,1816 @@
+import ast
+import importlib.util
+import io
+import json
+import sys
+import tempfile
+import threading
+import types
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import numpy as np
+from PIL import Image
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class TestGaussianValidationError(ValueError):
+    pass
+
+
+def conditioning_canvas_size(image_size, requested_size, prevent_upscale):
+    size = int(requested_size)
+    if not prevent_upscale:
+        return size
+    native_short_side = min(int(image_size[0]), int(image_size[1]))
+    return size if native_short_side >= size else max(16, (native_short_side // 16) * 16)
+
+
+def safe_preprocess_scale(width, height, target_short_side):
+    return min(
+        target_short_side / min(width, height),
+        16384 / max(width, height),
+        (4096 * 4096 / float(width * height)) ** 0.5,
+    )
+
+
+def foreground_bbox(alpha, threshold=8):
+    ys, xs = np.nonzero(np.asarray(alpha) >= int(threshold))
+    if xs.size == 0:
+        raise ValueError("empty foreground mask")
+    return [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
+
+
+def normalize_quaternions(values):
+    values = np.asarray(values, dtype=np.float32)
+    norms = np.linalg.norm(values, axis=-1, keepdims=True)
+    invalid = (~np.isfinite(values).all(axis=-1)) | (norms[:, 0] <= 1e-12)
+    if invalid.any():
+        raise TestGaussianValidationError("invalid quaternion")
+    return values / norms
+
+
+def quat_to_matrix(values):
+    values = normalize_quaternions(values)
+    w, x, y, z = values[:, 0], values[:, 1], values[:, 2], values[:, 3]
+    return np.stack([
+        1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y),
+        2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x),
+        2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y),
+    ], axis=-1).reshape(-1, 3, 3)
+
+
+def matrix_to_quat(matrices):
+    matrices = np.asarray(matrices, dtype=np.float32)
+    result = []
+    for matrix in matrices:
+        candidates = np.asarray([
+            [1 + matrix[0, 0] - matrix[1, 1] - matrix[2, 2], matrix[0, 1] + matrix[1, 0], matrix[0, 2] + matrix[2, 0], matrix[2, 1] - matrix[1, 2]],
+            [matrix[1, 0] + matrix[0, 1], 1 - matrix[0, 0] + matrix[1, 1] - matrix[2, 2], matrix[1, 2] + matrix[2, 1], matrix[0, 2] - matrix[2, 0]],
+            [matrix[2, 0] + matrix[0, 2], matrix[2, 1] + matrix[1, 2], 1 - matrix[0, 0] - matrix[1, 1] + matrix[2, 2], matrix[1, 0] - matrix[0, 1]],
+            [matrix[2, 1] - matrix[1, 2], matrix[0, 2] - matrix[2, 0], matrix[1, 0] - matrix[0, 1], 1 + matrix.trace()],
+        ])
+        values, vectors = np.linalg.eigh(candidates)
+        vector = vectors[:, int(np.argmax(values))]
+        result.append([vector[3], vector[0], vector[1], vector[2]])
+    return normalize_quaternions(result)
+
+
+def load_modules():
+    root_package = types.ModuleType("vnccs_factory_test")
+    root_package.__path__ = [str(ROOT)]
+    api_package = types.ModuleType("vnccs_factory_test.api")
+    api_package.__path__ = [str(ROOT / "api")]
+    sys.modules[root_package.__name__] = root_package
+    sys.modules[api_package.__name__] = api_package
+
+    gaussian_spec = importlib.util.spec_from_file_location(
+        "vnccs_factory_test.api.gaussian_scene",
+        ROOT / "api" / "gaussian_scene.py",
+    )
+    gaussian = importlib.util.module_from_spec(gaussian_spec)
+    sys.modules[gaussian_spec.name] = gaussian
+    gaussian_spec.loader.exec_module(gaussian)
+
+    factory_spec = importlib.util.spec_from_file_location(
+        "vnccs_factory_test.api.factory3d",
+        ROOT / "api" / "factory3d.py",
+    )
+    factory = importlib.util.module_from_spec(factory_spec)
+    sys.modules[factory_spec.name] = factory
+    factory_spec.loader.exec_module(factory)
+    return gaussian, factory
+
+
+class FactoryBackendTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.gaussian, cls.factory = load_modules()
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.original_root = self.factory._factory_root
+        self.original_model_root = self.factory._model_root
+        self.original_category_roots = self.factory._category_roots
+        self.factory._factory_root = lambda: self.root
+        self.factory._model_root = lambda: self.root / "models"
+        self.factory._category_roots = lambda _category: []
+
+    def tearDown(self):
+        self.factory._factory_root = self.original_root
+        self.factory._model_root = self.original_model_root
+        self.factory._category_roots = self.original_category_roots
+        self.temporary.cleanup()
+
+    def test_upgrade_preserves_original_assets_and_parametric_recipe(self):
+        original = self.factory.create_scene("Original")
+        scene_id = original["scene_id"]
+        root = self.factory.resolve_scene_dir(scene_id)
+        (root / "reference-test.txt").write_text("asset bytes")
+        before = (root / "scene.json").read_bytes()
+        with self.assertRaisesRegex(ValueError, "Upgrade"):
+            self.factory.create_primitive_object(scene_id, {"primitive": {"kind": "stairs"}})
+        upgraded = self.factory.upgrade_scene(scene_id)
+        self.assertNotEqual(upgraded["scene_id"], scene_id)
+        self.assertEqual((root / "scene.json").read_bytes(), before)
+        copied_root = self.factory.resolve_scene_dir(upgraded["scene_id"])
+        self.assertEqual((copied_root / "reference-test.txt").read_text(), "asset bytes")
+        created = self.factory.create_primitive_object(upgraded["scene_id"], {
+            "primitive": {"kind": "stairs", "steps": 17, "width": 1.2, "height": 3, "depth": 4},
+        })
+        item = created["scene"]["objects"][0]
+        self.assertEqual(item["primitive"]["kind"], "stairs")
+        self.assertEqual(item["primitive"]["steps"], 17)
+        loaded = self.factory.load_scene(upgraded["scene_id"])
+        self.assertEqual(loaded["schema_version"], 12)
+        with self.assertRaisesRegex(ValueError, "Editor 12 writer"):
+            self.factory.update_scene(upgraded["scene_id"], {"name": "Old writer"})
+        self.factory.update_scene(upgraded["scene_id"], {"schema_version": 12, "name": "New writer"})
+        self.assertEqual(self.factory.upgrade_scene(upgraded["scene_id"])["scene_id"], upgraded["scene_id"])
+
+    def test_upgrade_failure_removes_only_new_copy(self):
+        original = self.factory.create_scene("Original")
+        scene_id = original["scene_id"]
+        root = self.factory.resolve_scene_dir(scene_id)
+        before = (root / "scene.json").read_bytes()
+        with mock.patch.object(self.factory, "_save_scene", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                self.factory.upgrade_scene(scene_id)
+        self.assertEqual((root / "scene.json").read_bytes(), before)
+        self.assertEqual(len(list(root.parent.iterdir())), 1)
+
+    def _write_valid_ply(self, path: Path, count: int = 1) -> None:
+        names = [
+            "x", "y", "z",
+            "f_dc_0", "f_dc_1", "f_dc_2",
+            "opacity",
+            "scale_0", "scale_1", "scale_2",
+            "rot_0", "rot_1", "rot_2", "rot_3",
+        ]
+        dtype = np.dtype([(name, "<f4") for name in names])
+        records = np.zeros(count, dtype=dtype)
+        records["scale_0"] = records["scale_1"] = records["scale_2"] = -2.0
+        records["rot_0"] = 1.0
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(self.gaussian._ply_header(count, dtype) + records.tobytes())
+
+    def test_scenes_are_created_listed_and_updated(self):
+        scene = self.factory.create_scene("First scene")
+        self.assertRegex(scene["scene_id"], r"^[a-f0-9]{32}$")
+        self.assertEqual(scene["schema_version"], self.factory.SCHEMA_VERSION)
+        self.assertEqual(scene["render_revision"], 0)
+        self.assertEqual(
+            scene["render"],
+            {
+                "width": 1024,
+                "height": 1024,
+                "aspect": "1:1",
+                "show_camera_frame": False,
+            },
+        )
+        self.assertEqual(scene["camera"]["fov"], 42.0)
+        self.assertEqual(scene["camera"]["up"], [0.0, 1.0, 0.0])
+        self.assertEqual(scene["cameras"], [])
+        self.assertEqual(scene["architecture"]["buildings"], [])
+        self.assertEqual(scene["lighting"]["preset"], "day")
+        self.assertEqual(scene["lighting"]["color"], "#fff1d6")
+        self.assertEqual(
+            scene["lighting"]["shadows"],
+            {
+                "enabled": True,
+                "quality": "medium",
+                "bias": -0.0005,
+                "normal_bias": 0.02,
+            },
+        )
+        self.assertEqual(scene["lighting"]["lights"], [])
+        self.assertEqual(self.factory.list_scenes()[0]["name"], "First scene")
+
+        updated = self.factory.update_scene(scene["scene_id"], {"name": "Renamed"})
+        self.assertEqual(updated["name"], "Renamed")
+        self.assertEqual(updated["revision"], 0)
+        self.assertEqual(self.factory.load_scene(scene["scene_id"])["name"], "Renamed")
+        unchanged = self.factory.update_scene(scene["scene_id"], {"name": "Renamed", "objects": []})
+        self.assertEqual(unchanged["revision"], 0)
+
+    def test_room_can_be_saved_without_a_building(self):
+        scene = self.factory.create_scene("Standalone room")
+        level_id = scene["levels"][0]["level_id"]
+        wall_ids = [character * 32 for character in "1234"]
+        polygon = [[0, 0], [4, 0], [4, 3], [0, 3]]
+        walls = [
+            {
+                "wall_id": wall_ids[index],
+                "name": "Wall",
+                "level_id": level_id,
+                "building_id": "",
+                "start": polygon[index],
+                "end": polygon[(index + 1) % len(polygon)],
+                "thickness": 0.12,
+                "height": 2.8,
+                "elevation_offset": 0.0,
+            }
+            for index in range(len(polygon))
+        ]
+        architecture = {
+            "materials": [],
+            "buildings": [],
+            "walls": walls,
+            "rooms": [{
+                "room_id": "5" * 32,
+                "name": "Room",
+                "level_id": level_id,
+                "building_id": "",
+                "polygon": polygon,
+                "wall_ids": wall_ids,
+            }],
+            "openings": [],
+        }
+
+        updated = self.factory.update_scene(
+            scene["scene_id"],
+            {"architecture": architecture},
+        )
+        self.assertEqual(updated["architecture"]["buildings"], [])
+        self.assertEqual(
+            [wall["building_id"] for wall in updated["architecture"]["walls"]],
+            ["", "", "", ""],
+        )
+        self.assertEqual(updated["architecture"]["rooms"][0]["building_id"], "")
+        restored = self.factory.load_scene(scene["scene_id"])
+        self.assertEqual(len(restored["architecture"]["walls"]), 4)
+        self.assertEqual(len(restored["architecture"]["rooms"]), 1)
+        self.assertEqual(restored["architecture"]["buildings"], [])
+
+    def test_saved_cameras_are_normalized_and_invalidate_capture_revision(self):
+        scene = self.factory.create_scene("Camera scene")
+        camera_id = "c" * 32
+        updated = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "cameras": [{
+                    "camera_id": camera_id,
+                    "name": "Hero camera",
+                    "created_at": 10,
+                    "position": [4, 3, 2],
+                    "target": [0, 0, 0],
+                    "up": [0, 2, 0],
+                    "fov": 56,
+                }],
+            },
+        )
+        self.assertEqual(updated["revision"], 0)
+        self.assertEqual(updated["render_revision"], 1)
+        self.assertEqual(updated["cameras"][0]["camera_id"], camera_id)
+        self.assertEqual(updated["cameras"][0]["up"], [0.0, 1.0, 0.0])
+        self.assertEqual(self.factory.list_scenes()[0]["camera_count"], 1)
+        with self.assertRaisesRegex(ValueError, "unique"):
+            self.factory.update_scene(
+                scene["scene_id"],
+                {"cameras": [updated["cameras"][0], updated["cameras"][0]]},
+            )
+
+    def test_scenes_are_deleted_recursively_but_not_during_active_generation(self):
+        scene = self.factory.create_scene("Delete me")
+        scene_root = self.factory.resolve_scene_dir(scene["scene_id"])
+        asset = scene_root / "objects" / ("a" * 32) / "model.ply"
+        asset.parent.mkdir(parents=True)
+        asset.write_bytes(b"scene asset")
+
+        result = self.factory.delete_scene(scene["scene_id"])
+
+        self.assertEqual(
+            result,
+            {"scene_id": scene["scene_id"], "deleted": True},
+        )
+        self.assertFalse(scene_root.exists())
+        self.assertEqual(self.factory.list_scenes(), [])
+        with self.assertRaises(FileNotFoundError):
+            self.factory.load_scene(scene["scene_id"])
+        with self.assertRaises(FileNotFoundError):
+            self.factory.delete_scene(scene["scene_id"])
+
+        protected = self.factory.create_scene("Generating")
+        job_id = "b" * 32
+        active_job = {
+            "job_id": job_id,
+            "scene_id": protected["scene_id"],
+            "status": "running",
+        }
+        with mock.patch.dict(self.factory._JOBS, {job_id: active_job}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "generation job is active"):
+                self.factory.delete_scene(protected["scene_id"])
+            self.assertTrue(
+                self.factory.resolve_scene_dir(protected["scene_id"]).is_dir()
+            )
+            active_job["status"] = "completed"
+            self.factory.delete_scene(protected["scene_id"])
+
+    def test_scene_lighting_is_normalized_persisted_and_invalidates_preview_only(self):
+        scene = self.factory.create_scene("Lighting")
+        level_id = scene["levels"][0]["level_id"]
+        light_id = "1" * 32
+        updated = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "lighting": {
+                    "preset": "sunset",
+                    "intensity": 1.25,
+                    "color": "#FF865F",
+                    "azimuth": 418,
+                    "elevation": 11,
+                    "ambient": 0.28,
+                    "background": "#25141B",
+                    "shadows": {
+                        "enabled": True,
+                        "quality": "high",
+                        "bias": -0.0002,
+                        "normal_bias": 0.0015,
+                    },
+                    "lights": [{
+                        "light_id": light_id,
+                        "name": "Practical",
+                        "level_id": level_id,
+                        "building_id": "",
+                        "kind": "point",
+                        "position": [1, 2.4, 3],
+                        "target": [1, 0, 3],
+                        "color": "#FF0088",
+                        "intensity": 10,
+                        "distance": 8,
+                        "angle": 45,
+                        "penumbra": 0.2,
+                        "cast_shadow": True,
+                        "visible": True,
+                    }],
+                }
+            },
+        )
+        self.assertEqual(updated["revision"], 0)
+        self.assertEqual(updated["render_revision"], 1)
+        self.assertEqual(
+            updated["lighting"],
+            {
+                "preset": "sunset",
+                "intensity": 1.25,
+                "color": "#ff865f",
+                "azimuth": 58.0,
+                "elevation": 11.0,
+                "ambient": 0.28,
+                "background": "#25141b",
+                "shadows": {
+                    "enabled": True,
+                    "quality": "high",
+                    "bias": -0.0002,
+                    "normal_bias": 0.0015,
+                },
+                "lights": [{
+                    "light_id": light_id,
+                    "name": "Practical",
+                    "level_id": level_id,
+                    "building_id": "",
+                    "kind": "point",
+                    "position": [1.0, 2.4, 3.0],
+                    "target": [1.0, 0.0, 3.0],
+                    "color": "#ff0088",
+                    "intensity": 10.0,
+                    "distance": 8.0,
+                    "angle": 45.0,
+                    "penumbra": 0.2,
+                    "cast_shadow": True,
+                    "visible": True,
+                }],
+            },
+        )
+        restored = self.factory.load_scene(scene["scene_id"])
+        self.assertEqual(restored["lighting"], updated["lighting"])
+        off = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "lighting": {
+                    "preset": "off",
+                    "intensity": 0,
+                    "color": "#ffffff",
+                    "azimuth": 325,
+                    "elevation": 42,
+                    "ambient": 1,
+                    "background": "#171b25",
+                }
+            },
+        )
+        self.assertEqual(off["lighting"]["preset"], "off")
+        self.assertEqual(off["lighting"]["background"], "#171b25")
+        self.assertEqual(off["lighting"]["lights"], [])
+        self.assertEqual(off["lighting"]["shadows"]["quality"], "medium")
+
+    def test_experimental_density_modes_are_supported_through_api_and_triposplat(self):
+        capabilities = self.factory.capabilities()
+        self.assertEqual(capabilities["formats"], ["ply", "glb"])
+        self.assertEqual(set(capabilities["generators"]), {"triposplat", "pixal3d", "trellis2"})
+        self.assertEqual(capabilities["generators"]["pixal3d"]["output_format"], "glb")
+        self.assertEqual(capabilities["generators"]["trellis2"]["output_kind"], "mesh")
+        self.assertIn(524288, capabilities["gaussian_counts"])
+        self.assertIn(1048576, capabilities["gaussian_counts"])
+        self.assertEqual(capabilities["experimental_gaussian_counts"], [524288, 1048576])
+        self.assertNotIn("erode_radius", capabilities["defaults"])
+        self.assertTrue(capabilities["defaults"]["remove_background"])
+        self.assertEqual(capabilities["splat_cache"]["limit_gb"], 32)
+        self.assertEqual(capabilities["splat_cache"]["used_bytes"], 0)
+        self.assertEqual(capabilities["scene_render"]["min_side"], 64)
+        self.assertEqual(capabilities["scene_render"]["max_side"], 4096)
+        self.assertEqual(capabilities["scene_render"]["max_cameras"], 32)
+        self.assertIn("16:9", capabilities["scene_render"]["aspect_presets"])
+        settings = self.factory._generation_settings({"num_gaussians": "524288"})
+        self.assertEqual(settings["num_gaussians"], 524288)
+        self.assertTrue(settings["remove_background"])
+        self.assertNotIn("erode_radius", settings)
+        extreme = self.factory._generation_settings({"num_gaussians": "1048576"})
+        self.assertEqual(extreme["num_gaussians"], 1048576)
+        clamped = self.factory._generation_settings({"num_gaussians": "9999999"})
+        self.assertEqual(clamped["num_gaussians"], 1048576)
+        source = (ROOT / "data" / "triposplat" / "triposplat.py").read_text(encoding="utf-8")
+        self.assertIn("_NUM_GAUSSIANS_MAX = 1048576", source)
+
+    def test_background_removal_defaults_on_and_can_be_disabled(self):
+        self.assertTrue(self.factory._generation_settings({})["remove_background"])
+        self.assertFalse(
+            self.factory._generation_settings({"remove_background": "0"})["remove_background"]
+        )
+        self.assertFalse(
+            self.factory._generation_settings({"remove_background": "false"})["remove_background"]
+        )
+        source = (ROOT / "data" / "triposplat" / "triposplat.py").read_text(encoding="utf-8")
+        self.assertIn("remove_background: bool = True", source)
+        self.assertIn('image = image.convert("RGBA")', source)
+        self.assertNotIn('image = image.convert("RGB").convert("RGBA")', source)
+
+    def test_mesh_generation_settings_are_provider_specific(self):
+        settings = self.factory._generation_settings({
+            "provider": "pixal3d",
+            "quality": "balanced",
+            "structure_steps": "14",
+            "shape_steps": "22",
+            "upsample_steps": "11",
+            "texture_steps": "9",
+            "remove_background": "0",
+            "seed": "42",
+        })
+        self.assertEqual(settings["provider"], "pixal3d")
+        self.assertEqual(settings["quality"], "balanced")
+        self.assertEqual(settings["target_face_count"], 350000)
+        self.assertEqual(settings["texture_resolution"], 2048)
+        self.assertEqual(settings["structure_steps"], 14)
+        self.assertFalse(settings["remove_background"])
+        high = self.factory._generation_settings({"provider": "pixal3d", "quality": "high"})
+        self.assertEqual(high["target_resolution"], 1536)
+        self.assertEqual(high["remesh_resolution"], 768)
+        self.assertEqual(high["target_face_count"], 700000)
+        self.assertEqual(high["texture_resolution"], 2048)
+        with self.assertRaisesRegex(ValueError, "generator"):
+            self.factory._generation_settings({"provider": "unknown"})
+
+    def test_mesh_preprocess_detaches_autograd_tensors_before_numpy_nodes(self):
+        class GradTensor:
+            def __init__(self, detached=False):
+                self.detached = detached
+
+            def detach(self):
+                return GradTensor(detached=True)
+
+        result = self.factory.factory3d_generation._detach_tensor(GradTensor())
+        self.assertTrue(result.detached)
+        source = (ROOT / "api" / "factory3d_generation.py").read_text(encoding="utf-8")
+        pipeline_index = source.index("def run_mesh_generation")
+        remove_index = source.index('"RemoveBackground"', pipeline_index)
+        crop_index = source.index('"ImageCropToMask"', remove_index)
+        detach_index = source.rfind("mask = _detach_tensor(", pipeline_index, crop_index)
+        self.assertGreaterEqual(detach_index, 0)
+        self.assertLess(detach_index, remove_index)
+
+    def test_mesh_pipeline_prepares_comfy_v3_hidden_context(self):
+        class FakeOutput:
+            def __init__(self, *args):
+                self.args = args
+                self.block_execution = None
+
+            @property
+            def result(self):
+                return self.args
+
+        class FakeV3Node:
+            FUNCTION = "execute"
+            hidden = None
+
+            @classmethod
+            def PREPARE_CLASS_CLONE(cls, _v3_data):
+                class Prepared(cls):
+                    hidden = types.SimpleNamespace(unique_id=None)
+
+                return Prepared
+
+            def execute(self, value):
+                self.__class__.hidden.unique_id
+                return FakeOutput(value + 1)
+
+        nodes_stub = types.SimpleNamespace(NODE_CLASS_MAPPINGS={"FakeV3": FakeV3Node})
+        with mock.patch.dict(sys.modules, {"nodes": nodes_stub}):
+            result = self.factory.factory3d_generation._call_node("FakeV3", value=4)
+        self.assertEqual(result, (5,))
+
+    def test_direct_mesh_nodes_receive_a_thread_local_comfy_progress_context(self):
+        state = {"active": False, "contexts": []}
+
+        class FakeContext:
+            def __init__(self, *, prompt_id, node_id, list_index):
+                state["contexts"].append((prompt_id, node_id, list_index))
+
+            def __enter__(self):
+                state["active"] = True
+
+            def __exit__(self, _exc_type, _exc_value, _traceback):
+                state["active"] = False
+
+        class ProgressNode:
+            FUNCTION = "execute"
+
+            def execute(self, value):
+                if not state["active"]:
+                    raise AttributeError("PromptServer has no last_prompt_id")
+                return (value + 1,)
+
+        nodes_stub = types.SimpleNamespace(NODE_CLASS_MAPPINGS={"ProgressNode": ProgressNode})
+        execution_package = types.ModuleType("comfy_execution")
+        execution_package.__path__ = []
+        execution_utils = types.ModuleType("comfy_execution.utils")
+        execution_utils.CurrentNodeContext = FakeContext
+        execution_utils.get_executing_context = lambda: None
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "nodes": nodes_stub,
+                "comfy_execution": execution_package,
+                "comfy_execution.utils": execution_utils,
+            },
+        ):
+            result = self.factory.factory3d_generation._call_node("ProgressNode", value=6)
+        self.assertEqual(result, (7,))
+        self.assertFalse(state["active"])
+        self.assertEqual(len(state["contexts"]), 1)
+        prompt_id, node_id, list_index = state["contexts"][0]
+        self.assertTrue(prompt_id.startswith("vnccs-3d-factory-"))
+        self.assertEqual(node_id, "vnccs-3d-factory-ProgressNode")
+        self.assertEqual(list_index, 0)
+
+    def test_direct_mesh_progress_is_hidden_from_the_global_comfy_queue(self):
+        generation = self.factory.factory3d_generation
+        events = []
+        instance = types.SimpleNamespace(
+            send_sync=lambda *args, **kwargs: events.append(
+                args[0] if args else kwargs.get("event")
+            )
+        )
+        prompt_server = types.SimpleNamespace(instance=instance)
+        server_stub = types.ModuleType("server")
+        server_stub.PromptServer = prompt_server
+        original_patched = generation._COMFY_PROGRESS_PATCHED
+        generation._COMFY_PROGRESS_PATCHED = False
+        try:
+            with mock.patch.dict(sys.modules, {"server": server_stub}):
+                with generation._SuppressComfyProgress():
+                    instance.send_sync("progress", {})
+                    instance.send_sync("status", {})
+                instance.send_sync("progress", {})
+        finally:
+            generation._COMFY_PROGRESS_PATCHED = original_patched
+        self.assertEqual(events, ["status", "progress"])
+
+    def test_mesh_pipeline_uses_inference_mode_and_releases_moge_before_dino(self):
+        source = (ROOT / "api" / "factory3d_generation.py").read_text(encoding="utf-8")
+        pipeline_index = source.index("def run_mesh_generation")
+        moge_index = source.index('"MoGeInference"', pipeline_index)
+        release_index = source.index("del geometry, moge", moge_index)
+        clip_index = source.index('"CLIPVisionLoader"', release_index)
+        self.assertIn("@_torch_inference\ndef run_mesh_generation", source)
+        self.assertIn("finally:\n                release_runtime_memory()", source)
+        self.assertLess(moge_index, release_index)
+        self.assertLess(release_index, clip_index)
+        self.assertIn("release_runtime_memory()", source[release_index:clip_index])
+
+    def test_factory_model_lifecycle_matches_unicanvas_without_global_unload(self):
+        factory_source = (ROOT / "api" / "factory3d.py").read_text(encoding="utf-8")
+        generation_source = (ROOT / "api" / "factory3d_generation.py").read_text(encoding="utf-8")
+        self.assertNotIn("unload_all_models()", generation_source)
+        self.assertIn('getattr(model_management, "cleanup_models", None)', generation_source)
+        self.assertIn("with _FactoryModelOperation(job), torch.inference_mode():", factory_source)
+        self.assertIn("_release_cached_triposplat_pipeline()", factory_source)
+        self.assertIn("factory3d_generation.release_runtime_memory()", factory_source)
+        self.assertIn("self.lock.release()", factory_source)
+
+    def test_factory_reuses_the_loaded_unicanvas_model_operation_lock(self):
+        shared_lock = threading.RLock()
+        module_name = "vnccs_factory_test.nodes.unicanvas"
+        module = types.ModuleType(module_name)
+        module._COMFY_MODEL_OP_LOCK = shared_lock
+        with mock.patch.dict(sys.modules, {module_name: module}):
+            self.assertIs(self.factory._model_operation_lock(), shared_lock)
+
+    def test_cancelled_factory_lock_acquisition_cannot_leak_the_lock(self):
+        class RecordingLock:
+            def __init__(self):
+                self.locked = False
+
+            def acquire(self, timeout=None):
+                self.locked = True
+                return True
+
+            def release(self):
+                self.locked = False
+
+        lock = RecordingLock()
+        job = {
+            "job_id": "a" * 32,
+            "cancel_event": threading.Event(),
+            "progress": 0,
+        }
+        job["cancel_event"].set()
+        with mock.patch.object(self.factory, "_model_operation_lock", return_value=lock):
+            with self.assertRaises(self.factory.JobCancelled):
+                with self.factory._FactoryModelOperation(job):
+                    pass
+        self.assertFalse(lock.locked)
+
+    def test_conditioning_resolution_settings_include_experimental_native_size_mode(self):
+        capabilities = self.factory.capabilities()
+        self.assertEqual(capabilities["conditioning_resolutions"], [1024, 1536, 2048])
+        self.assertEqual(capabilities["experimental_conditioning_resolutions"], [1536, 2048])
+        self.assertEqual(capabilities["defaults"]["conditioning_resolution"], 1024)
+        self.assertFalse(capabilities["defaults"]["prevent_upscale"])
+
+        settings = self.factory._generation_settings({
+            "conditioning_resolution": "2048",
+            "prevent_upscale": "1",
+        })
+        self.assertEqual(settings["conditioning_resolution"], 2048)
+        self.assertTrue(settings["prevent_upscale"])
+        with self.assertRaisesRegex(ValueError, "conditioning_resolution"):
+            self.factory._generation_settings({"conditioning_resolution": "4096"})
+
+        source = (ROOT / "data" / "triposplat" / "triposplat.py").read_text(encoding="utf-8")
+        self.assertIn("def _conditioning_canvas_size(", source)
+        self.assertIn("(native_short_side // _IMAGE_PATCH_SIZE) * _IMAGE_PATCH_SIZE", source)
+        self.assertIn("prevent_upscale=prevent_upscale", source)
+        resolve = conditioning_canvas_size
+        self.assertEqual(resolve((1200, 800), 2048, True), 800)
+        self.assertEqual(resolve((1024, 770), 2048, True), 768)
+        self.assertEqual(resolve((1200, 800), 2048, False), 2048)
+        self.assertEqual(resolve((4096, 3072), 1536, True), 1536)
+
+    def test_triposplat_runtime_is_relocated_and_safety_fixes_are_executable(self):
+        source_path = ROOT / "data" / "triposplat" / "triposplat.py"
+        self.assertTrue(source_path.is_file())
+        self.assertFalse((ROOT / "triposplat_backend" / "triposplat.py").exists())
+        source = source_path.read_text(encoding="utf-8")
+        self.assertNotIn("list(map(tuple", source)
+        self.assertIn("generator=generator", source)
+        self.assertIn("GaussianValidationError", source)
+        model_source = (ROOT / "data" / "triposplat" / "model.py").read_text(encoding="utf-8")
+        self.assertIn('register_buffer("pos_pe"', model_source)
+        self.assertIn('"prepared_context"', model_source)
+
+        alpha = np.zeros((8, 8), dtype=np.uint8)
+        alpha[2, 3] = 255
+        self.assertEqual(foreground_bbox(alpha), [3, 2, 4, 3])
+        with self.assertRaisesRegex(ValueError, "empty foreground mask"):
+            foreground_bbox(np.zeros((8, 8), dtype=np.uint8))
+
+        scale = safe_preprocess_scale(1, 20_000_000, 2048)
+        self.assertLessEqual(round(20_000_000 * scale), 16384)
+
+    def test_quaternion_conversion_handles_half_turns_and_rejects_zero_norm(self):
+        source = (ROOT / "data" / "triposplat" / "triposplat.py").read_text(encoding="utf-8")
+        quaternions = np.asarray(
+            [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            dtype=np.float32,
+        )
+        matrices = quat_to_matrix(quaternions)
+        recovered = matrix_to_quat(matrices)
+        alignment = np.abs(np.sum(quaternions * recovered, axis=1))
+        np.testing.assert_allclose(alignment, np.ones(4), atol=1e-5)
+        with self.assertRaisesRegex(TestGaussianValidationError, "invalid quaternion"):
+            quat_to_matrix(np.zeros((1, 4), dtype=np.float32))
+
+    def test_numeric_payload_validation_rejects_nan_and_degenerate_rotation(self):
+        names = [
+            "x", "y", "z",
+            "f_dc_0", "f_dc_1", "f_dc_2",
+            "opacity",
+            "scale_0", "scale_1", "scale_2",
+            "rot_0", "rot_1", "rot_2", "rot_3",
+        ]
+        dtype = np.dtype([(name, "<f4") for name in names])
+
+        def write_ply(path: Path, record: np.ndarray) -> None:
+            header = [
+                "ply",
+                "format binary_little_endian 1.0",
+                "element vertex 1",
+                *(f"property float {name}" for name in names),
+                "end_header",
+                "",
+            ]
+            path.write_bytes("\n".join(header).encode("ascii") + record.tobytes())
+
+        valid = np.zeros(1, dtype=dtype)
+        valid["scale_0"] = valid["scale_1"] = valid["scale_2"] = -2.0
+        valid["rot_0"] = 1.0
+        good_path = self.root / "good.ply"
+        write_ply(good_path, valid)
+        report = self.gaussian.validate_ply_payload(good_path)
+        self.assertEqual(report["gaussians"], 1)
+
+        invalid = valid.copy()
+        invalid["x"] = np.nan
+        bad_path = self.root / "nan.ply"
+        write_ply(bad_path, invalid)
+        with self.assertRaisesRegex(ValueError, "NaN/Inf"):
+            self.gaussian.validate_ply_payload(bad_path)
+
+        invalid = valid.copy()
+        for index in range(4):
+            invalid[f"rot_{index}"] = 0.0
+        bad_rotation = self.root / "rotation.ply"
+        write_ply(bad_rotation, invalid)
+        with self.assertRaisesRegex(ValueError, "degenerate quaternion"):
+            self.gaussian.validate_ply_payload(bad_rotation)
+
+        invalid = valid.copy()
+        invalid["scale_0"] = -1e30
+        bad_scale = self.root / "scale.ply"
+        write_ply(bad_scale, invalid)
+        with self.assertRaisesRegex(ValueError, "invalid scale"):
+            self.gaussian.validate_ply_payload(bad_scale)
+
+    def test_compact_splat_validation_reads_float_payload(self):
+        record = np.zeros((1, 32), dtype=np.uint8)
+        record[:, 0:12] = np.asarray([[0.0, 0.0, 0.0]], dtype="<f4").view(np.uint8)
+        record[:, 12:24] = np.asarray([[1.0, 1.0, 1.0]], dtype="<f4").view(np.uint8)
+        path = self.root / "valid.splat"
+        path.write_bytes(record.tobytes())
+        self.assertEqual(self.gaussian.validate_splat_payload(path, 1)["gaussians"], 1)
+
+        record[:, 12:24] = np.asarray([[np.nan, 1.0, 1.0]], dtype="<f4").view(np.uint8)
+        path.write_bytes(record.tobytes())
+        with self.assertRaisesRegex(ValueError, "NaN/Inf"):
+            self.gaussian.validate_splat_payload(path, 1)
+
+        record[:, 12:24] = np.asarray([[1.0, 1.0, 1.0]], dtype="<f4").view(np.uint8)
+        record[:, 28:32] = 128
+        path.write_bytes(record.tobytes())
+        with self.assertRaisesRegex(ValueError, "degenerate rotation"):
+            self.gaussian.validate_splat_payload(path, 1)
+
+    def test_splat_is_a_single_content_addressed_cache_derivative(self):
+        first = self.root / "first" / "model.ply"
+        second = self.root / "second" / "model.ply"
+        self._write_valid_ply(first, 2)
+        second.parent.mkdir(parents=True)
+        second.write_bytes(first.read_bytes())
+
+        first_cache = self.factory._ensure_cached_splat(first)
+        second_cache = self.factory._ensure_cached_splat(second)
+
+        self.assertEqual(first_cache, second_cache)
+        self.assertEqual(first_cache.stat().st_size, 2 * 32)
+        self.assertEqual(
+            list(self.factory._splat_cache_root().glob("v1-*.splat")),
+            [first_cache],
+        )
+
+    def test_splat_cache_limit_is_persisted_and_cache_can_be_cleared(self):
+        initial = self.factory.splat_cache_status()
+        self.assertEqual(initial["limit_gb"], 32)
+        self.assertEqual(initial["file_count"], 0)
+
+        for invalid in (0, 1025, "invalid", None):
+            with self.assertRaisesRegex(ValueError, "SPLAT cache limit"):
+                self.factory.configure_splat_cache(invalid)
+
+        configured = self.factory.configure_splat_cache(64)
+        self.assertEqual(configured["limit_gb"], 64)
+        settings = json.loads(
+            self.factory._splat_cache_settings_path().read_text(encoding="utf-8")
+        )
+        self.assertEqual(settings["limit_gb"], 64)
+
+        cache_root = self.factory._splat_cache_root()
+        (cache_root / f"v1-{'a' * 64}.splat").write_bytes(b"a" * 32)
+        (cache_root / f"v1-{'b' * 64}.splat").write_bytes(b"b" * 64)
+        populated = self.factory.splat_cache_status()
+        self.assertEqual(populated["file_count"], 2)
+        self.assertEqual(populated["used_bytes"], 96)
+
+        cleared = self.factory.clear_splat_cache()
+        self.assertEqual(cleared["deleted_files"], 2)
+        self.assertEqual(cleared["deleted_bytes"], 96)
+        self.assertEqual(cleared["file_count"], 0)
+        self.assertEqual(cleared["used_bytes"], 0)
+        self.assertTrue(self.factory._splat_cache_settings_path().is_file())
+
+    def test_splat_cache_prunes_oldest_derived_files(self):
+        root = self.factory._splat_cache_root()
+        older = root / f"v1-{'c' * 64}.splat"
+        newer = root / f"v1-{'d' * 64}.splat"
+        older.write_bytes(b"o" * 10)
+        newer.write_bytes(b"n" * 20)
+        older.touch()
+        newer.touch()
+        older_mtime = newer.stat().st_mtime - 10
+        import os
+
+        os.utime(older, (older_mtime, older_mtime))
+        with mock.patch.object(self.factory, "_splat_cache_limit_bytes", return_value=25):
+            self.factory._prune_splat_cache()
+        self.assertFalse(older.exists())
+        self.assertTrue(newer.exists())
+
+    def test_legacy_scene_assets_migrate_to_ply_only_storage_and_shared_cache(self):
+        scene = self.factory.create_scene("Legacy")
+        scene_root = self.factory.resolve_scene_dir(scene["scene_id"])
+        object_id = self.factory._new_id()
+        object_root = scene_root / "objects" / object_id
+        ply = object_root / "model.ply"
+        splat = object_root / "model.splat"
+        self._write_valid_ply(ply, 2)
+        self.gaussian.ply_to_splat(ply, splat)
+        export_ply = scene_root / "exports" / "scene.ply"
+        retired_export = scene_root / "exports" / "scene.retired"
+        export_ply.parent.mkdir(parents=True)
+        export_ply.write_bytes(b"canonical")
+        retired_export.write_bytes(b"retired")
+        scene["objects"].append(
+            {
+                "object_id": object_id,
+                "name": "Legacy object",
+                "transform": self.gaussian.normalize_transform({}),
+                "checksums": {
+                    "ply_sha256": self.factory._sha256_file(ply),
+                    "splat_sha256": self.factory._sha256_file(splat),
+                },
+                "files": {
+                    "ply": str(ply.relative_to(self.factory.resolve_scene_dir(scene["scene_id"]))),
+                    "splat": str(splat.relative_to(self.factory.resolve_scene_dir(scene["scene_id"]))),
+                },
+            }
+        )
+        scene["layers"] = [{"type": "object", "object_id": object_id}]
+        scene["exports"] = {
+            "revision": 0,
+            "files": {
+                "ply": str(export_ply.relative_to(scene_root)),
+                "retired": str(retired_export.relative_to(scene_root)),
+            },
+            "retired_metadata": {"enabled": True},
+        }
+        scene["schema_version"] = self.factory.SCHEMA_VERSION - 1
+        self.factory._atomic_json(self.factory._scene_path(scene["scene_id"]), scene)
+
+        migrated = self.factory.load_scene(scene["scene_id"])
+        item = migrated["objects"][0]
+        self.assertNotIn("splat", item["files"])
+        self.assertNotIn("splat_sha256", item["checksums"])
+        self.assertFalse(splat.exists())
+        self.assertTrue(export_ply.is_file())
+        self.assertFalse(retired_export.exists())
+        self.assertEqual(set(migrated["exports"]["files"]), {"ply"})
+        self.assertNotIn("retired_metadata", migrated["exports"])
+        cached = self.factory._ensure_object_splat(scene["scene_id"], object_id)
+        self.assertTrue(cached.is_file())
+        self.assertEqual(cached.stat().st_size, 2 * 32)
+
+    def test_generation_result_embeds_committed_public_scene_for_frontend_hydration(self):
+        source = (ROOT / "api" / "factory3d.py").read_text(encoding="utf-8")
+        self.assertIn('"scene": _public_scene(scene)', source)
+
+    def test_pixal_generation_commits_a_textured_mesh_asset(self):
+        scene = self.factory.create_scene("Pixal")
+        object_id = self.factory._new_id()
+        image_stream = io.BytesIO()
+        Image.new("RGB", (96, 64), (24, 48, 72)).save(image_stream, format="PNG")
+        settings = self.factory._generation_settings({
+            "provider": "pixal3d",
+            "quality": "preview",
+            "seed": "7",
+        })
+        job = self.factory._new_job("generation", scene["scene_id"])
+
+        def fake_generate(_provider, _image, target, prepared, _settings, **_callbacks):
+            target.write_bytes(b"glTF" + b"\0" * 32)
+            Image.new("RGB", (1024, 1024), (0, 0, 0)).save(prepared, format="PNG")
+            return {
+                "provider": "pixal3d",
+                "format": "glb",
+                "size": target.stat().st_size,
+                "prepared_width": 1024,
+                "prepared_height": 1024,
+            }
+
+        with mock.patch.object(
+            self.factory,
+            "_provider_weights_status",
+            return_value={"ready": True},
+        ), mock.patch.object(
+            self.factory.factory3d_generation,
+            "run_mesh_generation",
+            side_effect=fake_generate,
+        ):
+            result = self.factory._generate_mesh_object(
+                job,
+                image_stream.getvalue(),
+                object_id,
+                "Pixal object",
+                settings,
+            )
+
+        item = result["scene"]["objects"][0]
+        self.assertEqual(item["asset_kind"], "mesh")
+        self.assertEqual(item["source"]["type"], "model_import")
+        self.assertEqual(item["source"]["generator"], "pixal3d")
+        self.assertTrue(item["source"]["generated"])
+        self.assertEqual(item["source"]["format"], "glb")
+        self.assertEqual(item["settings"]["source"], "model_import")
+        self.assertEqual(item["settings"]["generation_source"], "pixal3d")
+        self.assertIn("/asset/model", item["urls"]["model"])
+        stored = self.factory.load_scene(scene["scene_id"])["objects"][0]
+        self.assertTrue(self.factory._object_file(scene["scene_id"], stored, "model").is_file())
+
+    def test_object_updates_cannot_replace_server_file_metadata(self):
+        scene = self.factory.create_scene("Scene")
+        object_id = self.factory._new_id()
+        scene["objects"].append(
+            {
+                "object_id": object_id,
+                "name": "Object",
+                "transform": self.gaussian.normalize_transform({}),
+                "files": {"ply": "objects/original/model.ply"},
+            }
+        )
+        self.factory._save_scene(scene)
+        updated = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "objects": [{
+                    "object_id": object_id,
+                    "name": "Moved",
+                    "transform": {"position": [1, 2, 3], "scale": 2},
+                    "files": {"ply": "../../escape.ply"},
+                }]
+            },
+        )
+        item = updated["objects"][0]
+        self.assertEqual(item["name"], "Moved")
+        self.assertEqual(item["transform"]["position"], [1.0, 2.0, 3.0])
+        self.assertEqual(item["files"]["ply"], "objects/original/model.ply")
+
+    def test_duplicate_object_has_independent_assets_and_transform(self):
+        scene = self.factory.create_scene("Scene")
+        object_id = self.factory._new_id()
+        object_root = self.factory.resolve_scene_dir(scene["scene_id"]) / "objects" / object_id
+        object_root.mkdir(parents=True)
+        files = {}
+        for key, name in {
+            "reference": "reference.png",
+            "prepared": "prepared.png",
+            "ply": "model.ply",
+        }.items():
+            target = object_root / name
+            target.write_bytes(f"{key}-asset".encode())
+            files[key] = str(target.relative_to(self.factory.resolve_scene_dir(scene["scene_id"])))
+        scene["objects"].append({
+            "object_id": object_id,
+            "name": "Machine",
+            "created_at": 1,
+            "visible": True,
+            "transform": self.gaussian.normalize_transform({"position": [1, 2, 3]}),
+            "files": files,
+        })
+        group_id = self.factory._new_id()
+        scene["layers"] = [{
+            "type": "group",
+            "group_id": group_id,
+            "name": "Machines",
+            "visible": True,
+            "children": [object_id],
+        }]
+        self.factory._save_scene(scene)
+
+        result = self.factory.duplicate_object(scene["scene_id"], object_id)
+        duplicate = self.factory._object_by_id(result["scene"], result["object_id"])
+        self.assertEqual(duplicate["name"], "Machine — copy")
+        self.assertEqual(duplicate["transform"]["position"], [1.0, 2.0, 3.0])
+        self.assertNotEqual(duplicate["files"], files)
+        for key in files:
+            source = self.factory._object_file(scene["scene_id"], scene["objects"][0], key)
+            copied = self.factory._object_file(scene["scene_id"], duplicate, key)
+            self.assertNotEqual(source, copied)
+            self.assertEqual(source.read_bytes(), copied.read_bytes())
+
+        duplicate["transform"]["position"][0] = 99
+        self.assertEqual(scene["objects"][0]["transform"]["position"][0], 1.0)
+        group = result["scene"]["layers"][0]
+        self.assertEqual(group["group_id"], group_id)
+        self.assertEqual(group["children"], [object_id, result["object_id"]])
+
+    def test_gaussian_ply_import_is_committed_to_scene_and_builds_viewport_asset(self):
+        scene = self.factory.create_scene("Imported models")
+        source_path = self.root / "ready-model.ply"
+        self._write_valid_ply(source_path, count=3)
+        source_info = self.gaussian.inspect_ply(source_path)
+        source_records = np.memmap(
+            source_path,
+            mode="r+",
+            dtype=source_info.dtype,
+            offset=source_info.data_offset,
+            shape=(source_info.vertex_count,),
+        )
+        source_records["x"] = 1.0
+        source_records["y"] = 2.0
+        source_records["z"] = 3.0
+        source_records.flush()
+        del source_records
+        source_bytes = source_path.read_bytes()
+
+        result = self.factory.import_ply_object(
+            scene["scene_id"],
+            io.BytesIO(source_bytes),
+            "..\\Ready Model.PLY",
+        )
+
+        restored = self.factory.load_scene(scene["scene_id"])
+        imported = self.factory._object_by_id(restored, result["object_id"])
+        self.assertEqual(imported["name"], "Ready Model")
+        self.assertEqual(imported["gaussians"], 3)
+        self.assertTrue(imported["visible"])
+        self.assertEqual(imported["source"]["type"], "ply_import")
+        self.assertEqual(imported["source"]["filename"], "Ready Model.PLY")
+        self.assertEqual(imported["source"]["size"], len(source_bytes))
+        self.assertEqual(imported["settings"]["source"], "ply_import")
+        self.assertEqual(
+            restored["layers"][-1],
+            {"type": "object", "object_id": result["object_id"]},
+        )
+        stored_ply = self.factory._object_file(scene["scene_id"], imported, "ply")
+        self.assertNotEqual(stored_ply.read_bytes(), source_bytes)
+        stored_info = self.gaussian.inspect_ply(stored_ply)
+        stored_records = np.memmap(
+            stored_ply,
+            mode="r",
+            dtype=stored_info.dtype,
+            offset=stored_info.data_offset,
+            shape=(stored_info.vertex_count,),
+        )
+        np.testing.assert_allclose(stored_records["x"], 3.0)
+        np.testing.assert_allclose(stored_records["y"], -2.0)
+        np.testing.assert_allclose(stored_records["z"], 1.0)
+        del stored_records
+        self.assertEqual(
+            imported["checksums"]["ply_sha256"],
+            self.factory._sha256_file(stored_ply),
+        )
+        thumbnail = self.factory._ensure_object_thumbnail(
+            scene["scene_id"],
+            imported,
+        )
+        self.assertTrue(thumbnail.is_file())
+        exported_ply = self.factory._ensure_object_ply_export(
+            scene["scene_id"],
+            imported["object_id"],
+        )
+        exported_info = self.gaussian.inspect_ply(exported_ply)
+        exported_records = np.memmap(
+            exported_ply,
+            mode="r",
+            dtype=exported_info.dtype,
+            offset=exported_info.data_offset,
+            shape=(exported_info.vertex_count,),
+        )
+        np.testing.assert_allclose(exported_records["x"], 1.0)
+        np.testing.assert_allclose(exported_records["y"], 2.0)
+        np.testing.assert_allclose(exported_records["z"], 3.0)
+        del exported_records
+        viewport = self.factory._ensure_object_splat(
+            scene["scene_id"],
+            imported["object_id"],
+        )
+        self.assertEqual(viewport.stat().st_size, 3 * 32)
+        public = self.factory._public_scene(restored)
+        public_item = self.factory._object_by_id(public, imported["object_id"])
+        self.assertIn("/asset/splat", public_item["urls"]["splat"])
+        self.assertIn("/asset/thumbnail", public_item["urls"]["thumbnail"])
+
+    def test_invalid_or_oversized_ply_import_does_not_add_partial_object(self):
+        scene = self.factory.create_scene("Reject imports")
+
+        with self.assertRaisesRegex(ValueError, "PLY header|not a PLY file"):
+            self.factory.import_ply_object(
+                scene["scene_id"],
+                io.BytesIO(b"not a PLY"),
+                "broken.ply",
+            )
+        self.assertEqual(self.factory.load_scene(scene["scene_id"])["objects"], [])
+
+        with mock.patch.object(self.factory, "MAX_PLY_UPLOAD_BYTES", 4):
+            with self.assertRaisesRegex(ValueError, "too large"):
+                self.factory.import_ply_object(
+                    scene["scene_id"],
+                    io.BytesIO(b"12345"),
+                    "oversized.ply",
+                )
+        self.assertEqual(self.factory.load_scene(scene["scene_id"])["objects"], [])
+        object_root = self.factory.resolve_scene_dir(scene["scene_id"]) / "objects"
+        self.assertEqual(list(object_root.iterdir()), [])
+
+    def test_scene_layers_preserve_order_groups_visibility_and_render_revision(self):
+        scene = self.factory.create_scene("Layered")
+        object_ids = [self.factory._new_id() for _ in range(3)]
+        for index, object_id in enumerate(object_ids):
+            scene["objects"].append({
+                "object_id": object_id,
+                "name": f"Object {index + 1}",
+                "visible": True,
+                "transform": self.gaussian.normalize_transform({}),
+                "files": {},
+            })
+        scene["layers"] = [
+            {"type": "object", "object_id": object_ids[0]},
+            {"type": "object", "object_id": object_ids[1]},
+            {"type": "object", "object_id": object_ids[2]},
+        ]
+        self.factory._save_scene(scene, bump_revision=False)
+        group_id = self.factory._new_id()
+        layers = [
+            {
+                "type": "group",
+                "group_id": group_id,
+                "name": "Foreground",
+                "visible": True,
+                "children": [object_ids[1], object_ids[0]],
+            },
+            {"type": "object", "object_id": object_ids[2]},
+        ]
+
+        grouped = self.factory.update_scene(scene["scene_id"], {"layers": layers})
+        self.assertEqual(grouped["revision"], 0)
+        self.assertEqual(grouped["layers"], layers)
+        self.assertEqual(self.factory._visible_object_ids(grouped), set(object_ids))
+
+        hidden_group = json.loads(json.dumps(layers))
+        hidden_group[0]["visible"] = False
+        hidden = self.factory.update_scene(scene["scene_id"], {"layers": hidden_group})
+        self.assertEqual(hidden["revision"], 1)
+        self.assertEqual(self.factory._visible_object_ids(hidden), {object_ids[2]})
+        self.assertEqual(hidden["exports"], {})
+
+        object_hidden = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "layers": layers,
+                "objects": [{"object_id": object_ids[2], "visible": False}],
+            },
+        )
+        self.assertEqual(object_hidden["revision"], 2)
+        self.assertEqual(
+            self.factory._visible_object_ids(object_hidden),
+            {object_ids[0], object_ids[1]},
+        )
+
+        with self.assertRaisesRegex(ValueError, "duplicate object"):
+            self.factory.update_scene(
+                scene["scene_id"],
+                {
+                    "layers": [
+                        {"type": "object", "object_id": object_ids[0]},
+                        {
+                            "type": "group",
+                            "group_id": self.factory._new_id(),
+                            "children": [object_ids[0]],
+                        },
+                    ]
+                },
+            )
+
+    def test_hidden_objects_are_excluded_only_from_combined_scene_export(self):
+        scene = self.factory.create_scene("Visibility")
+        visible_id = self.factory._new_id()
+        hidden_id = self.factory._new_id()
+        for object_id, visible in ((visible_id, True), (hidden_id, False)):
+            root = self.factory.resolve_scene_dir(scene["scene_id"]) / "objects" / object_id
+            root.mkdir(parents=True)
+            source = root / "model.ply"
+            source.write_bytes(object_id.encode())
+            scene["objects"].append({
+                "object_id": object_id,
+                "name": object_id,
+                "visible": visible,
+                "transform": self.gaussian.normalize_transform({}),
+                "files": {
+                    "ply": str(source.relative_to(
+                        self.factory.resolve_scene_dir(scene["scene_id"])
+                    ))
+                },
+            })
+        scene["layers"] = [
+            {"type": "object", "object_id": visible_id},
+            {"type": "object", "object_id": hidden_id},
+        ]
+        self.factory._save_scene(scene, bump_revision=False)
+
+        combined = self.factory._scene_sources(self.factory.load_scene(scene["scene_id"]))
+        self.assertEqual(len(combined), 1)
+        self.assertIn(visible_id, str(combined[0][0]))
+        individual = self.factory._scene_sources(
+            self.factory.load_scene(scene["scene_id"]),
+            hidden_id,
+        )
+        self.assertEqual(len(individual), 1)
+        self.assertIn(hidden_id, str(individual[0][0]))
+
+    def test_stale_scene_export_is_rebuilt_after_orientation_format_change(self):
+        scene = self.factory.create_scene("Scene")
+        object_id = self.factory._new_id()
+        source = self.factory.resolve_scene_dir(scene["scene_id"]) / "objects" / object_id / "model.ply"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b"source")
+        stale_ply = self.factory.resolve_scene_dir(scene["scene_id"]) / "exports" / "scene-r0.ply"
+        stale_splat = stale_ply.with_suffix(".splat")
+        stale_ply.parent.mkdir(parents=True, exist_ok=True)
+        stale_ply.write_bytes(b"stale")
+        stale_splat.write_bytes(b"stale")
+        scene["objects"].append(
+            {
+                "object_id": object_id,
+                "name": "Object",
+                "transform": self.gaussian.normalize_transform({}),
+                "files": {"ply": str(source.relative_to(self.factory.resolve_scene_dir(scene["scene_id"])))},
+            }
+        )
+        scene["exports"] = {
+            "revision": scene["revision"],
+            "format_version": self.factory.EXPORT_FORMAT_VERSION - 1,
+            "files": {
+                "ply": str(stale_ply.relative_to(self.factory.resolve_scene_dir(scene["scene_id"]))),
+                "splat": str(stale_splat.relative_to(self.factory.resolve_scene_dir(scene["scene_id"]))),
+            },
+        }
+        self.factory._save_scene(scene, bump_revision=False)
+        saved_camera_id = "f" * 32
+        self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "cameras": [{
+                    "camera_id": saved_camera_id,
+                    "name": "Camera 1",
+                    "position": [6, 5, 4],
+                    "target": [1, 0, 0],
+                    "up": [0, 1, 0],
+                    "fov": 50,
+                }],
+            },
+        )
+
+        captured_metadata = {}
+
+        def fake_export(_sources, ply, *, metadata=None):
+            captured_metadata.update(metadata or {})
+            Path(ply).parent.mkdir(parents=True, exist_ok=True)
+            Path(ply).write_bytes(b"upright")
+            return {
+                "ply": {"gaussians": 1, "objects": 1},
+            }
+
+        with mock.patch.object(
+            self.factory,
+            "export_gaussian_scene",
+            side_effect=fake_export,
+        ) as export:
+            result = self.factory.ensure_scene_ply_export(scene["scene_id"])
+
+        export.assert_called_once()
+        self.assertIn(f"-v{self.factory.EXPORT_FORMAT_VERSION}-", result["ply"].name)
+        self.assertEqual(set(result), {"scene", "ply"})
+        self.assertEqual(captured_metadata["camera"]["position"], [2.8, 2.1, 4.2])
+        self.assertEqual(captured_metadata["camera"]["target"], [0.0, 0.0, 0.0])
+        self.assertEqual(captured_metadata["camera"]["fov"], 42.0)
+        self.assertEqual(captured_metadata["schema"], "vnccs-3d-factory-gaussian-scene/v2")
+        self.assertEqual(captured_metadata["cameras"][0]["camera_id"], saved_camera_id)
+        self.assertEqual(captured_metadata["cameras"][0]["position"], [6.0, 5.0, 4.0])
+        self.assertEqual(captured_metadata["render"]["width"], 1024)
+        saved = self.factory.load_scene(scene["scene_id"])
+        self.assertEqual(saved["exports"]["format_version"], self.factory.EXPORT_FORMAT_VERSION)
+        self.assertEqual(saved["exports"]["render_revision"], saved["render_revision"])
+        self.assertEqual(set(saved["exports"]["files"]), {"ply"})
+
+        updated = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "camera": {
+                    "position": [7, 6, 5],
+                    "target": [1, 2, 3],
+                    "fov": 61,
+                },
+                "render": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspect": "16:9",
+                    "show_camera_frame": True,
+                },
+            },
+        )
+        with mock.patch.object(
+            self.factory,
+            "export_gaussian_scene",
+            side_effect=fake_export,
+        ) as camera_export:
+            self.factory.ensure_scene_ply_export(scene["scene_id"])
+        camera_export.assert_called_once()
+        self.assertEqual(captured_metadata["camera"]["position"], [7.0, 6.0, 5.0])
+        self.assertEqual(captured_metadata["camera"]["target"], [1.0, 2.0, 3.0])
+        self.assertEqual(captured_metadata["camera"]["fov"], 61.0)
+        self.assertEqual(captured_metadata["render"]["width"], 1920)
+        self.assertEqual(captured_metadata["render"]["height"], 1080)
+        self.assertEqual(
+            captured_metadata["render_revision"],
+            updated["render_revision"],
+        )
+
+    def test_invalid_scene_identifier_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.factory.resolve_scene_dir("../../outside")
+
+    def test_reference_image_is_persisted_with_scene_and_public_path_is_safe(self):
+        scene = self.factory.create_scene("Scene")
+        stream = io.BytesIO()
+        Image.new("RGB", (3, 2), (20, 40, 60)).save(stream, format="PNG")
+        saved = self.factory.store_scene_reference(
+            scene["scene_id"],
+            stream.getvalue(),
+            "my reference.png",
+        )
+        reference = saved["reference"]
+        self.assertEqual(reference["name"], "my reference.png")
+        self.assertEqual((reference["width"], reference["height"]), (3, 2))
+        self.assertTrue(self.factory._scene_reference_file(saved).is_file())
+        preview_path = self.factory._scene_reference_preview_file(saved)
+        self.assertTrue(preview_path.is_file())
+        with Image.open(preview_path) as preview:
+            self.assertLessEqual(max(preview.size), 640)
+        public = self.factory._public_scene(saved)["reference"]
+        self.assertNotIn("file", public)
+        self.assertNotIn("preview_file", public)
+        self.assertEqual(
+            public["url"],
+            f"/vnccs/3d-factory/scenes/{scene['scene_id']}/reference",
+        )
+        self.assertRegex(
+            public["preview_url"],
+            rf"^/vnccs/3d-factory/scenes/{scene['scene_id']}/reference/preview\?v=\d+$",
+        )
+
+    def test_skydome_image_settings_and_public_asset_are_scene_persistent(self):
+        scene = self.factory.create_scene("Sky")
+        stream = io.BytesIO()
+        Image.new("RGB", (512, 256), (25, 90, 170)).save(stream, "JPEG")
+
+        saved = self.factory.store_scene_skydome(
+            scene["scene_id"],
+            stream.getvalue(),
+            "Mountain Sunset.jpg",
+        )
+        sky = saved["skydome"]
+        self.assertEqual(sky["type"], "skydome")
+        self.assertEqual(sky["projection"], "equirectangular")
+        self.assertEqual(sky["name"], "Mountain Sunset")
+        self.assertEqual((sky["width"], sky["height"]), (512, 256))
+        self.assertTrue(self.factory._scene_skydome_file(saved).is_file())
+        viewport_path = self.factory._scene_skydome_viewport_file(saved)
+        self.assertTrue(viewport_path.is_file())
+        with Image.open(viewport_path) as viewport:
+            self.assertLessEqual(viewport.width, 2048)
+            self.assertLessEqual(viewport.height, 1024)
+        self.assertEqual(saved["revision"], 0)
+        self.assertEqual(saved["render_revision"], 1)
+
+        updated = self.factory.update_scene(
+            scene["scene_id"],
+            {"skydome": {"yaw": 143, "pitch": -12, "exposure": 1.4}},
+        )
+        self.assertEqual(updated["skydome"]["yaw"], 143.0)
+        self.assertEqual(updated["skydome"]["pitch"], -12.0)
+        self.assertEqual(updated["skydome"]["exposure"], 1.4)
+        self.assertEqual(updated["skydome"]["roll"], 0.0)
+        self.assertTrue(updated["skydome"]["visible"])
+        self.assertEqual(updated["revision"], 0)
+        self.assertEqual(updated["render_revision"], 2)
+
+        public = self.factory._public_scene(updated)["skydome"]
+        self.assertEqual(public["type"], "skydome")
+        self.assertNotIn("file", public)
+        self.assertRegex(
+            public["url"],
+            rf"^/vnccs/3d-factory/scenes/{scene['scene_id']}/skydome/viewport\?v=\d+$",
+        )
+        self.assertRegex(
+            public["source_url"],
+            rf"^/vnccs/3d-factory/scenes/{scene['scene_id']}/skydome\?v=\d+$",
+        )
+
+        removed = self.factory.remove_scene_skydome(scene["scene_id"])
+        self.assertNotIn("skydome", removed)
+        self.assertEqual(removed["render_revision"], 3)
+        with self.assertRaises(FileNotFoundError):
+            self.factory._scene_skydome_file(removed)
+
+    def test_scene_preview_is_a_revision_bound_3d_render(self):
+        scene = self.factory.create_scene("Scene")
+        scene = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "render": {
+                    "width": 320,
+                    "height": 180,
+                    "aspect": "16:9",
+                    "show_camera_frame": True,
+                },
+            },
+        )
+        stream = io.BytesIO()
+        Image.new("RGB", (320, 180), (12, 24, 48)).save(stream, format="PNG")
+        capture_token = "c" * 32
+        saved = self.factory.store_scene_preview(
+            scene["scene_id"],
+            stream.getvalue(),
+            capture_token=capture_token,
+        )
+        preview = saved["preview"]
+        self.assertEqual((preview["width"], preview["height"]), (320, 180))
+        self.assertEqual(preview["revision"], saved["revision"])
+        self.assertEqual(preview["render_revision"], saved["render_revision"])
+        self.assertTrue(self.factory._scene_preview_file(saved).is_file())
+        self.assertTrue(
+            self.factory._scene_preview_file(saved, capture_token).is_file()
+        )
+        with self.assertRaisesRegex(FileNotFoundError, "execution capture"):
+            self.factory._scene_preview_file(saved, "d" * 32)
+        failed = self.factory.store_scene_preview_error(
+            scene["scene_id"],
+            "d" * 32,
+            "GPU context was lost",
+        )
+        self.assertEqual(failed["preview_sync"]["status"], "failed")
+        self.assertEqual(failed["preview_sync"]["error"], "GPU context was lost")
+        public = self.factory._public_scene(saved)["preview"]
+        self.assertNotIn("file", public)
+        self.assertEqual(
+            public["url"],
+            f"/vnccs/3d-factory/scenes/{scene['scene_id']}/preview",
+        )
+
+        renamed = self.factory.update_scene(scene["scene_id"], {"name": "Changed"})
+        self.assertEqual(
+            self.factory._scene_preview_file(renamed),
+            self.factory._scene_preview_file(saved),
+        )
+        changed = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "objects": [],
+                "layers": [],
+            },
+        )
+        self.assertEqual(changed["revision"], saved["revision"])
+        scene_with_object = self.factory.load_scene(scene["scene_id"])
+        object_id = self.factory._new_id()
+        scene_with_object["objects"].append({
+            "object_id": object_id,
+            "name": "Object",
+            "visible": True,
+            "transform": self.gaussian.normalize_transform({}),
+            "files": {},
+        })
+        scene_with_object["layers"].append({"type": "object", "object_id": object_id})
+        self.factory._save_scene(scene_with_object, bump_revision=False)
+        changed = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "objects": [{
+                    "object_id": object_id,
+                    "transform": {"position": [1, 0, 0]},
+                }],
+            },
+        )
+        with self.assertRaisesRegex(FileNotFoundError, "stale"):
+            self.factory._scene_preview_file(changed)
+
+    def test_execution_capture_set_is_atomic_ordered_and_scene_export_sized(self):
+        scene = self.factory.create_scene("Camera captures")
+        camera_ids = ["a" * 32, "b" * 32]
+        scene = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "render": {
+                    "width": 320,
+                    "height": 180,
+                    "aspect": "16:9",
+                    "show_camera_frame": False,
+                },
+                "cameras": [
+                    {
+                        "camera_id": camera_id,
+                        "name": f"Camera {index + 1}",
+                        "position": [index + 1, 2, 3],
+                        "target": [0, 0, 0],
+                        "up": [0, 1, 0],
+                        "fov": 42 + index,
+                    }
+                    for index, camera_id in enumerate(camera_ids)
+                ],
+            },
+        )
+
+        def png(color):
+            stream = io.BytesIO()
+            Image.new("RGB", (320, 180), color).save(stream, format="PNG")
+            return stream.getvalue()
+
+        token = "c" * 32
+        saved = self.factory.store_scene_capture_set(
+            scene["scene_id"],
+            png((10, 20, 30)),
+            {
+                camera_ids[0]: png((40, 50, 60)),
+                camera_ids[1]: png((70, 80, 90)),
+            },
+            camera_ids,
+            scene["revision"],
+            scene["render_revision"],
+            token,
+        )
+        paths = self.factory._scene_capture_files(saved, token)
+        self.assertEqual(len(paths), 3)
+        self.assertEqual(paths[0].name, "current.png")
+        self.assertEqual([path.stem for path in paths[1:]], camera_ids)
+        self.assertEqual(saved["preview_sync"]["camera_count"], 2)
+        self.assertNotIn("capture_set", self.factory._public_scene(saved))
+
+        changed = self.factory.update_scene(
+            scene["scene_id"],
+            {"cameras": [scene["cameras"][1]]},
+        )
+        with self.assertRaisesRegex(FileNotFoundError, "stale"):
+            self.factory._scene_capture_files(changed)
+
+        wrong = io.BytesIO()
+        Image.new("RGB", (321, 180), (1, 2, 3)).save(wrong, format="PNG")
+        with self.assertRaisesRegex(ValueError, "Scene Export"):
+            self.factory.store_scene_capture_set(
+                scene["scene_id"],
+                wrong.getvalue(),
+                {camera_ids[1]: png((1, 2, 3))},
+                [camera_ids[1]],
+                changed["revision"],
+                changed["render_revision"],
+                "d" * 32,
+            )
+
+    def test_scene_render_dimensions_and_camera_invalidate_only_the_preview(self):
+        scene = self.factory.create_scene("Camera")
+        first = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "render": {
+                    "width": 1920,
+                    "height": 1080,
+                    "aspect": "16:9",
+                    "show_camera_frame": True,
+                }
+            },
+        )
+        self.assertEqual(first["revision"], 0)
+        self.assertEqual(first["render_revision"], 1)
+        self.assertEqual(first["render"]["width"], 1920)
+        self.assertEqual(first["render"]["height"], 1080)
+
+        wrong = io.BytesIO()
+        Image.new("RGB", (1024, 1024), (1, 2, 3)).save(wrong, format="PNG")
+        with self.assertRaisesRegex(ValueError, "configured export frame is 1920x1080"):
+            self.factory.store_scene_preview(scene["scene_id"], wrong.getvalue())
+
+        exact = io.BytesIO()
+        Image.new("RGB", (1920, 1080), (4, 5, 6)).save(exact, format="PNG")
+        saved = self.factory.store_scene_preview(scene["scene_id"], exact.getvalue())
+        self.assertTrue(self.factory._scene_preview_file(saved).is_file())
+
+        camera = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "camera": {
+                    "position": [3, 4, 5],
+                    "target": [0.5, 0.25, -1],
+                    "fov": 55,
+                }
+            },
+        )
+        self.assertEqual(camera["revision"], 0)
+        self.assertEqual(camera["render_revision"], 2)
+        self.assertEqual(camera["camera"]["position"], [3.0, 4.0, 5.0])
+        self.assertEqual(camera["camera"]["fov"], 55.0)
+        with self.assertRaisesRegex(FileNotFoundError, "camera or resolution"):
+            self.factory._scene_preview_file(camera)
+        with self.assertRaisesRegex(ValueError, "camera or export frame changed"):
+            self.factory.store_scene_preview(
+                scene["scene_id"],
+                exact.getvalue(),
+                saved["revision"],
+                saved["render_revision"],
+            )
+
+        frame_only = self.factory.update_scene(
+            scene["scene_id"],
+            {
+                "render": {
+                    **camera["render"],
+                    "show_camera_frame": False,
+                }
+            },
+        )
+        self.assertEqual(frame_only["revision"], 0)
+        self.assertEqual(frame_only["render_revision"], 2)
+
+    def test_legacy_preview_with_wrong_dimensions_is_not_exposed(self):
+        scene = self.factory.create_scene("Legacy")
+        root = self.factory.resolve_scene_dir(scene["scene_id"])
+        preview_path = root / "preview" / "scene.png"
+        preview_path.parent.mkdir(parents=True)
+        Image.new("RGB", (1154, 1280), (1, 1, 1)).save(preview_path, format="PNG")
+        scene["preview"] = {
+            "file": str(preview_path.relative_to(root)),
+            "width": 1154,
+            "height": 1280,
+            "revision": 0,
+        }
+        self.factory._save_scene(scene, bump_revision=False)
+        loaded = self.factory.load_scene(scene["scene_id"])
+        with self.assertRaisesRegex(FileNotFoundError, "dimensions"):
+            self.factory._scene_preview_file(loaded)
+        self.assertNotIn("url", self.factory._public_scene(loaded)["preview"])
+
+    def test_scene_preview_rejects_placeholder_sized_images(self):
+        scene = self.factory.create_scene("Scene")
+        stream = io.BytesIO()
+        Image.new("RGB", (1, 1), (0, 0, 0)).save(stream, format="PNG")
+        with self.assertRaisesRegex(ValueError, "only 1x1"):
+            self.factory.store_scene_preview(scene["scene_id"], stream.getvalue())
+
+    def test_weights_are_discovered_in_standard_comfy_model_directories(self):
+        model_root = self.factory._model_root()
+        for relative in self.factory._WEIGHT_FILES:
+            path = model_root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"weight")
+
+        status = self.factory._weights_status()
+        self.assertTrue(status["ready"])
+        self.assertEqual(Path(status["root"]), model_root)
+        self.assertTrue(all(Path(item["resolved_path"]).is_file() for item in status["files"]))
+        self.assertFalse(any("TripoSplat" in item["resolved_path"] for item in status["files"]))
+
+    def test_weights_are_discovered_through_extra_model_paths_and_legacy_root(self):
+        model_root = self.factory._model_root()
+        extra_root = self.root / "extra_vae"
+        self.factory._category_roots = lambda category: [extra_root] if category == "vae" else []
+
+        expected = {}
+        for relative in self.factory._WEIGHT_FILES:
+            relative_path = Path(relative)
+            if relative == "vae/flux2-vae.safetensors":
+                path = extra_root / relative_path.name
+            else:
+                path = model_root / "TripoSplat" / relative_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"weight")
+            expected[relative] = path.resolve()
+
+        paths = self.factory._weight_paths()
+        self.assertEqual(paths, expected)
+        self.assertTrue(self.factory._weights_status()["ready"])
+
+    def test_all_factory_api_routes_are_registered_on_the_comfy_route_table(self):
+        class RouteTableStub:
+            def __init__(self):
+                self.definitions = []
+
+            def _register(self, method, path):
+                def decorator(handler):
+                    self.definitions.append((method, path, handler))
+                    return handler
+
+                return decorator
+
+            def get(self, path):
+                return self._register("GET", path)
+
+            def post(self, path):
+                return self._register("POST", path)
+
+            def patch(self, path):
+                return self._register("PATCH", path)
+
+            def put(self, path):
+                return self._register("PUT", path)
+
+            def delete(self, path):
+                return self._register("DELETE", path)
+
+        aiohttp_stub = types.ModuleType("aiohttp")
+        aiohttp_stub.web = types.SimpleNamespace()
+        routes = RouteTableStub()
+        self.factory._REGISTERED = False
+        try:
+            with mock.patch.dict(sys.modules, {"aiohttp": aiohttp_stub}):
+                self.factory.register_routes(routes)
+        finally:
+            self.factory._REGISTERED = False
+        registered = {(method, path) for method, path, _handler in routes.definitions}
+        expected = {
+            ("GET", "/vnccs/3d-factory/capabilities"),
+            ("GET", "/vnccs/3d-factory/splat-cache"),
+            ("POST", "/vnccs/3d-factory/splat-cache/settings"),
+            ("POST", "/vnccs/3d-factory/splat-cache/clear"),
+            ("POST", "/vnccs/3d-factory/weights/download"),
+            ("POST", "/vnccs/3d-factory/generators/{provider}/weights/download"),
+            ("GET", "/vnccs/3d-factory/scenes"),
+            ("POST", "/vnccs/3d-factory/scenes"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}"),
+            ("PATCH", "/vnccs/3d-factory/scenes/{scene_id}"),
+            ("DELETE", "/vnccs/3d-factory/scenes/{scene_id}"),
+            ("POST", "/vnccs/3d-factory/scenes/{scene_id}/reference"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}/reference"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}/reference/preview"),
+            ("POST", "/vnccs/3d-factory/scenes/{scene_id}/skydome"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}/skydome"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}/skydome/viewport"),
+            ("DELETE", "/vnccs/3d-factory/scenes/{scene_id}/skydome"),
+            ("POST", "/vnccs/3d-factory/scenes/{scene_id}/preview"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}/preview"),
+            ("POST", "/vnccs/3d-factory/scenes/{scene_id}/generate"),
+            ("GET", "/vnccs/3d-factory/jobs/{job_id}"),
+            ("POST", "/vnccs/3d-factory/jobs/{job_id}/cancel"),
+            ("GET", "/vnccs/3d-factory/jobs/{job_id}/log"),
+            ("PATCH", "/vnccs/3d-factory/scenes/{scene_id}/objects/{object_id}"),
+            ("POST", "/vnccs/3d-factory/scenes/{scene_id}/objects/{object_id}/duplicate"),
+            ("DELETE", "/vnccs/3d-factory/scenes/{scene_id}/objects/{object_id}"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}/objects/{object_id}/asset/{kind}"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}/objects/{object_id}/export/ply"),
+            ("POST", "/vnccs/3d-factory/scenes/{scene_id}/export"),
+            ("GET", "/vnccs/3d-factory/scenes/{scene_id}/exports/ply"),
+            ("GET", "/vnccs/3d-factory/library/items"),
+            ("POST", "/vnccs/3d-factory/library/items"),
+            ("PUT", "/vnccs/3d-factory/library/items/{asset_id}"),
+            ("POST", "/vnccs/3d-factory/library/items/{asset_id}/load"),
+            ("GET", "/vnccs/3d-factory/library/items/{asset_id}/preview"),
+            ("GET", "/vnccs/3d-factory/library/items/{asset_id}/download"),
+            ("DELETE", "/vnccs/3d-factory/library/items/{asset_id}"),
+        }
+        self.assertTrue(expected.issubset(registered), expected.difference(registered))
+
+
+if __name__ == "__main__":
+    unittest.main()

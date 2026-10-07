@@ -1,5 +1,27 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { installCustomSelects } from "./vnccs_custom_select.mjs";
+
+// Global Registry Cache to prevent API storms (multiple nodes requesting same data)
+window.VNCCS_REGISTRY = window.VNCCS_REGISTRY || {};
+window.VNCCS_FETCH_PROMISES = window.VNCCS_FETCH_PROMISES || {};
+
+function appendTextElement(parent, tagName, text, cssText = "") {
+    const element = document.createElement(tagName);
+    if (cssText) element.style.cssText = cssText;
+    element.textContent = String(text ?? "");
+    parent.appendChild(element);
+    return element;
+}
+
+function setStatusText(element, text, color, fontFamily = "") {
+    const span = document.createElement("span");
+    span.textContent = String(text ?? "");
+    span.style.color = color;
+    if (fontFamily) span.style.fontFamily = fontFamily;
+    element.replaceChildren(span);
+    return span;
+}
 
 class VNCCS_ModelListWidget {
     constructor(node, container) {
@@ -10,10 +32,17 @@ class VNCCS_ModelListWidget {
         this.downloadStatuses = {}; // Store status from server
         this.pollingInterval = null;
         this.downloadStartTimes = {}; // Local logic for fake progress
-        
+        this.downloadProgressTimers = {};
+        this.disposed = false;
+        this.pendingTimeouts = new Set();
+        this.disposeCallbacks = new Set();
+
         // Styles
         this.styleContainer();
-        
+        this.customSelectController = installCustomSelects(this.container, {
+            theme: "model-manager",
+        });
+
         // Start polling for status periodically
         this.startPolling();
     }
@@ -28,13 +57,13 @@ class VNCCS_ModelListWidget {
         this.container.style.height = "100%";
         this.container.style.fontFamily = "sans-serif";
         this.container.style.position = "relative"; // Ensure we can place overlays
-        
+
         // 0. Header Area
         this.header = document.createElement("div");
         this.header.style.cssText = `
             padding: 8px 10px;
             background: #1a1a1a;
-            border-bottom: 1px solid #333;
+            border-bottom: 2px solid #333;
             color: #ccc;
             font-size: 12px;
             font-weight: bold;
@@ -42,7 +71,21 @@ class VNCCS_ModelListWidget {
             justify-content: space-between;
             align-items: center;
         `;
-        this.header.innerHTML = "<span>Status: Unknown</span>";
+
+        this.statusText = document.createElement("span");
+        this.statusText.innerText = "Status: Unknown";
+        this.header.appendChild(this.statusText);
+
+        // Add Settings Cog
+        const settingsBtn = document.createElement("div");
+        settingsBtn.innerHTML = "⚙️";
+        settingsBtn.style.cssText = "cursor: pointer; font-size: 16px; transition: opacity 0.2s; opacity: 0.7;";
+        settingsBtn.title = "Download policy";
+        settingsBtn.onmouseover = () => settingsBtn.style.opacity = "1";
+        settingsBtn.onmouseout = () => settingsBtn.style.opacity = "0.7";
+        settingsBtn.onclick = () => this.showApiKeyDialog();
+
+        this.header.appendChild(settingsBtn);
         this.container.appendChild(this.header);
 
         // 1. List Area (Scrollable)
@@ -57,7 +100,7 @@ class VNCCS_ModelListWidget {
         `;
         this.listArea.innerHTML = `<div style="color: #888; text-align: center; margin-top: 20px;">Click 'Check Models' to load list</div>`;
         this.container.appendChild(this.listArea);
-        
+
         // 2. Footer Area (Sticky Bottom)
         this.footer = document.createElement("div");
         this.footer.style.cssText = `
@@ -67,7 +110,7 @@ class VNCCS_ModelListWidget {
             display: flex;
             justify-content: center;
         `;
-        
+
         const downloadAllBtn = document.createElement("button");
         downloadAllBtn.textContent = "Download All Missing/Updates";
         downloadAllBtn.className = "vnccs-btn-all";
@@ -83,80 +126,82 @@ class VNCCS_ModelListWidget {
             width: 100%;
         `;
         downloadAllBtn.onclick = () => this.downloadAll();
-        
+
         this.footer.appendChild(downloadAllBtn);
         this.container.appendChild(this.footer);
     }
 
     async downloadAll() {
         if (this.models.length === 0) return;
-        
+
         // Stop any existing queue
-        this.downloadQueue = []; 
+        this.downloadQueue = [];
         this.isProcessingQueue = false;
-        
+
         const tasks = [];
         Array.from(this.listArea.children).forEach(child => {
-             const modelName = child.dataset.modelName;
-             if (!modelName) return;
-             
-             const versionSelect = child.querySelector("select");
-             const btn = child.querySelector("button");
-             const btnText = btn.textContent;
-             
-             if (btnText === "Download" || btnText === "Switch/Update" || btnText === "Retry") {
-                 tasks.push({ name: modelName, version: versionSelect.value });
-             }
+            const modelName = child.dataset.modelName;
+            if (!modelName) return;
+
+            const versionSelect = child.querySelector("select");
+            const btn = child.querySelector("button");
+            const btnText = btn.textContent;
+
+            if (btnText === "Download" || btnText === "Switch/Update" || btnText === "Retry") {
+                tasks.push({ name: modelName, version: versionSelect.value });
+            }
         });
 
-        if(tasks.length === 0) {
-            alert("All models are up-to-date with current selections.");
+        if (tasks.length === 0) {
+            this.showMessage("All models are up-to-date with current selections.");
             return;
         }
 
-        if(!confirm(`Start downloading ${tasks.length} models?`)) return;
+        this.showConfirm(`Start downloading ${tasks.length} models?`, () => {
+            // 1. Mark all as queued visually
+            this.downloadQueue = tasks;
+            for (const task of tasks) {
+                // Only mark manually if not already downloading
+                const s = this.downloadStatuses[task.name];
+                if (!s || s.status !== "downloading") {
+                    this.downloadStatuses[task.name] = { status: "queued", message: "Waiting in queue..." };
+                }
+            }
+            this.renderList();
 
-        // 1. Mark all as queued visually
-        this.downloadQueue = tasks;
-        for (const task of tasks) {
-            // Only mark manually if not already downloading
-             const s = this.downloadStatuses[task.name];
-             if (!s || s.status !== "downloading") {
-                this.downloadStatuses[task.name] = { status: "queued", message: "Waiting in queue..." };
-             }
-        }
-        this.renderList();
-
-        // 2. Start Processing
-        this.processQueue();
+            // 2. Start Processing
+            this.processQueue();
+        });
     }
-    
+
     async processQueue() {
-        if (this.isProcessingQueue) return;
+        if (this.isProcessingQueue || this.disposed) return;
         this.isProcessingQueue = true;
-        
+
         try {
-            while (this.downloadQueue.length > 0) {
+            while (!this.disposed && this.downloadQueue.length > 0) {
                 const task = this.downloadQueue.shift(); // Get next
-                
+
                 // Double check if we should still download (maybe state changed?)
                 // e.g. user manually clicked retry on it?
-                
+
                 // Start download
                 await this.downloadModel(this.node.widgets[0].value, task.name, task.version);
-                
+
                 // Wait for completion with timeout
                 try {
                     await this.waitForCompletion(task.name, 900000); // 15 min timeout per model
                 } catch (e) {
                     console.error("Download timeout or error:", e);
-                    this.downloadStatuses[task.name] = { status: "error", message: "Timed out / Error" };
-                    this.renderList();
+                    if (!this.disposed) {
+                        this.downloadStatuses[task.name] = { status: "error", message: "Timed out / Error" };
+                        this.renderList();
+                    }
                     // Continue to next...
                 }
-                
+
                 // Short rest
-                await new Promise(r => setTimeout(r, 1000));
+                await this.delay(1000);
             }
         } finally {
             this.isProcessingQueue = false;
@@ -164,79 +209,146 @@ class VNCCS_ModelListWidget {
             // If queue empty, we are fine.
         }
     }
-    
+
     async waitForCompletion(modelName, timeoutMs = 600000) {
         const start = Date.now();
         return new Promise((resolve, reject) => {
+            let settled = false;
+            let timer = null;
+            const finish = (callback, value) => {
+                if (settled) return;
+                settled = true;
+                if (timer !== null) this.clearTrackedTimeout(timer);
+                this.disposeCallbacks.delete(onDispose);
+                callback(value);
+            };
+            const onDispose = () => finish(reject, new Error("Widget disposed"));
+            this.disposeCallbacks.add(onDispose);
             const check = () => {
+                if (this.disposed) {
+                    onDispose();
+                    return;
+                }
                 const s = this.downloadStatuses[modelName];
-                
+
                 if (Date.now() - start > timeoutMs) {
-                    reject(new Error("Timeout"));
+                    finish(reject, new Error("Timeout"));
                     return;
                 }
 
                 // If status is success or error, we are done
                 if (s && (s.status === "success" || s.status === "error")) {
-                    resolve();
+                    finish(resolve);
                 } else if (!s) {
                     // Status disappeared? treat as error
-                    reject(new Error("Status lost"));
+                    finish(reject, new Error("Status lost"));
                 } else {
                     // Still downloading... check again in 2s
-                    setTimeout(check, 2000);
+                    timer = this.setTrackedTimeout(check, 2000);
                 }
             };
             check();
         });
     }
 
-    async fetchModels(repoId) {
+    setTrackedTimeout(callback, delay) {
+        if (this.disposed) return null;
+        const timer = window.setTimeout(() => {
+            this.pendingTimeouts.delete(timer);
+            if (!this.disposed) callback();
+        }, delay);
+        this.pendingTimeouts.add(timer);
+        return timer;
+    }
+
+    clearTrackedTimeout(timer) {
+        if (timer === null || timer === undefined) return;
+        window.clearTimeout(timer);
+        this.pendingTimeouts.delete(timer);
+    }
+
+    delay(delay) {
+        if (this.disposed) return Promise.resolve();
+        return new Promise((resolve) => {
+            let timer = null;
+            const finish = () => {
+                this.disposeCallbacks.delete(finish);
+                if (timer !== null) this.clearTrackedTimeout(timer);
+                resolve();
+            };
+            this.disposeCallbacks.add(finish);
+            timer = this.setTrackedTimeout(finish, delay);
+        });
+    }
+
+    async fetchModels(repoId, force = false) {
+        if (this.disposed) return;
         this.loading = true;
-        
-        // 1. Try to load from cache first for instant feedback
-        const cacheKey = `vnccs_cache_${repoId}`;
-        const cached = localStorage.getItem(cacheKey);
-        
-        if (cached && this.models.length === 0) {
-            try {
-                const parsed = JSON.parse(cached);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.models = parsed;
-                    this.renderList();
-                    // Don't return, continue to fetch fresh data
-                } else {
-                    this.renderLoading();
-                }
-            } catch (e) {
-                this.renderLoading();
-            }
-        } else if (this.models.length === 0) {
+
+        if (force) {
+            // Clear cache for this repo to ensure no stale data survives
+            delete window.VNCCS_REGISTRY[repoId];
+            const cacheKey = `vnccs_cache_${repoId}`;
+            localStorage.removeItem(cacheKey);
+        }
+
+        if (!force && window.VNCCS_REGISTRY[repoId]) {
+            this.models = window.VNCCS_REGISTRY[repoId];
+            this.renderList();
+        } else if (force || this.models.length === 0) {
             this.renderLoading();
         }
-        
-        // 2. Network Fetch in background
-        try {
-            const response = await api.fetchApi(`/vnccs/manager/check?repo_id=${encodeURIComponent(repoId)}`);
-            const data = await response.json();
-            
-            if (data.error) {
-                // If we have cache, maybe just show a quiet error or toast?
-                // For now, if no models, show error. If models exist, keep them (stale is better than error)
-                if (this.models.length === 0) this.renderError(data.error);
-            } else {
+
+        // Debounce: if a fetch for this repo is already in flight, reuse it
+        // UNLESS force is true, then we want a fresh network call
+        if (!force && window.VNCCS_FETCH_PROMISES[repoId]) {
+            try {
+                const data = await window.VNCCS_FETCH_PROMISES[repoId];
                 this.models = Array.isArray(data) ? data : (data.models || []);
-                // Update Cache
-                localStorage.setItem(cacheKey, JSON.stringify(this.models));
-                
-                await this.updateStatuses(); 
                 this.renderList();
-                
-                // Notify others (Selectors) that fresh data with active versions is here
-                window.dispatchEvent(new CustomEvent("vnccs-registry-updated"));
+                return;
+            } catch (e) {
+                // fall through to retry if previous failed
             }
+        }
+
+        // 2. Network Fetch in background
+        const fetchPromise = (async () => {
+            try {
+                const url = `/vnccs/manager/check?repo_id=${encodeURIComponent(repoId)}${force ? '&force_refresh=true' : ''}`;
+                const response = await api.fetchApi(url);
+                const data = await response.json();
+
+                if (!data.error) {
+                    const models = Array.isArray(data) ? data : (data.models || []);
+                    window.VNCCS_REGISTRY[repoId] = models;
+                    return models;
+                }
+                throw new Error(data.error);
+            } finally {
+                delete window.VNCCS_FETCH_PROMISES[repoId];
+            }
+        })();
+
+        window.VNCCS_FETCH_PROMISES[repoId] = fetchPromise;
+
+        try {
+            const models = await fetchPromise;
+            if (this.disposed) return;
+            this.models = models;
+            const cacheKey = `vnccs_cache_${repoId}`;
+            localStorage.setItem(cacheKey, JSON.stringify(this.models));
+
+            await this.updateStatuses();
+            this.renderList();
+
+            // Notify others (Selectors) that fresh data with active versions is here
+            // Pass data in detail to avoid extra fetches
+            window.dispatchEvent(new CustomEvent("vnccs-registry-updated", {
+                detail: { repo_id: repoId, models: this.models }
+            }));
         } catch (e) {
-             if (this.models.length === 0) this.renderError(e.message);
+            if (this.models.length === 0) this.renderError(e.message);
         } finally {
             this.loading = false;
         }
@@ -244,98 +356,115 @@ class VNCCS_ModelListWidget {
 
     startPolling() {
         if (this.pollingInterval) clearInterval(this.pollingInterval);
-        this.pollingInterval = setInterval(() => this.updateStatuses(), 2000);
+        if (this.disposed) return;
+        this.pollingInterval = setInterval(() => {
+            if (!this.disposed) this.updateStatuses();
+        }, 2000);
     }
 
     showApiKeyDialog(modelName, repoId, version) {
-        // Create an overlay (simple div over the listArea)
-        const overlay = document.createElement("div");
-        overlay.style.cssText = `
-            position: absolute; top:0; left:0; width:100%; height:100%; 
-            background: rgba(0,0,0,0.85); z-index: 100;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            padding: 20px; box-sizing: border-box; text-align: center;
-        `;
-        
-        const dialog = document.createElement("div");
-        dialog.style.cssText = `
-            background: #2a2a2a; border: 1px solid #555; border-radius: 8px; 
-            padding: 15px; width: 100%; max-width: 350px;
-            display: flex; flex-direction: column; gap: 10px;
-        `;
-        
-        dialog.innerHTML = `
-            <h3 style="margin:0 0 5px 0; color: #fff;">Authorization Required</h3>
-            <p style="margin:0; font-size: 11px; color: #ccc; line-height: 1.4;">
-                This model requires a Civitai API Key to download.<br>
-                <a href="https://education.civitai.com/civitais-guide-to-downloading-via-api/" target="_blank" style="color: #6cf;">Read Guide</a> | 
-                <a href="https://civitai.com/user/account" target="_blank" style="color: #6cf;">Get Key</a>
-            </p>
-            <input type="password" id="civitai-api-key" placeholder="Paste API Key here..." style="
-                background: #111; border: 1px solid #444; color: #fff; padding: 6px; border-radius: 4px; width: 100%;
-            ">
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 5px;">
-                <button id="cancel-key-btn" style="background: #444; border:none; color:white; padding: 5px 10px; border-radius:4px; cursor:pointer;">Cancel</button>
-                <button id="save-key-btn" style="background: #4a4; border:none; color:white; padding: 5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">Save & Retry</button>
-            </div>
-        `;
-        
-        overlay.appendChild(dialog);
-        this.container.appendChild(overlay); 
-        
-        // Event Listeners
-        const input = dialog.querySelector("#civitai-api-key");
-        const cancelBtn = dialog.querySelector("#cancel-key-btn");
-        const saveBtn = dialog.querySelector("#save-key-btn");
-        
-        input.focus(); // Focus input immediately
-
-        cancelBtn.onclick = () => {
-            this.container.removeChild(overlay);
-        };
-        
-        saveBtn.onclick = async () => {
-            const token = input.value.trim();
-            if (!token) {
-                 alert("Please enter a token.");
-                 return;
-            }
-            
-            // Send to backend
-            try {
-                const response = await api.fetchApi("/vnccs/manager/save_token", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ token: token })
-                });
-                
-                if (response.ok) {
-                    // Close dialog
-                    this.container.removeChild(overlay);
-                    // Retry download
-                    this.downloadModel(repoId, modelName, version);
-                } else {
-                    alert("Failed to save token on server.");
-                }
-            } catch (e) {
-                alert("Failed to save token: " + e.message);
-            }
-        };
+        this.showMessage("VNCCS downloads only public Hugging Face assets and never stores credentials.");
     }
 
     async updateStatuses() {
+        if (this.disposed) return;
         try {
-            const response = await api.fetchApi("/vnccs/manager/status");
+            const repoId = this.node.widgets?.find(w => w.name === "repo_id")?.value || "";
+            const response = await api.fetchApi(`/vnccs/utils/manager/status?repo_id=${encodeURIComponent(repoId)}&t=${Date.now()}`, {
+                cache: "no-store",
+                headers: { "Cache-Control": "no-cache" }
+            });
             if (response.ok) {
-                this.downloadStatuses = await response.json();
-                // Re-render only if we have models loaded to reflect changes
-                if (this.models.length > 0) {
-                     this.renderList();
+                const newStatuses = await response.json();
+                if (this.disposed) return;
+
+                // Track transitions to "success" to trigger registry refresh (updates disk status in all nodes)
+                let needsRefresh = false;
+                for (const name in newStatuses) {
+                    const s = newStatuses[name];
+                    const oldS = this.downloadStatuses[name];
+                    if (s && s.status === "success" && (!oldS || oldS.status !== "success")) {
+                        needsRefresh = true;
+                        break;
+                    }
+                }
+
+                this.mergeDownloadStatuses(newStatuses);
+                for (const [name, status] of Object.entries(this.downloadStatuses)) {
+                    if (status && (status.status === "downloading" || status.status === "queued")) {
+                        this.startDownloadProgressTimer(name);
+                    }
+                }
+
+                if (needsRefresh) {
+                    const repoWidget = this.node.widgets?.find(w => w.name === "repo_id");
+                    if (repoWidget && repoWidget.value) {
+                        this.fetchModels(repoWidget.value);
+                    }
+                } else if (this.models.length > 0) {
+                    this.renderList();
                 }
             }
-        } catch (e) {
-            // console.error("Status poll failed", e);
+        } catch (e) { }
+    }
+
+    mergeDownloadStatuses(newStatuses = {}) {
+        const merged = { ...newStatuses };
+        for (const [name, oldStatus] of Object.entries(this.downloadStatuses)) {
+            const incoming = newStatuses[name];
+            const oldIsActive = oldStatus && (oldStatus.status === "downloading" || oldStatus.status === "queued");
+            if (!incoming && oldIsActive) {
+                merged[name] = oldStatus;
+            }
         }
+        this.downloadStatuses = merged;
+    }
+
+    startDownloadProgressTimer(modelName) {
+        if (this.disposed || this.downloadProgressTimers[modelName]) return;
+
+        this.downloadProgressTimers[modelName] = setInterval(() => {
+            const status = this.downloadStatuses[modelName];
+            const active = status && (status.status === "downloading" || status.status === "queued");
+
+            if (!active) {
+                clearInterval(this.downloadProgressTimers[modelName]);
+                delete this.downloadProgressTimers[modelName];
+                return;
+            }
+
+            if (this.models.length > 0) {
+                this.renderList();
+            }
+        }, 500);
+    }
+
+    dispose() {
+        if (this.disposed) return;
+        this.disposed = true;
+        this.customSelectController?.disconnect();
+        this.customSelectController = null;
+        this.downloadQueue = [];
+        this.isProcessingQueue = false;
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
+        for (const timer of Object.values(this.downloadProgressTimers)) clearInterval(timer);
+        this.downloadProgressTimers = {};
+        for (const timer of this.pendingTimeouts) window.clearTimeout(timer);
+        this.pendingTimeouts.clear();
+        for (const callback of [...this.disposeCallbacks]) callback();
+        this.disposeCallbacks.clear();
+    }
+
+    async pollDownloadStatusNow(modelName) {
+        await this.updateStatuses();
+        const status = this.downloadStatuses[modelName];
+        if (status && (status.status === "downloading" || status.status === "queued")) {
+            this.startDownloadProgressTimer(modelName);
+        }
+        return status;
     }
 
     async downloadModel(repoId, modelName, version) {
@@ -343,6 +472,7 @@ class VNCCS_ModelListWidget {
             // Optimistic update
             this.downloadStatuses[modelName] = { status: "downloading", message: `Requesting v${version}...` };
             this.downloadStartTimes[modelName] = Date.now();
+            this.startDownloadProgressTimer(modelName);
             this.renderList(); // Initial render to start animation
 
             const response = await api.fetchApi("/vnccs/manager/download", {
@@ -354,14 +484,26 @@ class VNCCS_ModelListWidget {
                     version: version // Send selected version
                 })
             });
-            
-            if(response.ok) {
-                // Polling will handle the rest
-                this.updateStatuses();
+
+            if (response.ok) {
+                let responseData = {};
+                try {
+                    responseData = await response.json();
+                } catch (e) { }
+
+                if (responseData.status) {
+                    this.downloadStatuses[modelName] = {
+                        status: responseData.status,
+                        message: responseData.message || responseData.status
+                    };
+                    this.renderList();
+                }
+
+                this.pollDownloadStatusNow(modelName);
                 window.dispatchEvent(new CustomEvent("vnccs-registry-updated"));
             } else {
-                 this.downloadStatuses[modelName] = { status: "error", message: "Request failed" };
-                 this.renderList();
+                this.downloadStatuses[modelName] = { status: "error", message: "Request failed" };
+                this.renderList();
             }
 
         } catch (e) {
@@ -370,22 +512,44 @@ class VNCCS_ModelListWidget {
         }
     }
 
+    getDownloadProgress(modelName, dynStatus) {
+        const rawProgress = Number(dynStatus?.progress);
+        if (Number.isFinite(rawProgress) && rawProgress > 0) {
+            return Math.max(1, Math.min(rawProgress, 100));
+        }
+
+        if (!this.downloadStartTimes[modelName]) {
+            this.downloadStartTimes[modelName] = Date.now();
+        }
+        const startTime = this.downloadStartTimes[modelName];
+        const elapsed = Date.now() - startTime;
+        return Math.min(Math.max((elapsed / 30000) * 100, 3), 95);
+    }
+
     renderLoading() {
         this.listArea.innerHTML = `<div style="color: #aaa; text-align: center; margin-top: 20px;">Loading models info...</div>`;
     }
 
     renderError(msg) {
-        this.listArea.innerHTML = `<div style="color: #ff5555; text-align: center; margin-top: 20px;">Error: ${msg}</div>`;
+        if (this.disposed) return;
+        this.listArea.replaceChildren();
+        appendTextElement(
+            this.listArea,
+            "div",
+            `Error: ${msg}`,
+            "color: #ff5555; text-align: center; margin-top: 20px;",
+        );
     }
 
     renderList() {
+        if (this.disposed) return;
         if (this.models.length === 0) {
             this.listArea.innerHTML = `<div style="color: #888; text-align: center;">No models found in config.</div>`;
             return;
         }
 
-        const repoId = this.node.widgets[0].value; 
-        
+        const repoId = this.node.widgets[0].value;
+
         let totalModels = 0;
         let installedCount = 0;
         let hasUpdates = false;
@@ -393,38 +557,43 @@ class VNCCS_ModelListWidget {
         // Identify existing items to preserve them
         const existingItems = {};
         Array.from(this.listArea.children).forEach(child => {
-             if (child.dataset.modelName) existingItems[child.dataset.modelName] = child;
+            if (child.dataset.modelName) {
+                existingItems[child.dataset.modelName] = child;
+            } else {
+                // Clear Loading models info... or Error messages if we are about to render real models
+                child.remove();
+            }
         });
 
         this.models.forEach((model, index) => {
             // New Backend API: active_version (string), installed_versions (array)
             const activeVer = model.active_version;
             const installedList = model.installed_versions || [];
-            
+
             // Stats Calculation
             totalModels++;
             if (installedList.length > 0) {
                 installedCount++;
                 // Check if active version matches latest available 
                 if (model.versions && model.versions.length > 0) {
-                     // We only care if the LATEST version is physically present in the installed list
-                     const cleanLatest = String(model.versions[0].version).replace(/^v/, '').trim();
-                     const isLatestInstalled = installedList.some(v => 
+                    // We only care if the LATEST version is physically present in the installed list
+                    const cleanLatest = String(model.versions[0].version).replace(/^v/, '').trim();
+                    const isLatestInstalled = installedList.some(v =>
                         String(v).replace(/^v/, '').trim() === cleanLatest
-                     );
-                     
-                     if (!isLatestInstalled) {
-                         hasUpdates = true;
-                     }
+                    );
+
+                    if (!isLatestInstalled) {
+                        hasUpdates = true;
+                    }
                 }
             }
-            
+
             const dynStatus = this.downloadStatuses[model.name];
-            
+
             // Get or Create Item
             let item = existingItems[model.name];
             let versionSelect, btn, statusLabel, bgLayer;
-            
+
             if (!item) {
                 item = document.createElement("div");
                 item.dataset.modelName = model.name;
@@ -452,36 +621,37 @@ class VNCCS_ModelListWidget {
                 const content = document.createElement("div");
                 content.style.position = "relative";
                 content.style.zIndex = "1";
-                
+
                 // Top Row
                 const topRow = document.createElement("div");
                 topRow.style.display = "flex";
                 topRow.style.justifyContent = "space-between";
-                topRow.innerHTML = `<span style="font-weight: bold; color: #eee; font-size: 13px;">${model.name}</span>`;
+                appendTextElement(topRow, "span", model.name, "font-weight: bold; color: #eee; font-size: 13px;");
                 statusLabel = document.createElement("span");
+                statusLabel.className = "vnccs-model-status";
                 statusLabel.style.fontSize = "11px";
                 topRow.appendChild(statusLabel);
                 content.appendChild(topRow);
 
                 // Desc Row
-                content.innerHTML += `<div style="font-size: 10px; color: #bbb;">${model.description || ""}</div>`;
-                
+                appendTextElement(content, "div", model.description || "", "font-size: 10px; color: #bbb;");
+
                 // Controls Row
                 const controlsRow = document.createElement("div");
                 controlsRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-top: 4px; flex-wrap: nowrap;";
-                
+
                 versionSelect = document.createElement("select");
                 // flex: 0 1 auto to prevent growing, width auto to fit content
                 versionSelect.style.cssText = "background: #222; color: #ddd; border: 1px solid #555; border-radius: 4px; font-size: 11px; padding: 2px; flex: 0 1 auto; width: auto; margin-right: 8px; max-width: 200px;";
                 controlsRow.appendChild(versionSelect);
-                
+
                 btn = document.createElement("button");
                 btn.className = "vnccs-btn";
                 // Explicit width: auto and no flex grow
                 btn.style.cssText = "border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 11px; font-weight: bold; color: white; flex: 0 0 auto; width: auto;";
                 controlsRow.appendChild(btn);
                 content.appendChild(controlsRow);
-                
+
                 item.appendChild(content);
                 this.listArea.appendChild(item);
 
@@ -489,15 +659,11 @@ class VNCCS_ModelListWidget {
                 // Note: We re-bind onclick every render to capture closure scope if needed, 
                 // but better is to read from Select DOM.
             } else {
-                 // Re-select elements
-                 bgLayer = item.querySelector(".progress-bg");
-                 statusLabel = item.querySelector("span:last-child"); // slightly fragile selector
-                 if (!statusLabel || statusLabel.parentElement.parentElement.parentElement !== item) {
-                     // Fallback check if structure matches
-                     statusLabel = item.children[1].children[0].children[1]; 
-                 }
-                 versionSelect = item.querySelector("select");
-                 btn = item.querySelector("button");
+                // Re-select elements
+                bgLayer = item.querySelector(".progress-bg");
+                statusLabel = item.querySelector(".vnccs-model-status");
+                versionSelect = item.querySelector("select");
+                btn = item.querySelector("button");
             }
 
             // Always update Options (in case versions changed?) - optimize later if slow
@@ -510,22 +676,22 @@ class VNCCS_ModelListWidget {
                     const opt = document.createElement("option");
                     opt.value = v.version;
                     opt.textContent = `v${v.version}`;
-                    
+
                     // Logic to visually indicate installed versions in the dropdown?
                     if (installedList.includes(v.version)) {
                         opt.textContent += (v.version === activeVer) ? " (Active)" : " (Installed)";
                         opt.style.color = "#8f8";
                     }
-                    
+
                     if (idx === 0) opt.selected = true;
                     versionSelect.appendChild(opt);
                 });
                 // Restore selection if it still exists
                 if (currentVal && Array.from(versionSelect.options).some(o => o.value === currentVal)) {
-                     versionSelect.value = currentVal;
+                    versionSelect.value = currentVal;
                 } else if (activeVer && Array.from(versionSelect.options).some(o => o.value === activeVer)) {
-                     // Default to active version if current is invalid
-                     versionSelect.value = activeVer;
+                    // Default to active version if current is invalid
+                    versionSelect.value = activeVer;
                 }
             }
 
@@ -536,202 +702,278 @@ class VNCCS_ModelListWidget {
                 const isError = dynStatus && dynStatus.status === "error";
                 const isAuthRequired = dynStatus && dynStatus.status === "auth_required";
                 const isSuccess = dynStatus && dynStatus.status === "success";
+                const isQueued = dynStatus && dynStatus.status === "queued";
 
-                // Progress logic
+                // 1. Transient High Priority States (Downloading, Queued, Auth)
                 if (isDownloading) {
-                    // Use real progress from backend if available
                     let progress = 0;
                     let msg = dynStatus.message || "Downloading";
-                    
-                    if (dynStatus.progress !== undefined) {
-                        progress = dynStatus.progress;
-                    } else {
-                         // Fallback to fake
-                        const startTime = this.downloadStartTimes[model.name] || Date.now();
-                        const elapsed = Date.now() - startTime;
-                        progress = Math.min((elapsed / 30000) * 100, 95);
-                    }
-                    
+                    progress = this.getDownloadProgress(model.name, dynStatus);
                     bgLayer.style.width = `${progress}%`;
-                    bgLayer.style.transition = "width 0.2s linear";  // Faster transition directly
-                    bgLayer.style.background = "rgba(40, 100, 40, 0.5)"; // Greenish fill
-                    
-                    statusLabel.innerHTML = `<span style="color: #ccf; font-family: monospace;">⬇ ${msg}</span>`;
-                } else if (isSuccess) {
-                    bgLayer.style.width = "100%";
+                    bgLayer.style.transition = "width 0.2s linear";
                     bgLayer.style.background = "rgba(40, 100, 40, 0.5)";
-                } else {
-                    bgLayer.style.width = "0%";
-                    bgLayer.style.background = "rgba(100, 40, 40, 0.5)"; // Reset or Red for error?
-                }
-
-                if (isDownloading) {
+                    item.style.background = `linear-gradient(90deg, rgba(40, 100, 40, 0.45) 0%, rgba(40, 100, 40, 0.45) ${progress}%, #333 ${progress}%, #333 100%)`;
+                    setStatusText(statusLabel, `⬇ ${msg}`, "#ccf", "monospace");
                     item.style.borderColor = "#44a";
-                    // statusLabel updated above in progress block
                     btn.textContent = "Downloading";
                     btn.disabled = true;
                     btn.style.background = "#448";
                     btn.style.color = "#aaa";
                     versionSelect.disabled = true;
-                } else if (dynStatus && dynStatus.status === "queued") {
+                    return;
+                }
+
+                if (isQueued) {
                     item.style.borderColor = "#884";
-                    // Striped background for queued
                     bgLayer.style.width = "100%";
                     bgLayer.style.background = "repeating-linear-gradient(45deg, #443, #443 10px, #332 10px, #332 20px)";
-                    statusLabel.innerHTML = `<span style="color: #dd8;">⏳ Queued</span>`;
+                    item.style.background = "repeating-linear-gradient(45deg, #443, #443 10px, #332 10px, #332 20px)";
+                    setStatusText(statusLabel, "⏳ Queued", "#dd8");
                     btn.textContent = "Waiting...";
                     btn.disabled = true;
                     btn.style.background = "#554";
                     btn.style.color = "#aaa";
                     versionSelect.disabled = true;
-                } else if (isAuthRequired) {
-                    item.style.borderColor = "#fa0"; // Orange
+                    return;
+                }
+
+                if (isAuthRequired) {
+                    item.style.borderColor = "#fa0";
                     bgLayer.style.width = "100%";
-                    bgLayer.style.background = "rgba(100, 80, 0, 0.2)"; 
-                    statusLabel.innerHTML = `<span style="color: #fa0;">⚠ API Key Required</span>`;
+                    bgLayer.style.background = "rgba(100, 80, 0, 0.2)";
+                    item.style.background = "rgba(100, 80, 0, 0.2)";
+                    setStatusText(statusLabel, "⚠ API Key Required", "#fa0");
                     btn.textContent = "Enter Key";
                     btn.disabled = false;
                     btn.style.background = "#ca0";
                     btn.style.color = "black";
                     versionSelect.disabled = true;
-                    
-                    // Override click for auth logic
                     btn.onclick = (e) => {
                         e.stopPropagation();
                         this.showApiKeyDialog(model.name, repoId, selVer);
                     };
-                    return; // Return early to skip default onclick binding
-                    
-                } else if (isError) {
-                    item.style.borderColor = "#a44";
-                    bgLayer.style.width = "100%";
-                    bgLayer.style.background = "rgba(100, 40, 40, 0.2)"; // Slight red fill
-                    statusLabel.innerHTML = `<span style="color: #f88;">⚠ ${dynStatus.message}</span>`;
-                    btn.textContent = "Retry";
-                    btn.disabled = false;
-                    btn.style.background = "#a44";
-                    versionSelect.disabled = false;
-                    btn.onclick = () => this.downloadModel(repoId, model.name, selVer);
-                } else if (isSuccess) {
-                     item.style.borderColor = "#4a4";
-                     statusLabel.innerHTML = `<span style="color: #cfc;">✓ Installed v${selVer}</span>`;
-                     btn.textContent = "Switch/Active"; // Show different text if success was setting active?
-                     btn.style.background = "#363";
-                     versionSelect.disabled = false;
-                     // We need to re-bind correct action, which requires re-evaluating state on next render cycle
-                     // or forcing a set active here. Assume next poll fixes it.
-                     // But for instant feedback, we can just reload list
-                     if(this.models) this.fetchModels(repoId);
-                } else {
-                    // Normal state
-                    versionSelect.disabled = false;
+                    return;
+                }
+
+                // --- DISK TRUTH PRIORITY ---
+                const isSelectedInstalled = installedList.includes(selVer);
+                const isSelectedActive = (selVer === activeVer);
+
+                // If version not on disk, it's NOT installed, period.
+                if (!isSelectedInstalled && !isSelectedActive) {
+                    // Reset cosmetic flags
                     bgLayer.style.width = "0%";
-                    item.style.borderColor = "#444";
                     item.style.background = "#333";
+                    versionSelect.disabled = false;
 
-                    // LOGIC: Check if selected version is installed or active
-                    const isSelectedActive = (selVer === activeVer);
-                    const isSelectedInstalled = installedList.includes(selVer);
-                    
-                    // Check for updates relative to SELECTED version
-                    let updateMsg = "";
-                    if (model.versions && model.versions.length > 0) {
-                         const latestVer = model.versions[0].version;
-                         const cleanSel = String(selVer).replace(/^v/, '');
-                         const cleanLat = String(latestVer).replace(/^v/, '');
-                         if (cleanSel !== cleanLat) {
-                             updateMsg = ` <span style="color: #fca; font-size: 0.9em;">(Latest: v${cleanLat})</span>`;
-                         }
-                    }
-
-                    if (isSelectedActive) {
-                        // Current Selection is the Active one
-                        item.style.borderColor = "#484";
-                        item.style.background = "rgba(40, 100, 40, 0.1)"; 
-                        statusLabel.innerHTML = `<span style="color: #afa;">✓ Active</span>${updateMsg}`;
-                        btn.textContent = "Active"; 
-                        btn.disabled = true;
-                        btn.style.background = "transparent";
-                        btn.style.color = "#8c8";
-                        btn.style.border = "1px solid #484";
-                    } else if (isSelectedInstalled) {
-                        // Current Selection is Installed but NOT Active -> Allow Switch
-                        item.style.borderColor = "#aa4";
-                        statusLabel.innerHTML = `<span style="color: #ffc;">Installed</span>${updateMsg}`;
-                        btn.textContent = "Set Active";
+                    if (isError) {
+                        item.style.borderColor = "#a44";
+                        bgLayer.style.width = "100%";
+                        bgLayer.style.background = "rgba(100, 40, 40, 0.2)";
+                        item.style.background = "rgba(100, 40, 40, 0.2)";
+                        setStatusText(statusLabel, `⚠ ${dynStatus.message || "Error"}`, "#f88");
+                        btn.textContent = "Retry";
                         btn.disabled = false;
-                        btn.style.background = "#aa4";
-                        btn.style.color = "black";
-                        btn.style.border = "none";
-                        
-                        btn.onclick = async () => {
-                            btn.textContent = "Activating...";
-                            btn.disabled = true;
-                            try {
-                                await api.fetchApi("/vnccs/manager/set_active", {
-                                    method: "POST",
-                                    body: JSON.stringify({ model_name: model.name, version: selVer })
-                                });
-                                // Force refresh
-                                await this.fetchModels(repoId);
-                                // Notify other widgets (like Selector) that state changed
-                                window.dispatchEvent(new CustomEvent("vnccs-registry-updated"));
-                            } catch(e) {
-                                console.error(e);
-                                btn.textContent = "Error";
-                            }
-                        };
+                        btn.style.background = "#a44";
+                        btn.style.color = "white";
+                        btn.onclick = () => this.downloadModel(repoId, model.name, selVer);
                     } else {
-                        // Not installed -> Download
                         item.style.borderColor = "#666";
-                        item.style.background = "#333"; 
-                        statusLabel.innerHTML = `<span style="color: #ccc;">○ Not Installed</span>${updateMsg}`;
+                        setStatusText(statusLabel, "○ Not Installed", "#ccc");
                         btn.textContent = "Download";
                         btn.disabled = false;
                         btn.style.background = "#44a";
                         btn.style.color = "white";
                         btn.onclick = () => this.downloadModel(repoId, model.name, selVer);
                     }
+                    return;
+                }
+
+                // --- INSTALLED/ACTIVE STATES ---
+                versionSelect.disabled = false;
+                bgLayer.style.width = "0%";
+                item.style.background = "#333";
+
+                let latestVersionMessage = "";
+                if (model.versions && model.versions.length > 0) {
+                    const latestVer = model.versions[0].version;
+                    if (String(selVer).replace(/^v/, '') !== String(latestVer).replace(/^v/, '')) {
+                        latestVersionMessage = `(Latest: v${latestVer})`;
+                    }
+                }
+
+                const setInstalledStatus = (text, color, includeLatest = false) => {
+                    setStatusText(statusLabel, text, color);
+                    if (includeLatest && latestVersionMessage) {
+                        const suffix = appendTextElement(statusLabel, "span", ` ${latestVersionMessage}`);
+                        suffix.style.color = "#fca";
+                        suffix.style.fontSize = "0.9em";
+                    }
+                };
+
+                if (isSelectedActive) {
+                    item.style.borderColor = "#484";
+                    item.style.background = "rgba(40, 100, 40, 0.1)";
+                    setInstalledStatus("✓ Active", "#afa", true);
+                    btn.textContent = "Active";
+                    btn.disabled = true;
+                    btn.style.background = "transparent";
+                    btn.style.color = "#8c8";
+                    btn.style.border = "1px solid #484";
+                } else {
+                    // Installed but not active
+                    item.style.borderColor = isSuccess ? "#4a4" : "#aa4";
+                    if (isSuccess) setInstalledStatus(`✓ Installed v${selVer}`, "#cfc");
+                    else setInstalledStatus("Installed", "#ffc", true);
+
+                    btn.textContent = "Set Active";
+                    btn.disabled = false;
+                    btn.style.background = "#aa4";
+                    btn.style.color = "black";
+                    btn.style.border = "none";
+                    btn.onclick = async () => {
+                        btn.textContent = "Activating...";
+                        btn.disabled = true;
+                        try {
+                            await api.fetchApi("/vnccs/manager/set_active", {
+                                method: "POST",
+                                body: JSON.stringify({ repo_id: repoId, model_name: model.name, version: selVer })
+                            });
+                            await this.fetchModels(repoId);
+                            window.dispatchEvent(new CustomEvent("vnccs-registry-updated"));
+                        } catch (e) {
+                            console.error(e);
+                            btn.textContent = "Error";
+                            btn.disabled = false;
+                        }
+                    };
                 }
             };
-            
+
             versionSelect.onchange = updateState;
             // Initial call
             updateState();
-            
+
             const currentChild = this.listArea.children[index];
             if (currentChild !== item) {
                 this.listArea.insertBefore(item, currentChild);
             }
         });
-        
-        
+
+
         // Cleanup extra children if model list shrank
         while (this.listArea.children.length > this.models.length) {
             this.listArea.removeChild(this.listArea.lastChild);
         }
 
         // Update Header
-        if (this.header) {
+        if (this.header && this.statusText) {
             if (installedCount === totalModels) {
                 if (hasUpdates) {
-                     this.header.innerHTML = `<span style="color: #fc4;">Updates Available (${installedCount}/${totalModels})</span>`;
-                     this.header.style.borderBottomColor = "#aa4";
+                    this.statusText.textContent = `Updates Available (${installedCount}/${totalModels})`;
+                    this.statusText.style.color = "#fc4";
+                    this.header.style.borderBottomColor = "#aa4";
                 } else {
-                     this.header.innerHTML = `<span style="color: #8c8;">All Updated (${installedCount}/${totalModels})</span>`;
-                     this.header.style.borderBottomColor = "#484";
+                    this.statusText.textContent = `All Updated (${installedCount}/${totalModels})`;
+                    this.statusText.style.color = "#8c8";
+                    this.header.style.borderBottomColor = "#484";
                 }
             } else {
-                this.header.innerHTML = `<span style="color: #ccc;">Installed ${installedCount} models from ${totalModels}</span>`;
+                this.statusText.textContent = `Installed ${installedCount} models from ${totalModels}`;
+                this.statusText.style.color = "#ccc";
                 this.header.style.borderBottomColor = "#333";
             }
         }
+    }
+
+    showMessage(text, isError = false) {
+        if (this.disposed) return;
+        const overlay = document.createElement("div");
+        overlay.style.cssText = `
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center;
+            z-index: 1000; padding: 20px; box-sizing: border-box;
+        `;
+        const box = document.createElement("div");
+        box.style.cssText = `
+            background: #222; border: 1px solid ${isError ? '#a44' : '#444'}; 
+            padding: 15px; border-radius: 8px; max-width: 300px; width: 100%;
+            text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        `;
+        appendTextElement(box, "div", text, "color: #eee; font-size: 13px; margin-bottom: 15px; line-height: 1.4;");
+        const btn = document.createElement("button");
+        btn.innerText = "OK";
+        btn.style.cssText = "background: #44a; color: white; border: none; padding: 6px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;";
+        btn.onclick = () => overlay.remove();
+        box.appendChild(btn);
+        overlay.appendChild(box);
+        this.container.appendChild(overlay);
+    }
+
+    showConfirm(text, onConfirm) {
+        if (this.disposed) return;
+        const overlay = document.createElement("div");
+        overlay.style.cssText = `
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center;
+            z-index: 1000; padding: 20px; box-sizing: border-box;
+        `;
+        const box = document.createElement("div");
+        box.style.cssText = `
+            background: #222; border: 1px solid #444; 
+            padding: 15px; border-radius: 8px; max-width: 300px; width: 100%;
+            text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        `;
+        appendTextElement(box, "div", text, "color: #eee; font-size: 13px; margin-bottom: 15px; line-height: 1.4;");
+
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.gap = "10px";
+        row.style.justifyContent = "center";
+
+        const cancel = document.createElement("button");
+        cancel.innerText = "Cancel";
+        cancel.style.cssText = "background: #444; color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer;";
+        cancel.onclick = () => overlay.remove();
+
+        const ok = document.createElement("button");
+        ok.innerText = "Confirm";
+        ok.style.cssText = "background: #4a4; color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;";
+        ok.onclick = () => { overlay.remove(); onConfirm(); };
+
+        row.appendChild(cancel);
+        row.appendChild(ok);
+        box.appendChild(row);
+        overlay.appendChild(box);
+        this.container.appendChild(overlay);
     }
 }
 
 app.registerExtension({
     name: "VNCCS.ModelManager",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
+        const syncDOMWidgetWidth = (node, widgetName) => {
+            const widget = node?.widgets?.find(w => w.name === widgetName);
+            const nodeWidth = Number(node?.size?.[0]);
+            if (widget && Number.isFinite(nodeWidth) && nodeWidth > 0) {
+                if (!widget._vnccsWidthBound) {
+                    Object.defineProperty(widget, "width", {
+                        configurable: true,
+                        get() {
+                            const width = Number(this._node?.size?.[0]);
+                            return Number.isFinite(width) && width > 0 ? width : undefined;
+                        },
+                        set(_value) {
+                            // ComfyUI may restore stale DOM widget widths from older layouts.
+                            // Keep this DOM widget tied to the node width instead.
+                        }
+                    });
+                    widget._vnccsWidthBound = true;
+                }
+                if (typeof widget.triggerDraw === "function") widget.triggerDraw();
+            }
+        };
+
         if (nodeData.name === "VNCCS_ModelManager") {
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
@@ -739,35 +981,63 @@ app.registerExtension({
 
                 // Add "Check" button widget
                 this.addWidget("button", "Check/Refresh Models", null, () => {
-                   const repoId = this.widgets.find(w => w.name === "repo_id")?.value;
-                   if(repoId && this.listWidget) {
-                       this.listWidget.fetchModels(repoId);
-                   } else {
-                       alert("Please enter a Repo ID first.");
-                   }
+                    const repoId = this.widgets.find(w => w.name === "repo_id")?.value;
+                    if (repoId && this.listWidget) {
+                        this.listWidget.fetchModels(repoId, true);
+                    } else {
+                        if (this.listWidget) this.listWidget.showMessage("Please enter a Repo ID first.", true);
+                    }
                 });
 
                 // Helper to create DOM element
                 const container = document.createElement("div");
                 // ComfyUI DOM Widget wrapper
-                this.addDOMWidget("ModelList", "div", container, {
+                const modelListWidget = this.addDOMWidget("ModelList", "div", container, {
                     serialize: false,
                     hideOnZoom: false
                 });
-                
+                this.modelListDOMWidget = modelListWidget;
+                syncDOMWidgetWidth(this, "ModelList");
+                requestAnimationFrame(() => syncDOMWidgetWidth(this, "ModelList"));
+
                 // Initialize logic
                 this.listWidget = new VNCCS_ModelListWidget(this, container);
-                
+
                 // Increase default size to fit list
                 this.setSize([400, 500]);
+                syncDOMWidgetWidth(this, "ModelList");
+                requestAnimationFrame(() => syncDOMWidgetWidth(this, "ModelList"));
 
                 // Auto-fetch on load (delayed to allow graph restore)
-                setTimeout(() => {
+                this._vnccsModelManagerInitTimer = setTimeout(() => {
                     const repoWidget = this.widgets?.find(w => w.name === "repo_id");
                     if (repoWidget && repoWidget.value && this.listWidget) {
-                         this.listWidget.fetchModels(repoWidget.value);
+                        this.listWidget.fetchModels(repoWidget.value);
                     }
                 }, 100);
+            };
+
+            const onResize = nodeType.prototype.onResize;
+            nodeType.prototype.onResize = function (size) {
+                if (onResize) onResize.apply(this, arguments);
+                syncDOMWidgetWidth(this, "ModelList");
+                requestAnimationFrame(() => syncDOMWidgetWidth(this, "ModelList"));
+            };
+
+            const onConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onConfigure = function (info) {
+                if (onConfigure) onConfigure.apply(this, arguments);
+                syncDOMWidgetWidth(this, "ModelList");
+                clearTimeout(this._vnccsModelManagerConfigureTimer);
+                this._vnccsModelManagerConfigureTimer = setTimeout(() => syncDOMWidgetWidth(this, "ModelList"), 100);
+            };
+
+            const onRemoved = nodeType.prototype.onRemoved;
+            nodeType.prototype.onRemoved = function () {
+                clearTimeout(this._vnccsModelManagerInitTimer);
+                clearTimeout(this._vnccsModelManagerConfigureTimer);
+                this.listWidget?.dispose();
+                if (onRemoved) onRemoved.apply(this, arguments);
             };
         }
 
@@ -775,25 +1045,25 @@ app.registerExtension({
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 if (onNodeCreated) onNodeCreated.apply(this, arguments);
-                
+
                 // 1. Ensure "model_name" and "version" widgets exist even if in "hidden" block
                 // ComfyUI doesn't auto-create widgets for "hidden" inputs, so we add them manually
                 let textWidget = this.widgets?.find(w => w.name === "model_name");
                 if (!textWidget) {
-                    textWidget = this.addWidget("text", "model_name", "", () => {}, { serialize: true });
+                    textWidget = this.addWidget("text", "model_name", "", () => { }, { serialize: true });
                 }
                 // HACK: Completely hide the widget from rendering
-                textWidget.computeSize = () => [0, -4]; 
-                textWidget.type = "hidden"; 
-                textWidget.draw = () => {}; // Override draw to do nothing
+                textWidget.computeSize = () => [0, -4];
+                textWidget.type = "hidden";
+                textWidget.draw = () => { }; // Override draw to do nothing
 
                 let verWidget = this.widgets?.find(w => w.name === "version");
                 if (!verWidget) {
-                    verWidget = this.addWidget("text", "version", "auto", () => {}, { serialize: true });
+                    verWidget = this.addWidget("text", "version", "auto", () => { }, { serialize: true });
                 }
                 verWidget.computeSize = () => [0, -4];
                 verWidget.type = "hidden";
-                verWidget.draw = () => {}; // Override draw to do nothing
+                verWidget.draw = () => { }; // Override draw to do nothing
 
                 // 2. Create UI Container
                 const container = document.createElement("div");
@@ -807,24 +1077,35 @@ app.registerExtension({
 
                 // 3. Register DOM Widget
                 // We add it to the node so ComfyUI renders it
-                this.addDOMWidget("SelectorWidget", "div", container, {
+                const selectorDOMWidget = this.addDOMWidget("SelectorWidget", "div", container, {
                     serialize: false,
                     hideOnZoom: false
                 });
+                this.selectorDOMWidget = selectorDOMWidget;
+                syncDOMWidgetWidth(this, "SelectorWidget");
+                requestAnimationFrame(() => syncDOMWidgetWidth(this, "SelectorWidget"));
 
                 // 4. Initialize Logic Class
                 this.selectorWidget = new VNCCS_SelectorWidget(this, container);
 
                 // 5. Initial Data Update (Delayed)
-                setTimeout(() => {
-                    this.selectorWidget.refresh();
+                this._vnccsModelSelectorInitTimer = setTimeout(() => {
+                    this.selectorWidget?.refresh();
                 }, 100);
+            };
+
+            const onResize = nodeType.prototype.onResize;
+            nodeType.prototype.onResize = function (size) {
+                if (onResize) onResize.apply(this, arguments);
+                syncDOMWidgetWidth(this, "SelectorWidget");
+                requestAnimationFrame(() => syncDOMWidgetWidth(this, "SelectorWidget"));
             };
 
             // Handle Workflow Loading (Restore values)
             const onConfigure = nodeType.prototype.onConfigure;
-            nodeType.prototype.onConfigure = function() {
+            nodeType.prototype.onConfigure = function () {
                 if (onConfigure) onConfigure.apply(this, arguments);
+                syncDOMWidgetWidth(this, "SelectorWidget");
                 // Sync value when graph is restored
                 if (this.selectorWidget) {
                     const w = this.widgets.find(x => x.name === "model_name");
@@ -833,9 +1114,21 @@ app.registerExtension({
                         // Trigger a render so version logic runs (after fetch?)
                         // We might need to wait for fetch first, usually refresh() handles it
                         // but setting currentValue is key.
-                        setTimeout(() => this.selectorWidget.refresh(), 500);
+                        clearTimeout(this._vnccsModelSelectorConfigureTimer);
+                        this._vnccsModelSelectorConfigureTimer = setTimeout(() => {
+                            syncDOMWidgetWidth(this, "SelectorWidget");
+                            this.selectorWidget?.refresh();
+                        }, 500);
                     }
                 }
+            };
+
+            const onRemoved = nodeType.prototype.onRemoved;
+            nodeType.prototype.onRemoved = function () {
+                clearTimeout(this._vnccsModelSelectorInitTimer);
+                clearTimeout(this._vnccsModelSelectorConfigureTimer);
+                this.selectorWidget?.dispose();
+                if (onRemoved) onRemoved.apply(this, arguments);
             };
         }
     }
@@ -847,126 +1140,172 @@ class VNCCS_SelectorWidget {
         this.container = container;
         this.models = [];
         this.currentValue = "";
-        
+        this.disposed = false;
+        this.overlays = new Set();
+
         // Base Design Resolution
-        this.designWidth = 320; 
+        this.designWidth = 320;
 
         // Grab initial value from widget (if already set)
         const w = this.node.widgets.find(x => x.name === "model_name");
-        if(w) this.currentValue = w.value;
+        if (w) this.currentValue = w.value;
 
         // Listen for global registry updates (sync with Manager)
-        this._onRegistryUpdate = () => {
-             // Avoid refreshing if node is gone or collapsed
-             if (!this.container || !this.container.isConnected) {
-                 window.removeEventListener("vnccs-registry-updated", this._onRegistryUpdate);
-                 return;
-             }
-             this.refresh();
+        this._onRegistryUpdate = (e) => {
+            if (this.disposed) return;
+            // Avoid refreshing if node is gone or collapsed
+            if (!this.container || !this.container.isConnected) {
+                window.removeEventListener("vnccs-registry-updated", this._onRegistryUpdate);
+                return;
+            }
+
+            // Check if event carries data for our repo
+            const repoWidget = this.node.widgets.find(w => w.name === "repo_id");
+            const repoId = repoWidget ? repoWidget.value : "MIUProject/VNCCS";
+
+            if (e.detail && e.detail.repo_id === repoId && e.detail.models) {
+                this.models = e.detail.models;
+                this.render();
+            } else {
+                this.refresh();
+            }
         };
         window.addEventListener("vnccs-registry-updated", this._onRegistryUpdate);
 
         // Styles
         this.styleContainer();
-        
+
         // Hook Resize for scaling
         const onResize = node.onResize;
         node.onResize = (size) => {
             if (onResize) onResize.apply(node, [size]);
             this.updateScale();
         };
-        
+
+        // Initial Data Check: pick up from cache immediately if already there
+        const repoWidget = this.node.widgets.find(w => w.name === "repo_id");
+        const initRepoId = repoWidget ? repoWidget.value : "MIUProject/VNCCS";
+        if (window.VNCCS_REGISTRY[initRepoId]) {
+            this.models = window.VNCCS_REGISTRY[initRepoId];
+        }
+
         this.render();
     }
 
     styleContainer() {
-        // Main wrapper styling - mimicking VNCCS_ModelListWidget robustness
+        // Main wrapper styling
         this.container.style.width = "100%";
-        this.container.style.height = "100%"; // Adhere strictly to parent/node size
+        this.container.style.height = "100%";
         this.container.style.padding = "0";
-        this.container.style.backgroundColor = "transparent"; 
-        this.container.style.marginTop = "0px"; // Remove top margin to avoid pushing down
-        this.container.style.overflow = "hidden"; // Clip content explicitly
+        this.container.style.backgroundColor = "transparent";
+        this.container.style.marginTop = "0px";
+        this.container.style.overflow = "hidden";
         this.container.style.position = "relative";
     }
 
     updateScale() {
-        if(!this.node || !this.innerContent) return;
-        
-        // Calculate Scale
-        const availableWidth = Math.max(this.node.size[0] - 20, 100); // -20 for padding safety
+        if (!this.node || !this.innerContent) return;
+        const availableWidth = Math.max(this.node.size[0] - 20, 100);
         const scale = availableWidth / this.designWidth;
-        
-        // Apply Transform
         this.innerContent.style.transform = `scale(${scale})`;
         this.innerContent.style.transformOrigin = "top left";
         this.innerContent.style.width = `${this.designWidth}px`;
-        
-        // We DO NOT set this.container.style.height manually anymore.
-        // We let CSS height: 100% handle the constraints, preventing overflow.
     }
 
-    async refresh() {
-        // 1. Re-sync inputs (Crucial for reload)
+    async refresh(force = false) {
+        if (this.disposed) return;
+        // 1. Re-sync inputs
         const repoWidget = this.node.widgets.find(w => w.name === "repo_id");
         const nameWidget = this.node.widgets.find(w => w.name === "model_name");
-        
+
         const repo_id = repoWidget ? repoWidget.value : "MIUProject/VNCCS";
         if (nameWidget) this.currentValue = nameWidget.value;
 
-        // Show loading state
-        if(this.refreshBtn) this.refreshBtn.textContent = "⌛";
-        if(this.models.length === 0) this.render(); // Render "Loading..." state if needed
+        if (this.refreshBtn) this.refreshBtn.textContent = "⌛";
+
+        if (force) {
+            delete window.VNCCS_REGISTRY[repo_id];
+        }
+
+        if (!force && window.VNCCS_REGISTRY[repo_id]) {
+            this.models = window.VNCCS_REGISTRY[repo_id];
+            this.render();
+            if (this.refreshBtn) this.refreshBtn.textContent = "↻";
+            return;
+        }
+
+        if (this.models.length === 0) this.render();
+
+        if (!force && window.VNCCS_FETCH_PROMISES[repo_id]) {
+            try {
+                this.models = await window.VNCCS_FETCH_PROMISES[repo_id];
+                this.render();
+                return;
+            } catch (e) { } finally {
+                if (this.refreshBtn) this.refreshBtn.textContent = "↻";
+            }
+        }
 
         try {
-            const response = await api.fetchApi(`/vnccs/manager/check?repo_id=${encodeURIComponent(repo_id)}`);
-            const data = await response.json();
-            if (data.models) {
-                this.models = data.models;
-                this.render(); // Re-render with new data
-            }
+            const url = `/vnccs/manager/check?repo_id=${encodeURIComponent(repo_id)}${force ? '&force_refresh=true' : ''}`;
+            const fetchPromise = (async () => {
+                const response = await api.fetchApi(url);
+                const data = await response.json();
+                if (data.models) {
+                    window.VNCCS_REGISTRY[repo_id] = data.models;
+                    return data.models;
+                }
+                throw new Error(data.error || "Unknown error");
+            })();
+
+            window.VNCCS_FETCH_PROMISES[repo_id] = fetchPromise;
+            this.models = await fetchPromise;
+            this.render();
         } catch (e) {
             console.error("VNCCS Selector Fetch Error", e);
         } finally {
-            if(this.refreshBtn) this.refreshBtn.textContent = "↻";
+            if (this.refreshBtn) this.refreshBtn.textContent = "↻";
+            delete window.VNCCS_FETCH_PROMISES[repo_id];
         }
     }
 
     setValue(name) {
+        if (this.disposed) return;
         this.currentValue = name;
         // Update hidden widget
         const w = this.node.widgets.find(x => x.name === "model_name");
-        if(w) w.value = name;
-        
+        if (w) w.value = name;
+
         // Try to update version immediately if possible
         const m = this.models.find(x => x.name === name);
         if (m && m.active_version) {
-             const vw = this.node.widgets.find(x => x.name === "version");
-             if(vw) vw.value = m.active_version;
+            const vw = this.node.widgets.find(x => x.name === "version");
+            if (vw) vw.value = m.active_version;
         }
-        
+
         this.render();
     }
 
     render() {
+        if (this.disposed) return;
         // Ensure hidden widgets are in sync if model is found
         const selectedModel = this.models.find(m => m.name === this.currentValue);
         if (selectedModel) {
-             const vw = this.node.widgets.find(x => x.name === "version");
-             // If active version exists, sync it to python input
-             if (vw && selectedModel.active_version) {
-                  vw.value = selectedModel.active_version;
-             } else if (vw) {
-                  vw.value = "auto";
-             }
+            const vw = this.node.widgets.find(x => x.name === "version");
+            // If active version exists, sync it to python input
+            if (vw && selectedModel.active_version) {
+                vw.value = selectedModel.active_version;
+            } else if (vw) {
+                vw.value = "auto";
+            }
         }
-        
+
         this.container.innerHTML = "";
-        
+
         // Inner Content Wrapper for Scaling
         this.innerContent = document.createElement("div");
         // We set fixed width here in updateScale, but init here
-        
+
         const row = document.createElement("div");
         row.style.display = "flex";
         row.style.width = "100%"; // Will fill the 320px inner content
@@ -985,25 +1324,25 @@ class VNCCS_SelectorWidget {
         card.style.display = "flex";
         card.style.flexDirection = "column";
         card.style.justifyContent = "center";
-        card.style.position = "relative"; 
+        card.style.position = "relative";
         card.title = "Click to Select Model";
-        
+
         card.onclick = () => this.showModal();
 
         if (selectedModel) {
             // New API structure: uses active_version and installed_versions list
             const activeVer = selectedModel.active_version;
-            
+
             // It is considered "installed" if we have an active version selected, OR if any version is installed
             // But visually we want to show green only if configured/active.
             // If installed but no active version set? -> Warning state 
-            
+
             const isConfigured = !!activeVer;
             const hasAnyInstall = selectedModel.installed_versions && selectedModel.installed_versions.length > 0;
-            
+
             if (isConfigured) {
                 row.style.borderColor = "#484"; // Green path
-                row.style.backgroundColor = "#162816"; 
+                row.style.backgroundColor = "#162816";
                 card.onmouseover = () => row.style.backgroundColor = "#1e351e";
                 card.onmouseout = () => row.style.backgroundColor = "#162816";
             } else if (hasAnyInstall) {
@@ -1019,63 +1358,80 @@ class VNCCS_SelectorWidget {
             }
 
             // Version info
-            let ver = "";
+            let versionText = "";
+            let versionWarning = "";
+            let versionWarningColor = "";
             const latestVer = (selectedModel.versions && selectedModel.versions.length > 0) ? selectedModel.versions[0].version : null;
-            
+
             const normalize = (s) => String(s).replace(/^v/, '').trim();
             const formatV = (s) => String(s).startsWith('v') ? s : 'v' + s;
 
             if (isConfigured) {
                 // We have an active version
-                ver = formatV(activeVer);
+                versionText = formatV(activeVer);
                 // Optionally warn if outdated?
                 if (latestVer && normalize(activeVer) !== normalize(latestVer)) {
-                     ver += ` <span style="color:#fa0; font-size:9px;">(New: ${formatV(latestVer)})</span>`;
+                    versionWarning = `(New: ${formatV(latestVer)})`;
+                    versionWarningColor = "#fa0";
                 }
             } else {
                 if (latestVer) {
-                     ver = `${formatV(latestVer)} <span style="color:#f88;">(Not Active)</span>`;
+                    versionText = formatV(latestVer);
+                    versionWarning = "(Not Active)";
+                    versionWarningColor = "#f88";
                 } else {
-                     ver = "Unknown Version";
+                    versionText = "Unknown Version";
                 }
             }
-            
+
             const nameColor = isConfigured ? "#cec" : (hasAnyInstall ? "#fe8" : "#f88");
             const icon = isConfigured ? "✓" : (hasAnyInstall ? "⚠" : "✖");
             const iconColor = isConfigured ? "#4a4" : (hasAnyInstall ? "#fa0" : "#f44");
 
-            card.innerHTML = `
-                <div style="font-weight: bold; color: ${nameColor}; word-break: break-word; font-size: 13px; line-height: 1.3; padding-right: 15px;">${selectedModel.name}</div>
-                <div style="font-size: 10px; color: #aaa; margin-top: 2px;">${ver}</div>
-                <div style="font-size: 10px; color: #8a8; margin-top: 5px; border-top: 1px solid rgba(100,150,100,0.2); padding-top: 4px; line-height: 1.25; font-style: italic;">
-                    ${selectedModel.description || "No description available."}
-                </div>
-                <div style="position: absolute; top: 6px; right: 6px; color: ${iconColor}; font-weight: bold; font-size: 14px;">${icon}</div>
-            `;
+            appendTextElement(
+                card,
+                "div",
+                selectedModel.name,
+                `font-weight: bold; color: ${nameColor}; word-break: break-word; font-size: 13px; line-height: 1.3; padding-right: 15px;`,
+            );
+            const versionLine = appendTextElement(card, "div", versionText, "font-size: 10px; color: #aaa; margin-top: 2px;");
+            if (versionWarning) {
+                appendTextElement(
+                    versionLine,
+                    "span",
+                    ` ${versionWarning}`,
+                    `color: ${versionWarningColor}; font-size: 9px;`,
+                );
+            }
+            appendTextElement(
+                card,
+                "div",
+                selectedModel.description || "No description available.",
+                "font-size: 10px; color: #8a8; margin-top: 5px; border-top: 1px solid rgba(100,150,100,0.2); padding-top: 4px; line-height: 1.25; font-style: italic;",
+            );
+            appendTextElement(
+                card,
+                "div",
+                icon,
+                `position: absolute; top: 6px; right: 6px; color: ${iconColor}; font-weight: bold; font-size: 14px;`,
+            );
         } else if (this.currentValue) {
             // Case 2: We have a saved name, but no API data yet (or missing from repo)
             // If models list is empty, we are probably still loading or offline -> Show Name nicely
             // If models list exists but not found -> Show "Missing"
-            
+
             if (this.models.length === 0) {
-                 card.innerHTML = `
-                    <div style="font-weight: bold; color: #ddd; word-break: break-word; font-size: 13px;">${this.currentValue}</div>
-                    <div style="font-size: 10px; color: #888; margin-top: 2px;">Loading info...</div>
-                `;
+                appendTextElement(card, "div", this.currentValue, "font-weight: bold; color: #ddd; word-break: break-word; font-size: 13px;");
+                appendTextElement(card, "div", "Loading info...", "font-size: 10px; color: #888; margin-top: 2px;");
             } else {
-                 card.innerHTML = `
-                    <div style="font-weight: bold; color: #f88; word-break: break-word; font-size: 13px;">${this.currentValue}</div>
-                    <div style="font-size: 10px; color: #d66; margin-top: 2px;">Not found in Repo</div>
-                `;
+                appendTextElement(card, "div", this.currentValue, "font-weight: bold; color: #f88; word-break: break-word; font-size: 13px;");
+                appendTextElement(card, "div", "Not found in Repo", "font-size: 10px; color: #d66; margin-top: 2px;");
             }
         } else {
             // Case 3: Empty (New Node)
-            const color = "#ccc";
-            card.innerHTML = `
-                <div style="color: ${color}; font-style: italic; font-size: 13px; text-align: center; padding: 4px 0;">Select Model...</div>
-            `;
+            appendTextElement(card, "div", "Select Model...", "color: #ccc; font-style: italic; font-size: 13px; text-align: center; padding: 4px 0;");
         }
-        
+
         row.appendChild(card);
 
 
@@ -1091,11 +1447,11 @@ class VNCCS_SelectorWidget {
         rBtn.style.fontSize = "16px";
         rBtn.style.cursor = "pointer";
         rBtn.style.backgroundColor = "rgba(0,0,0,0.2)"; // Slightly darker than card
-        
+
         rBtn.onmouseover = () => { rBtn.style.backgroundColor = "#444"; rBtn.style.color = "#fff"; };
         rBtn.onmouseout = () => { rBtn.style.backgroundColor = "rgba(0,0,0,0.2)"; rBtn.style.color = "#888"; };
-        rBtn.onclick = (e) => { e.stopPropagation(); this.refresh(); };
-        
+        rBtn.onclick = (e) => { e.stopPropagation(); this.refresh(true); };
+
         this.refreshBtn = rBtn;
         row.appendChild(rBtn);
 
@@ -1107,16 +1463,18 @@ class VNCCS_SelectorWidget {
     }
 
     showModal() {
+        if (this.disposed) return;
         if (!this.models.length) {
-            // If empty, try refresh first? or alert
-            if(confirm("Model list empty. Refresh now?")) {
+            // If empty, try refresh first? or custom confirm
+            this.showConfirm("Model list empty. Refresh now?", () => {
                 this.refresh();
-            }
+            });
             return;
         }
 
         // Create Modal Overlay
         const overlay = document.createElement("div");
+        this.overlays.add(overlay);
         Object.assign(overlay.style, {
             position: "fixed", top: "0", left: "0", width: "100vw", height: "100vh",
             background: "rgba(0,0,0,0.6)", zIndex: "10000",
@@ -1160,7 +1518,7 @@ class VNCCS_SelectorWidget {
             const lowerFilter = filter.toLowerCase();
             this.models
                 .filter(m => m.name.toLowerCase().includes(lowerFilter))
-                .sort((a,b) => a.name.localeCompare(b.name))
+                .sort((a, b) => a.name.localeCompare(b.name))
                 .forEach(m => {
                     const el = document.createElement("div");
                     const isSelected = m.name === this.currentValue;
@@ -1168,22 +1526,20 @@ class VNCCS_SelectorWidget {
                         padding: "8px 15px", borderBottom: "1px solid #333", cursor: "pointer",
                         background: isSelected ? "#2a3a2a" : "transparent"
                     });
-                    
-                    el.onmouseover = () => { if(!isSelected) el.style.background = "#333"; };
-                    el.onmouseout = () => { if(!isSelected) el.style.background = "transparent"; };
-                    
-                    el.innerHTML = `
-                        <div style="color: ${isSelected ? '#6c6' : '#eee'}; font-weight: bold;">${m.name}</div>
-                        <div style="color: #888; font-size: 11px;">${m.description || ""}</div>
-                    `;
+
+                    el.onmouseover = () => { if (!isSelected) el.style.background = "#333"; };
+                    el.onmouseout = () => { if (!isSelected) el.style.background = "transparent"; };
+
+                    appendTextElement(el, "div", m.name, `color: ${isSelected ? '#6c6' : '#eee'}; font-weight: bold;`);
+                    appendTextElement(el, "div", m.description || "", "color: #888; font-size: 11px;");
                     el.onclick = () => {
                         this.setValue(m.name);
                         document.body.removeChild(overlay);
                     };
                     list.appendChild(el);
                 });
-            
-            if(!list.hasChildNodes()) {
+
+            if (!list.hasChildNodes()) {
                 list.innerHTML = "<div style='padding:20px; text-align:center; color:#666'>No matches found</div>";
             }
         };
@@ -1194,11 +1550,86 @@ class VNCCS_SelectorWidget {
         dialog.appendChild(list);
         overlay.appendChild(dialog);
         document.body.appendChild(overlay);
-        
+
         overlay.onclick = (e) => {
-            if(e.target === overlay) document.body.removeChild(overlay);
+            if (e.target === overlay) document.body.removeChild(overlay);
         };
-        
+
         search.focus();
+    }
+
+    showMessage(text, isError = false) {
+        if (this.disposed) return;
+        const overlay = document.createElement("div");
+        this.overlays.add(overlay);
+        overlay.style.cssText = `
+            position: fixed; top:0; left:0; width:100vw; height:100vh;
+            background: rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center;
+            z-index: 20000; padding: 20px; box-sizing: border-box;
+        `;
+        const box = document.createElement("div");
+        box.style.cssText = `
+            background: #222; border: 1px solid ${isError ? '#a44' : '#444'}; 
+            padding: 15px; border-radius: 8px; max-width: 300px; width: 100%;
+            text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        `;
+        appendTextElement(box, "div", text, "color: #eee; font-size: 13px; margin-bottom: 15px; line-height: 1.4;");
+        const btn = document.createElement("button");
+        btn.innerText = "OK";
+        btn.style.cssText = "background: #44a; color: white; border: none; padding: 6px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;";
+        btn.onclick = () => overlay.remove();
+        box.appendChild(btn);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+    }
+
+    showConfirm(text, onConfirm) {
+        if (this.disposed) return;
+        const overlay = document.createElement("div");
+        this.overlays.add(overlay);
+        overlay.style.cssText = `
+            position: fixed; top:0; left:0; width:100vw; height:100vh;
+            background: rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center;
+            z-index: 20000; padding: 20px; box-sizing: border-box;
+        `;
+        const box = document.createElement("div");
+        box.style.cssText = `
+            background: #222; border: 1px solid #444; 
+            padding: 15px; border-radius: 8px; max-width: 300px; width: 100%;
+            text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        `;
+        appendTextElement(box, "div", text, "color: #eee; font-size: 13px; margin-bottom: 15px; line-height: 1.4;");
+
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.gap = "10px";
+        row.style.justifyContent = "center";
+
+        const cancel = document.createElement("button");
+        cancel.innerText = "Cancel";
+        cancel.style.cssText = "background: #444; color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer;";
+        cancel.onclick = () => overlay.remove();
+
+        const ok = document.createElement("button");
+        ok.innerText = "Confirm";
+        ok.style.cssText = "background: #4a4; color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;";
+        ok.onclick = () => { overlay.remove(); onConfirm(); };
+
+        row.appendChild(cancel);
+        row.appendChild(ok);
+        box.appendChild(row);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+    }
+
+    dispose() {
+        if (this.disposed) return;
+        this.disposed = true;
+        window.removeEventListener("vnccs-registry-updated", this._onRegistryUpdate);
+        for (const overlay of this.overlays) overlay.remove();
+        this.overlays.clear();
+        this.container?.replaceChildren();
+        this.node = null;
+        this.container = null;
     }
 }

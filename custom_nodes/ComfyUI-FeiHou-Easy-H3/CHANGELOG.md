@@ -1,5 +1,83 @@
 # Changelog
 
+## v1.4.13
+
+- Removes the custom API host and LAN endpoint allow-lists. Custom HTTPS-compatible API URLs can be configured directly without allowed_api_hosts.json.
+- Keeps URL parsing, the external HTTPS requirement, TLS verification, redirect blocking, and local-only settings routes.
+- Validation: Python and JavaScript syntax checks plus static reference checks. GPU generation and live third-party API requests were not performed.
+
+## v1.4.12
+
+- Adds a Standard-edition official-node two-pass H3 enhancement node. It samples a coarse high-noise pass, enlarges the denoised video latent, and continues with a low-noise refinement pass.
+- Adds a `Default Trigger Words` switch to both Sample Enhancer passes. It defaults on and prepends the built-in detail trigger to that pass's encoded prompt without exposing the trigger text in the node UI.
+- LoRA loading is intentionally not integrated; connect externally configured first/refinement models, including any user-selected LoRA chain.
+- Resizes MiniMax H3 reference/keyframe latent metadata with the video latent and preserves the nested audio latent. GPU quality and memory usage were not re-tested.
+
+## v1.4.11
+
+- Production-pack loader accepts shots with no reference images. Such shots run as text-to-video (image mode with no media); shots that reference audio still need at least one image or video, with a clear error.
+- Resolves asset IDs through the Shotlist's inline project data, so a user image declared as `P1` (for example `../人物.jpg`) loads as P1 without being renamed. Files named after the ID (`P3.png`) still take priority; paths outside the package are ignored.
+- Clearer missing/ambiguous asset messages. Folder paths for local ComfyUI are unchanged and need no ZIP. No UI or widget-order changes; RH edition unchanged. Loader validation tested with sample packs; GPU generation not re-tested.
+
+## v1.4.10
+
+- Removes the face-refinement 24 FPS restriction; uses the frame rate supplied by H3 context for existing timing calculations and output.
+- No new controls, interpolation checks, or widget-order changes. Syntax and file synchronization verified; non-24-FPS GPU quality not re-tested.
+
+## v1.4.9
+
+- Checks standard linear LoRA dimensions before bypass loading. Skips incompatible layers with per-layer warnings and a partial-load summary; rejects LoRAs with no usable matched layers.
+- Preserves matching adapters, strength, raw caches and multiple-LoRA composition. Other adapter types remain delegated to ComfyUI with an explicit unvalidated warning.
+- No UI/widget-order changes. CPU compatibility regressions tested; full GPU quality not re-tested.
+
+## v1.4.8
+
+- Hides the LoRA stack bypass toggle and consistently enables additive bypass loading, including saved regular-mode workflows and legacy API inputs.
+- Preserves LoRA names, strengths, enable flags, stack chaining and widget order. Does not change external official LoRA loaders or the RH edition.
+- Validates saved-workflow migration, backend stack normalization and syntax. Full GPU quality and memory usage were not re-tested for this release.
+
+## v1.4.7
+
+- Restores explicitly authorized LAN inference APIs, including remote Ollama and HTTP OpenAI-compatible services, through the server-local allowed_api_hosts.json lan_endpoints list.
+- Matches exact scheme, RFC1918 IPv4 address and port; does not automatically allow entire private networks. Existing public-host allow-lists and local Ollama remain compatible.
+- Retains public HTTPS requirements, TLS verification, redirect blocking and local-only settings routes. The web UI cannot modify the allow-list.
+- Documents LAN configuration and deployment requirements in both READMEs and the API Settings panel.
+- Validation: allow-list regression tests, Python/frontend syntax and diff checks. No live LAN server connection was tested. RH is unchanged.
+
+## v1.4.6
+
+- Adds reference-video time ranges and play/stop previews; video frames and source audio are cropped together with 100 ms input normalization.
+- Replaces the automatic-duration toggle with Off / Reference audio / Reference video alignment. Uses the first reference of the selected type, preserves legacy enabled toggles as audio alignment, and retains frame rounding and output-duration cropping.
+- Includes clone-safe sampling handoff/cache fixes, multi-LoRA regular/bypass selection, and the standalone resolution selector with conditional custom dimensions.
+- Improves production-pack multi-audio reference handling and documents the HTML integration contract.
+- Adds experimental face refinement with optional original-audio conditioning, clean second-pass model selection, and automatic cropped reference-face input. Optional dependencies and limitations are documented in FACE_REFINE.md.
+- Validation: Python/JavaScript syntax, JSON parsing, crop/playback simulations and saved-widget migration tests. No new GPU quality or live-cloud compatibility guarantees.
+
+## v1.4.5
+
+- Supports production-pack ZIP upload, inspection and preview from same-origin cloud ComfyUI browsers, including gateways that strip Origin while preserving same-origin Fetch Metadata. Adds credential-free access diagnostics.
+- Resolves relative folder/ZIP paths under ComfyUI/input; retains absolute paths with remote directory restrictions and a server-local remote_roots configuration. Cloud deployments still require platform authentication.
+- Leaves generation resolution and pixel dimensions under manual control: package inspection no longer validates or applies them, and old cached previews cannot override them. Aspect-ratio and FPS handling are retained.
+- Documents cloud setup and folder permissions without a fixed domain allow-list. Local configuration and development tests are excluded from publication.
+- Validation: seven local route/regression tests, syntax checks and user-confirmed cloud access. No GPU performance claims.
+
+## v1.4.4
+
+- Fixes the streamed final-layer wrapper for the updated ComfyUI 0.35 H3 calling convention, retaining compatibility fallbacks.
+- Improves Production Pack Loader folder/HTML discovery, referenced-asset selection, optional voice-reference handling, generation order, preview, ZIP/path selection and responsive diagnostics.
+- Adds an opt-in advanced text-encoder-only reference mode, without reference VAE latents. The built-in sparse-attention experiment is not included; use the official node for configurable sparse attention.
+- Preserves saved widget positions, including migration from the brief two-switch experimental build, and adds a stable gap beneath the prompt editor.
+- Preserves frontend cross-plugin isolation. Removes development test directories from the distributed package.
+- Validation: targeted CPU/frontend regression checks and user-reported local testing; no new GPU benchmark claims.
+
+## v1.4.3
+
+- Isolates standard-edition frontend installation markers and matches exact node class IDs, preventing cross-plugin media parameter interference.
+- Stops reference generation explicitly when visual media is missing or prompt references are unresolved.
+- Adds the experimental Production Pack Loader: folder/ZIP Shotlist import, ordered referenced assets, per-shot prompts/audio ranges, and native queue index increment.
+- Preserves existing main-node widget/output ordering and isolates preview settings between queued shots. Includes Chinese/English UI and usage documentation.
+- Validation: CPU regression tests, frontend syntax and transport-order simulations, and the 36-shot sample import. Full GPU/cloud generation was not performed for this release.
+
 ## v1.4.2
 
 - Adds a local custom-API host allow-list, validates every outbound prompt-API request, and blocks redirects to unvalidated destinations.

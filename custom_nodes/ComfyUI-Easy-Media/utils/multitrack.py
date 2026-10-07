@@ -73,6 +73,11 @@ def multitrack_is_shared_reference(content: dict) -> bool:
     )
 
 
+def multitrack_is_muted_image(content: dict) -> bool:
+    """Return whether a task image is explicitly bypassed."""
+    return isinstance(content, dict) and content.get("muted") is True
+
+
 def multitrack_media_identity(content: dict) -> tuple[str, str] | None:
     """Return the source/path identity used to match shared media references."""
     if not isinstance(content, dict):
@@ -131,9 +136,13 @@ def multitrack_task_images_with_shared(
         identity = multitrack_media_identity(shared_image)
         matching = next(
             (image for image in local_images if multitrack_media_identity(image) == identity),
-            shared_image,
+            None,
         )
-        normalized = canonicalize_multitrack_slot_content(matching)
+        normalized = canonicalize_multitrack_slot_content(
+            matching if matching is not None else shared_image
+        )
+        if matching is None:
+            normalized.pop("muted", None)
         normalized["shared_reference"] = True
         normalized.pop("speaker_reference", None)
         prefixed.append(normalized)
@@ -151,6 +160,7 @@ def multitrack_slot_media_types(data: dict) -> set[str]:
     tracks = data.get("tracks", [])
     if not isinstance(tracks, list):
         return required
+    shared_images = multitrack_shared_task_images(tracks)
 
     for track in tracks:
         if not isinstance(track, dict):
@@ -166,9 +176,13 @@ def multitrack_slot_media_types(data: dict) -> set[str]:
             if not isinstance(content, dict):
                 continue
             if track_type == "task":
-                images = content.get("images", [])
-                if isinstance(images, list) and any(
-                    isinstance(image, dict) and multitrack_slot_name(image) is not None
+                images = multitrack_task_images_with_shared(
+                    content.get("images", []), shared_images,
+                )
+                if any(
+                    isinstance(image, dict)
+                    and not multitrack_is_muted_image(image)
+                    and multitrack_slot_name(image) is not None
                     for image in images
                 ):
                     required.add("image")
@@ -218,6 +232,56 @@ def multitrack_segments_in_window(
         local_segment["content"] = dict(content)
         clipped.append(local_segment)
     return clipped
+
+
+def multitrack_audio_lock_is_effective(
+    info: dict,
+    track: dict,
+    start_frame: int,
+    end_frame: int,
+    *,
+    has_solo_track: bool | None = None,
+) -> bool:
+    """Return whether a locked track has audible media in a timeline window.
+
+    Video timing remains independent from this decision. This helper only
+    answers whether the track is allowed to provide lock audio.
+    """
+    if (
+        not isinstance(info, dict)
+        or not isinstance(track, dict)
+        or track.get("type") not in {"audio", "video"}
+        or track.get("audio_locked") is not True
+        or audio_is_muted(info)
+        or audio_is_muted(track)
+    ):
+        return False
+    if has_solo_track is None:
+        tracks = info.get("tracks", [])
+        has_solo_track = any(
+            isinstance(candidate, dict)
+            and candidate.get("type") in {"audio", "video"}
+            and candidate.get("solo") is True
+            for candidate in tracks if isinstance(tracks, list)
+        )
+    if has_solo_track and track.get("solo") is not True:
+        return False
+
+    track_type = track.get("type")
+    return any(
+        isinstance(segment, dict)
+        and isinstance(segment.get("content"), dict)
+        and segment["content"].get("media_type") == track_type
+        and not audio_is_muted(segment["content"])
+        and _multitrack_frame_value(segment.get("start_frame")) < end_frame
+        and _multitrack_frame_value(
+            segment.get("end_frame"),
+            _multitrack_frame_value(segment.get("start_frame")),
+        ) > start_frame
+        for segment in track.get("segments", [])
+    )
+
+
 def _slot_index(slot_name: str | None) -> int:
     if not slot_name:
         return 0

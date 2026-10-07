@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 import numpy as np
 from PIL import Image
@@ -20,9 +20,13 @@ from torch.nn.functional import interpolate
 
 
 ROOT = Path(__file__).resolve().parent
+# Every HTTP request in this module targets our own loopback llama-server.
+# Ignore process-wide proxy settings, which may otherwise intercept 127.0.0.1.
+LOCAL_OPENER = build_opener(ProxyHandler({}))
 DEFAULT_T2I = "Qwen-Image-2.1-PE-T2I.Q4_K_M.gguf"
 DEFAULT_EDIT = "Qwen-Image-2.1-PE-I2I.Q4_K_M.gguf"
 DEFAULT_MMPROJ = "Qwen-Image-2.1-PE-I2I.mmproj-bf16.gguf"
+DEFAULT_STARTUP_TIMEOUT = 900
 MAX_VISUAL_PIXELS = 1024 * 1024
 MAX_VISUAL_SIDE = 4096
 _RATIO = re.compile(r"^[1-9]\d{0,2}:[1-9]\d{0,2}$")
@@ -32,10 +36,28 @@ _QUOTED_LITERAL = re.compile(
     r'"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|«[^»\n]*»|'
     r"(?<![A-Za-z0-9])'(?:[^'\n]|(?<=[A-Za-z0-9])'(?=[A-Za-z0-9]))*'(?![A-Za-z0-9])"
 )
+_VISIBLE_TEXT_BEFORE = re.compile(
+    r"(?:标题|文字|字样|字幕|标语|写着|写有|写成|印着|印有|显示|标注|"
+    r"\b(?:title|text|caption|slogan|reads?|says?)\b)"
+    r"[^，,。！？.!?；;\n\"“”'‘’「」『』«»]{0,24}$|"
+    r"(?:广告牌|招牌|店招|路牌|标牌|告示牌|牌匾|横幅|标签|"
+    r"\b(?:billboard|sign|label|banner)\b)"
+    r"[^，,。！？.!?；;\n\"“”'‘’「」『』«»]{0,12}$", re.I)
+_VISIBLE_TEXT_AFTER = re.compile(
+    r"\s*(?:字样|文字|标题|标语|字幕|招牌|广告牌|路牌|标牌|标签|"
+    r"\b(?:text|title|caption|slogan|sign|label)\b)", re.I)
+
+
+def _visible_text_quote(match):
+    """Recognize quoted lettering transcribed from an input image."""
+    before = match.string[max(0, match.start() - 80):match.start()]
+    after = match.string[match.end():match.end() + 18]
+    return bool(_VISIBLE_TEXT_BEFORE.search(before) or _VISIBLE_TEXT_AFTER.match(after))
 
 
 def _protected_quote(match, protected_literals):
-    return protected_literals is None or match.group()[1:-1] in protected_literals
+    return (protected_literals is None or match.group()[1:-1] in protected_literals
+            or _visible_text_quote(match))
 
 
 def strip_quoted_literals(text, protected_literals=None):
@@ -117,7 +139,7 @@ def file_signature(path):
 
 def pick_mmproj(model_name, chosen):
     model_path = resolve_model(model_name)
-    base = re.sub(r"\.(?:Q\d[^.]*|IQ\d[^.]*|BF16|F16|F32)$", "",
+    base = re.sub(r"[.-](?:Q\d[^.]*|IQ\d[^.]*|BF16|F16|F32)$", "",
                   Path(model_name).stem, flags=re.IGNORECASE)
     if chosen != "Auto":
         path = resolve_model(chosen, True)
@@ -436,10 +458,22 @@ class LocalServer:
             path = Path(configured)
             if path.is_file():
                 return path
-            raise FileNotFoundError(path)
+            raise FileNotFoundError(
+                f"QWEN_PE_LLAMA_SERVER points to a missing executable: {path}. "
+                "See https://github.com/T8mars/Comfyui-Qwen-Image-Prompt-Rewrite-T8/"
+                "blob/main/README.md#install-llama-server-windows")
         matches = list((ROOT / "runtime").rglob("llama-server.exe"))
+        if not matches:
+            raise FileNotFoundError(
+                "llama-server.exe is missing. Install the two official llama.cpp Windows ZIPs "
+                "into this node's runtime/llama-b11068/ directory, or set "
+                "QWEN_PE_LLAMA_SERVER to its full path. Instructions: "
+                "https://github.com/T8mars/Comfyui-Qwen-Image-Prompt-Rewrite-T8/"
+                "blob/main/README.md#install-llama-server-windows")
         if len(matches) != 1:
-            raise FileNotFoundError("llama-server.exe not found; set QWEN_PE_LLAMA_SERVER")
+            raise RuntimeError(
+                "Multiple llama-server.exe files found under runtime/. Set "
+                "QWEN_PE_LLAMA_SERVER to the one you want to use.")
         return matches[0]
 
     def stop(self):
@@ -461,13 +495,17 @@ class LocalServer:
                 self.profile = None
                 self.port = None
 
-    def start(self, model, mmproj, context, gpu_layers):
+    def start(self, model, mmproj, context, gpu_layers,
+              startup_timeout=DEFAULT_STARTUP_TIMEOUT):
+        if (isinstance(startup_timeout, bool) or not isinstance(startup_timeout, int)
+                or not 30 <= startup_timeout <= 7200):
+            raise ValueError("startup_timeout must be an integer between 30 and 7200 seconds")
         with self.lock:
             profile = (file_signature(model), file_signature(mmproj) if mmproj else None,
                        context, gpu_layers)
             if self.process is not None and self.process.poll() is None and self.profile == profile:
                 try:
-                    with urlopen(f"http://127.0.0.1:{self.port}/health", timeout=2) as response:
+                    with LOCAL_OPENER.open(f"http://127.0.0.1:{self.port}/health", timeout=2) as response:
                         if response.status == 200:
                             return
                 except (URLError, TimeoutError, HTTPError):
@@ -494,20 +532,34 @@ class LocalServer:
                     check_interrupt = memory.throw_exception_if_processing_interrupted
                 except ImportError:
                     check_interrupt = None
-                deadline = time.monotonic() + 180
+                started_at = time.monotonic()
+                deadline = started_at + startup_timeout
+                next_report = started_at + 30
+                last_health_error = "no successful health response"
                 while time.monotonic() < deadline:
                     if check_interrupt:
                         check_interrupt()
                     if self.process.poll() is not None:
                         raise RuntimeError(f"llama-server exited with {self.process.returncode}; see {log_path}")
                     try:
-                        with urlopen(f"http://127.0.0.1:{port}/health", timeout=3) as response:
+                        with LOCAL_OPENER.open(f"http://127.0.0.1:{port}/health", timeout=3) as response:
                             if response.status == 200:
                                 return
-                    except (URLError, TimeoutError, HTTPError):
-                        pass
-                    time.sleep(0.5)
-                raise TimeoutError("llama-server did not become healthy within 180 seconds")
+                            last_health_error = f"HTTP {response.status}"
+                    except (URLError, TimeoutError, HTTPError) as exc:
+                        last_health_error = str(exc)
+                    now = time.monotonic()
+                    if now >= next_report:
+                        print(f"[Qwen PE T8] Loading {model.name}: waiting for llama-server "
+                              f"({now - started_at:.0f}/{startup_timeout} seconds); see {log_path}",
+                              flush=True)
+                        next_report = now + 30
+                    time.sleep(min(0.5, max(0, deadline - now)))
+                raise TimeoutError(
+                    f"llama-server did not become healthy within {startup_timeout} seconds. "
+                    f"Last health check: {last_health_error}. See {log_path}. "
+                    "If the log still shows model loading, increase the node's startup_timeout; "
+                    "if it shows an error, fix that error first.")
             except BaseException:
                 self.stop()
                 raise
@@ -538,6 +590,11 @@ class LocalServer:
                                   "If rewritten_prompt uses an image tag, only <image1> is valid; "
                                   "never use the unnumbered <image> placeholder.")
             system += "\n\nRuntime image-reference rule: " + reference_rule
+            if images:
+                system += ("\n\nVisible text in reference images: Keep legible titles, signs, "
+                           "advertisements, and labels verbatim inside quotation marks. "
+                           "Write the surrounding description in the selected output language; "
+                           "do not translate the visible lettering.")
             if output_language != "auto":
                 language = "English" if output_language == "English" else "Chinese"
                 system += (f"\n\nUser-selected language override: Write all descriptive prose of "
@@ -625,25 +682,43 @@ class LocalServer:
                     except ValueError:
                         if output_language == "auto":
                             raise
-                        answer["rewritten_prompt"], translation_usage = self._translate_prose(
-                            answer["rewritten_prompt"], output_language, seed, timeout)
                         translation_fallback = True
-                        if task == "edit" and len(images) == 1:
-                            answer["rewritten_prompt"], normalized_more_tags = (
-                                normalize_single_image_references(answer["rewritten_prompt"]))
-                            normalized_single_image_tags += normalized_more_tags
-                        if transparent_rgba:
-                            answer["rewritten_prompt"], normalized_more_backdrop = (
-                                normalize_opaque_background_phrases(answer["rewritten_prompt"], exact_literals))
-                            normalized_background_phrases += normalized_more_backdrop
-                            answer["rewritten_prompt"], removed_more = (
-                                remove_opaque_background_sentences(answer["rewritten_prompt"], exact_literals))
-                            removed_background_sentences += removed_more
-                            answer["rewritten_prompt"], normalized_more = (
-                                normalize_transparent_margins(answer["rewritten_prompt"], exact_literals))
-                            normalized_margin_phrases += normalized_more
-                        validate_references(answer, task, len(images), exact_literals)
-                        validate_language(answer, output_language, exact_literals)
+                        source_prose = answer["rewritten_prompt"]
+                        correction = None
+                        for translation_attempt in range(3):
+                            try:
+                                translated, translation_usage = self._translate_prose(
+                                    source_prose, output_language, seed, timeout,
+                                    correction=correction,
+                                    temperature=0.0 if translation_attempt == 0 else 0.3)
+                                normalized_more_tags = 0
+                                normalized_more_backdrop = 0
+                                removed_more = 0
+                                normalized_more = 0
+                                if task == "edit" and len(images) == 1:
+                                    translated, normalized_more_tags = normalize_single_image_references(translated)
+                                if transparent_rgba:
+                                    translated, normalized_more_backdrop = (
+                                        normalize_opaque_background_phrases(translated, exact_literals))
+                                    translated, removed_more = (
+                                        remove_opaque_background_sentences(translated, exact_literals))
+                                    translated, normalized_more = (
+                                        normalize_transparent_margins(translated, exact_literals))
+                                candidate = {**answer, "rewritten_prompt": translated}
+                                validate_references(candidate, task, len(images), exact_literals)
+                                validate_language(candidate, output_language, exact_literals)
+                                validate_mode(candidate, aspect_ratio, transparent_rgba, exact_literals)
+                            except ValueError as exc:
+                                if translation_attempt == 2:
+                                    raise
+                                correction = str(exc)
+                            else:
+                                answer = candidate
+                                normalized_single_image_tags += normalized_more_tags
+                                normalized_background_phrases += normalized_more_backdrop
+                                removed_background_sentences += removed_more
+                                normalized_margin_phrases += normalized_more
+                                break
                     validate_mode(answer, aspect_ratio, transparent_rgba, exact_literals)
                     return answer, {"finish_reason": choice.get("finish_reason"),
                                     "usage": result.get("usage", {}),
@@ -668,7 +743,8 @@ class LocalServer:
                     payload["chat_template_kwargs"] = {"enable_thinking": False}
             raise AssertionError("unreachable")
 
-    def _translate_prose(self, prose, output_language, seed, timeout):
+    def _translate_prose(self, prose, output_language, seed, timeout,
+                         correction=None, temperature=0.0):
         target = "Simplified Chinese" if output_language == "中文" else "English"
         if output_language == "中文":
             request_text = (
@@ -681,12 +757,19 @@ class LocalServer:
                 "Do not add or remove visual facts. Keep every <imageN> tag and every exact "
                 "quoted string unchanged. Return only plain translated prose, with no heading, "
                 "JSON, or explanation.\n\n" + prose)
+        if correction:
+            request_text = (
+                "上次译文未通过校验，请修正后重新翻译原文。错误：" + correction[:500] + "\n\n"
+                if output_language == "中文" else
+                "The previous translation failed validation. Fix this error and retranslate "
+                "the original text: " + correction[:500] + "\n\n"
+            ) + request_text
         payload = {
             "model": "qwen-pe",
             "messages": [{"role": "system", "content": "你是严格忠实的图像提示词翻译编辑。只执行翻译。" if output_language == "中文" else
                          "You are a faithful translation editor for image prompts."},
                          {"role": "user", "content": request_text}],
-            "temperature": 0.0, "top_p": 0.9, "max_tokens": 8192,
+            "temperature": temperature, "top_p": 0.9, "max_tokens": 8192,
             "seed": seed, "chat_template_kwargs": {"enable_thinking": False}, "stream": False,
         }
         result = self._post_completion(payload, timeout)
@@ -713,7 +796,7 @@ class LocalServer:
 
         def perform():
             try:
-                with urlopen(request, timeout=timeout) as response:
+                with LOCAL_OPENER.open(request, timeout=timeout) as response:
                     outcome["result"] = json.load(response)
             except HTTPError as exc:
                 detail = exc.read(2000).decode("utf-8", "replace")

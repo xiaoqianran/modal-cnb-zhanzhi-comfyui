@@ -18,6 +18,7 @@ import re
 import sys
 import threading
 import uuid
+import hashlib
 import base64
 import asyncio
 import gc
@@ -44,6 +45,7 @@ import nodes
 from comfy_extras import nodes_minimax_h3 as h3
 from comfy_extras import nodes_audio as comfy_audio_nodes
 from comfy_api.latest import InputImpl
+from .production_pack import SHOT_TYPE, register_routes as register_production_pack_routes
 
 
 MODE_IMAGE = "image"
@@ -121,15 +123,6 @@ PROMPT_OPTIMIZER_MODEL_LIST_TIMEOUT_SECONDS = 20
 PROMPT_OPTIMIZER_JPEG_QUALITY = 85
 PROMPT_OPTIMIZER_VIDEO_SAMPLE_COUNT = 3
 PROMPT_OPTIMIZER_CONFIG_VERSION = 6
-PROMPT_OPTIMIZER_ALLOWED_HOSTS_VERSION = 1
-PROMPT_OPTIMIZER_ALLOWED_HOSTS_FILENAME = "allowed_api_hosts.json"
-PROMPT_OPTIMIZER_BUILTIN_ALLOWED_HOSTS = frozenset({
-    "open.bigmodel.cn",
-    "api.xflow.cc",
-    "dashscope.aliyuncs.com",
-    "api.deepseek.com",
-})
-PROMPT_OPTIMIZER_MAX_CUSTOM_ALLOWED_HOSTS = 100
 PROMPT_OPTIMIZER_ZHIPU_MODELS = (
     "glm-5.1", "glm-5", "glm-5-turbo", "glm-5v-turbo", "glm-4.7", "glm-4.7-flash",
     "glm-4.7-flashx", "glm-4.6", "glm-4.6v", "glm-4.6v-flash", "glm-4.5",
@@ -511,86 +504,15 @@ def _prompt_optimizer_config_path() -> str:
     return os.path.join(_prompt_optimizer_config_directory(), "prompt_optimizer.json")
 
 
-def _prompt_optimizer_allowed_hosts_path() -> str:
-    """A local-only allow-list that is deliberately not writable by web routes."""
-    return os.path.join(_prompt_optimizer_config_directory(), PROMPT_OPTIMIZER_ALLOWED_HOSTS_FILENAME)
-
-
 def _legacy_prompt_optimizer_config_path() -> str:
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "prompt_optimizer.json")
-
-
-def _normalise_allowed_host(value: Any) -> str:
-    """Accept one DNS hostname, never a URL, wildcard, or IP address."""
-    host = str(value or "").strip().rstrip(".").lower()
-    if not host or any(token in host for token in ("://", "/", "\\", "@", "?", "#", ":", "*")):
-        return ""
-    try:
-        ipaddress.ip_address(host)
-        return ""
-    except ValueError:
-        pass
-    try:
-        host = host.encode("idna").decode("ascii")
-    except UnicodeError:
-        return ""
-    if len(host) > 253 or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+", host):
-        return ""
-    return host
-
-
-def _read_custom_allowed_optimizer_hosts() -> set[str]:
-    """Read the user-maintained host allow-list without exposing a write route."""
-    path = _prompt_optimizer_allowed_hosts_path()
-    payload: Any = {}
-    with _PROMPT_OPTIMIZER_CONFIG_LOCK:
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                payload = json.load(handle)
-        except FileNotFoundError:
-            # Create a discoverable, intentionally empty local file.  The web
-            # UI can explain how to add custom hosts, but cannot modify it.
-            directory = os.path.dirname(path)
-            os.makedirs(directory, exist_ok=True)
-            temporary_path = ""
-            try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w", encoding="utf-8", dir=directory,
-                    prefix=".allowed_api_hosts.", suffix=".tmp", delete=False,
-                ) as handle:
-                    temporary_path = handle.name
-                    json.dump({"version": PROMPT_OPTIMIZER_ALLOWED_HOSTS_VERSION, "hosts": []}, handle, ensure_ascii=False, indent=2)
-                    handle.write("\n")
-                os.replace(temporary_path, path)
-            finally:
-                if temporary_path and os.path.exists(temporary_path):
-                    try:
-                        os.remove(temporary_path)
-                    except OSError:
-                        pass
-        except (json.JSONDecodeError, OSError, TypeError, ValueError):
-            logging.warning("Easy H3: unable to read custom API host allow-list: %s", path)
-            return set()
-
-    entries = payload.get("hosts", []) if isinstance(payload, Mapping) else []
-    hosts: set[str] = set()
-    for value in entries[:PROMPT_OPTIMIZER_MAX_CUSTOM_ALLOWED_HOSTS] if isinstance(entries, list) else []:
-        host = _normalise_allowed_host(value)
-        if host:
-            hosts.add(host)
-    return hosts
-
-
-def _allowed_optimizer_hosts() -> set[str]:
-    return set(PROMPT_OPTIMIZER_BUILTIN_ALLOWED_HOSTS) | _read_custom_allowed_optimizer_hosts()
 
 
 def _validate_optimizer_base_url(api_url: str, api_format: str = "openai") -> str:
     """Validate an outbound prompt-API URL before any request is created.
 
-    Custom hosts must be deliberately approved in the local allow-list file.
-    This closes the server-side request forgery path while preserving support
-    for user-selected third-party API providers.
+    Custom API hosts are accepted directly. External APIs still require HTTPS;
+    local Ollama keeps its normal localhost-only HTTP handling.
     """
     base = str(api_url or "").strip().rstrip("/")
     if not base:
@@ -609,16 +531,11 @@ def _validate_optimizer_base_url(api_url: str, api_format: str = "openai") -> st
     normalized_format = str(api_format or "openai").strip().lower()
     if normalized_format == "ollama":
         if scheme not in {"http", "https"} or host not in {"localhost", "127.0.0.1", "::1"}:
-            raise ValueError("Ollama must use a local localhost, 127.0.0.1, or ::1 endpoint")
+            raise ValueError("Ollama requires localhost, 127.0.0.1, or ::1")
         return base
 
     if scheme != "https":
         raise ValueError("External prompt optimization APIs must use HTTPS")
-    if host not in _allowed_optimizer_hosts():
-        raise ValueError(
-            f"API host '{host}' is not allowed. Add this hostname to "
-            f"{PROMPT_OPTIMIZER_ALLOWED_HOSTS_FILENAME} and restart ComfyUI."
-        )
     return base
 
 
@@ -911,9 +828,6 @@ def _prompt_optimizer_provider_choices(settings: Mapping[str, Any] | None = None
 
 
 def _read_prompt_optimizer_config() -> dict[str, Any]:
-    # Make the documented local allow-list discoverable as soon as Easy H3
-    # reads its configuration, without exposing a web route that can edit it.
-    _read_custom_allowed_optimizer_hosts()
     path = _prompt_optimizer_config_path()
     with _PROMPT_OPTIMIZER_CONFIG_LOCK:
         try:
@@ -938,7 +852,7 @@ def _write_prompt_optimizer_config(value: Mapping[str, Any] | None) -> dict[str,
             continue
         api_url = str(provider.get("api_url") or "").strip()
         # A blank newly-created custom provider remains editable. It becomes
-        # usable only after it has a valid, allow-listed endpoint.
+        # usable only after it has a valid endpoint.
         if api_url:
             _validate_optimizer_base_url(api_url, str(provider.get("api_format") or "openai"))
     path = _prompt_optimizer_config_path()
@@ -1805,6 +1719,8 @@ def _register_prompt_optimizer_route() -> bool:
     if routes is None or getattr(_register_prompt_optimizer_route, "_registered", False):
         return bool(getattr(_register_prompt_optimizer_route, "_registered", False))
 
+    register_production_pack_routes(routes, _is_loopback_web_request)
+
     @routes.get("/feihou_easy_h3/prompt_optimizer_settings")
     async def _prompt_optimizer_settings_get(request):
         if not _is_loopback_web_request(request):
@@ -2023,14 +1939,14 @@ class MiniMaxH3Bundle:
     clip: Any
     video_vae: Any
     audio_vae: Any
-    lora_stack: tuple[tuple[str, float], ...] = ()
+    lora_stack: tuple[tuple[str, float, bool], ...] = ()
     fl2va_model_obj: Any = None
     ref2va_model_obj: Any = None
     second_sampling_enabled: bool = False
     second_fl2va_model_name: str = NONE_MODEL
     second_ref2va_model_name: str = NONE_MODEL
     second_sampling_use_lora: bool = True
-    second_lora_stack: tuple[tuple[str, float], ...] = ()
+    second_lora_stack: tuple[tuple[str, float, bool], ...] = ()
     remix_loader: bool = False
 
     def __post_init__(self) -> None:
@@ -2086,17 +2002,26 @@ class MiniMaxH3Bundle:
         self._loaded_loras[path] = (*signature, lora)
         return lora
 
-    def _apply_loras(self, model, lora_stack: tuple[tuple[str, float], ...] | None = None):
+    def _apply_loras(self, model, lora_stack: tuple[tuple[str, float, bool], ...] | None = None):
         stack = self.lora_stack if lora_stack is None else lora_stack
         if not stack:
             return model
-        loader = getattr(comfy.sd, "load_bypass_lora_for_models", None)
-        if not callable(loader):
-            raise RuntimeError("This ComfyUI version does not support bypass LoRA loading. Update ComfyUI and try again.")
         result = model
-        for name, strength in stack:
+        for name, strength, bypass in _normalize_lora_stack(stack):
+            loader = getattr(comfy.sd, "load_bypass_lora_for_models" if bypass else "load_lora_for_models", None)
+            if not callable(loader):
+                raise RuntimeError("This ComfyUI version does not support the selected LoRA loading mode.")
+            previous = list(result.get_injections("bypass_lora") or []) if bypass else []
             lora = self._load_lora(name)
+            if bypass:
+                from .lora_compat import compatible_lora
+                lora = compatible_lora(result, lora, name)
             result, _clip = loader(result, None, lora, float(strength), 0.0)
+            if bypass:
+                current = list(result.get_injections("bypass_lora") or [])
+                if previous and current and (len(current) != len(previous) or any(a is not b for a, b in zip(previous, current))):
+                    result.set_injections("bypass_lora", [_FeiHouLoraInjections(previous + current)])
+            logging.info("Easy H3: LoRA %s strength=%s mode=%s", name, strength, "bypass" if bypass else "regular")
         return result
 
     def release_lora_cache(self) -> None:
@@ -2174,19 +2099,22 @@ class MiniMaxH3Bundle:
             return self._model
 
     def second_sampling_model_for(self, kind: str):
-        """Load only the explicitly selected second-pass transformer.
+        """Load the second-pass transformer with the second-pass LoRA stack.
 
-        No fallback to the first-pass models is intentional: enabling the
-        switch without selecting a matching second-pass model keeps this output
-        empty and does not consume RAM or VRAM.
+        Remix Loader has one shared main transformer. When its optional
+        second-pass selector is left at None, reuse that main transformer as a
+        clean second-pass base and apply only the second-pass LoRA stack.
         """
         if not self.second_sampling_enabled:
             return None
         kind = "ref2va" if kind == "ref2va" else "fl2va"
         model_name = self.second_ref2va_model_name if kind == "ref2va" else self.second_fl2va_model_name
+        using_remix_fallback = _is_none_model(model_name) and self.remix_loader
+        if using_remix_fallback:
+            model_name = self.ref2va_model_name if kind == "ref2va" else self.fl2va_model_name
         if _is_none_model(model_name):
             return None
-        cache_key = ("file", model_name, self.second_lora_stack)
+        cache_key = ("file", model_name, using_remix_fallback, self.second_lora_stack)
         with self._lock:
             if self._second_model is not None and self._second_model_cache_key == cache_key:
                 model = self._second_model
@@ -2201,76 +2129,64 @@ class MiniMaxH3Bundle:
                     base_model = _load_gguf_unet(model_name)
                 else:
                     base_model, = nodes.UNETLoader().load_unet(model_name, "default")
+                # Keep a pre-LoRA patcher, sharing weights without a second load.
+                clean_base = base_model.clone()
                 model = self._apply_loras(base_model, self.second_lora_stack) if self.second_lora_stack else base_model
+                model.set_attachments("feihou_h3_clean_second_base", clean_base)
                 self._second_model = model
                 self._second_model_kind = kind
                 self._second_model_name = model_name
                 self._second_model_cache_key = cache_key
+                if using_remix_fallback:
+                    logging.info("Easy H3 Remix: no second-pass model selected; using the main model with the second-pass LoRA stack")
 
-            # The marker is consumed immediately before the second sampler
-            # prepares this model on GPU.  It unloads only the first-pass
+            # Clone-safe metadata is read immediately before the second sampler
+            # prepares this model on GPU. It unloads only the first-pass
             # transformer, never the shared CLIP or VAEs.
             first_model = self._model
             if first_model is not None and first_model is not model:
-                setattr(model, "_feihou_h3_unload_before_second_sampling", first_model)
+                model.set_attachments("feihou_h3_first_pass", first_model)
             # The intermediate decode/encode branch between the two samplers
             # can load both VAEs again.  Mark the second model so they are
             # released a second time at the exact hand-off to sampling.
             if getattr(self, "force_offload_enabled", False):
-                setattr(model, "_feihou_h3_release_auxiliary_before_second_sampling", self)
+                model.set_attachments("feihou_h3_auxiliary_owner", self)
+            else:
+                model.remove_attachments("feihou_h3_auxiliary_owner")
             if self.second_lora_stack:
-                setattr(model, "_feihou_h3_release_lora_cache_before_second_sampling", self)
+                model.set_attachments("feihou_h3_lora_owner", self)
+            from comfy import patcher_extension
+            model.remove_wrappers_with_key(patcher_extension.WrappersMP.PREPARE_SAMPLING, "feihou_h3_handoff")
+            model.add_wrapper_with_key(patcher_extension.WrappersMP.PREPARE_SAMPLING, "feihou_h3_handoff", _prepare_h3_handoff)
             return model
 
 
-def _install_second_sampling_memory_hook() -> None:
-    """Release the first H3 transformer immediately before second-pass load."""
-    try:
-        import comfy.sampler_helpers as sampler_helpers
-    except Exception:
-        return
-    original = getattr(sampler_helpers, "prepare_sampling", None)
-    if not callable(original) or getattr(original, "_feihou_h3_second_sampling_hook", False):
-        return
-
-    def prepare_sampling_with_h3_second_pass_release(model, *args, **kwargs):
-        first_model = getattr(model, "_feihou_h3_unload_before_second_sampling", None)
-        if first_model is not None:
-            try:
-                delattr(model, "_feihou_h3_unload_before_second_sampling")
-            except AttributeError:
-                pass
-            if first_model is not model:
-                try:
-                    comfy.model_management.unload_model_and_clones(first_model, unload_additional_models=False)
-                    logging.info("Easy H3: released first-pass transformer before loading the second-pass model")
-                except Exception as exc:
-                    logging.warning("Easy H3: unable to release first-pass transformer before second sampling: %s", exc)
-        auxiliary_owner = getattr(model, "_feihou_h3_release_auxiliary_before_second_sampling", None)
-        if auxiliary_owner is not None:
-            try:
-                delattr(model, "_feihou_h3_release_auxiliary_before_second_sampling")
-            except AttributeError:
-                pass
-            _release_auxiliary_models_for_sampling(auxiliary_owner, phase="second-pass sampling")
-        lora_owner = getattr(model, "_feihou_h3_release_lora_cache_before_second_sampling", None)
-        if lora_owner is not None:
-            try:
-                delattr(model, "_feihou_h3_release_lora_cache_before_second_sampling")
-            except AttributeError:
-                pass
-            try:
-                lora_owner.release_lora_cache()
-                logging.info("Easy H3: released LoRA cache before second-pass sampling")
-            except Exception as exc:
-                logging.warning("Easy H3: unable to release LoRA cache before second sampling: %s", exc)
-        return original(model, *args, **kwargs)
-
-    prepare_sampling_with_h3_second_pass_release._feihou_h3_second_sampling_hook = True
-    sampler_helpers.prepare_sampling = prepare_sampling_with_h3_second_pass_release
 
 
-_install_second_sampling_memory_hook()
+def _h3_memory_log(phase):
+    if torch.cuda.is_available():
+        logging.info("Easy H3: %s; CUDA allocated=%.0f MiB reserved=%.0f MiB", phase,
+                     torch.cuda.memory_allocated() / 1048576, torch.cuda.memory_reserved() / 1048576)
+
+
+def _prepare_h3_handoff(executor, model, *args, **kwargs):
+    # Attachments and wrappers survive normal ModelPatcher.clone(), including
+    # external attention/LoRA nodes. Do not consume them: cached models can run again.
+    first = model.get_attachment("feihou_h3_first_pass")
+    if first is not None and first is not model:
+        _h3_memory_log("before second-pass handoff")
+        comfy.model_management.unload_model_and_clones(first, unload_additional_models=False)
+        logging.info("Easy H3: released first-pass transformer before second-pass sampling")
+    owner = model.get_attachment("feihou_h3_auxiliary_owner")
+    if owner is not None:
+        _release_auxiliary_models_for_sampling(owner, phase="second-pass sampling")
+        gc.collect()
+        comfy.model_management.soft_empty_cache()
+    lora_owner = model.get_attachment("feihou_h3_lora_owner")
+    if lora_owner is not None:
+        lora_owner.release_lora_cache()
+    _h3_memory_log("after second-pass handoff")
+    return executor(model, *args, **kwargs)
 
 
 def _release_auxiliary_models_for_sampling(bundle: MiniMaxH3Bundle, phase: str = "sampling") -> None:
@@ -2320,8 +2236,14 @@ def _release_sampling_cache_afterwards(executor, *args, **kwargs):
     causes needless synchronisation and makes H3 substantially slower.
     """
     result = executor(*args, **kwargs)
+    patcher = getattr(getattr(executor, "class_obj", None), "model_patcher", None)
+    if patcher is not None and patcher.get_attachment("feihou_h3_release_after_first"):
+        _h3_memory_log("before first-pass release")
+        comfy.model_management.unload_model_and_clones(patcher, unload_additional_models=False)
+        logging.info("Easy H3: released first-pass transformer after sampling, before intermediate decode/encode")
     gc.collect()
     comfy.model_management.soft_empty_cache()
+    _h3_memory_log("after sampling cleanup")
     logging.info("Easy H3: released unused CUDA cache after sampling")
     return result
 
@@ -2354,7 +2276,7 @@ def _low_vram_block_conflict_messages(model: Any) -> list[str]:
                 sample = keys[0]
                 messages.append(
                     f"已有 DiT block 替换：{owner}（{len(keys)} 个 block，例如 {sample}）。"
-                    "完整低显存分块会替换同一 block；请勿把两个 block 实现叠加使用。"
+                    "保留已有 block 实现，该 block 不安装 Easy H3 分块；组合效果未经验证。"
                 )
         object_patches = getattr(model, "object_patches", {})
         if isinstance(object_patches, Mapping):
@@ -2424,6 +2346,8 @@ def _apply_complete_streamed_blocks(model):
 
 def _clone_h3_model_with_memory_features(model, *, force_offload: bool, streamed_attention: bool):
     """Attach optional per-workflow H3 memory features to a model clone."""
+    from .h3_diagnostics import diagnose, sampling_diagnostics
+    diagnose(model, 'before Easy H3 features')
     if not force_offload and not streamed_attention:
         return model
     try:
@@ -2433,6 +2357,11 @@ def _clone_h3_model_with_memory_features(model, *, force_offload: bool, streamed
         return model
     if streamed_attention:
         patched = _apply_complete_streamed_blocks(patched)
+
+    import comfy.patcher_extension
+    patched.remove_wrappers_with_key(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, 'feihou_h3_diagnostics')
+    patched.add_wrapper_with_key(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
+                                'feihou_h3_diagnostics', sampling_diagnostics)
 
     if force_offload:
         try:
@@ -2473,6 +2402,32 @@ class MiniMaxH3Context:
     prompt_preview: str
     audio_1: Any = None
     duration_control: Any = None
+    # Original first IMAGE, before reference-size adaptation. CPU only, no VAE inversion.
+    reference_image_1: Any = None
+    # I2V/FL2V keyframe sources for canvas-size rebuilds (Dual Sample nodes):
+    # tuple of (resolved_frame_index, crop_mode, IMAGE on CPU).
+    keyframe_images: Any = None
+    # Rebuilds canvas-sized conditioning at another width/height for the
+    # Dual Sample nodes (H3HighresRebuilder or None).
+    highres_rebuilder: Any = None
+    # Plan handed from Dual Sample 1st to Dual Sample 2nd (dict or None).
+    dual_plan: Any = None
+
+
+@dataclass(frozen=True)
+class H3HighresRebuilder:
+    """Re-run the exact Easy H3 conditioning builder at a new canvas size.
+
+    The callable may accept a third ``trigger_prefix`` argument.  Older callers
+    continue to pass only width and height.
+
+    ``canvas_dependent`` is True when the conditioning actually changes with the
+    canvas (``match`` reference sizing or first/last-frame keyframes); a fixed
+    short-edge reference size produces identical reference tokens at any canvas.
+    """
+
+    build: Any
+    canvas_dependent: bool = True
 
 
 @dataclass(frozen=True)
@@ -2514,23 +2469,46 @@ class _FlexibleOptionalInputType(dict):
 _ANY_TYPE = _AnyType("*")
 
 
-def _normalize_lora_stack(value: Any) -> tuple[tuple[str, float], ...]:
-    result: list[tuple[str, float]] = []
+class _FeiHouLoraInjections:
+    """Compose forward hooks in order and restore them in reverse order."""
+    def __init__(self, injections):
+        self.injections = tuple(injections)
+
+    def inject(self, patcher):
+        done = []
+        try:
+            for injection in self.injections:
+                injection.inject(patcher)
+                done.append(injection)
+        except Exception:
+            for injection in reversed(done):
+                injection.eject(patcher)
+            raise
+
+    def eject(self, patcher):
+        for injection in reversed(self.injections):
+            injection.eject(patcher)
+
+
+def _normalize_lora_stack(value: Any) -> tuple[tuple[str, float, bool], ...]:
+    result: list[tuple[str, float, bool]] = []
     for item in list(value or [])[:50]:
         if isinstance(item, Mapping):
             name = str(item.get("lora") or item.get("name") or "").strip()
             enabled = item.get("on", item.get("enabled", True))
             strength = float(item.get("strength", 1.0))
+            bypass = _as_bool(item.get("bypass", True))
         elif isinstance(item, (list, tuple)) and len(item) >= 2:
             name = str(item[0] or "").strip()
             enabled = True
             strength = float(item[1])
+            bypass = _as_bool(item[2]) if len(item) > 2 else True
         else:
             continue
         if isinstance(enabled, str):
             enabled = enabled.strip().lower() in {"1", "true", "yes", "on"}
         if enabled and name and name.lower() != "none" and strength != 0.0:
-            result.append((name, strength))
+            result.append((name, strength, bypass))
     return tuple(result)
 
 
@@ -2557,6 +2535,9 @@ class FeiHouEasyH3LoraStack:
             if not key.lower().startswith("lora_") or not isinstance(value, Mapping):
                 continue
             result.extend(_normalize_lora_stack([value]))
+        # Preserve the per-entry mode supplied by the UI.  Older workflows and
+        # direct tuple inputs without a third item still default to bypass in
+        # _normalize_lora_stack, so existing saved stacks remain compatible.
         return (result,)
 
 
@@ -2627,7 +2608,7 @@ class FeiHouEasyH3RemixLoader:
     FUNCTION = "load"
     RETURN_TYPES = ("MINIMAX_H3_BUNDLE",)
     RETURN_NAMES = ("h3_bundle",)
-    DESCRIPTION = "Load a MiniMax H3 Remix transformer shared by FL2VA and REF2VA, with optional independent first/second-pass LoRA stacks."
+    DESCRIPTION = "Load a MiniMax H3 Remix transformer shared by FL2VA and REF2VA, with independent first/second-pass LoRA stacks; the second-pass output falls back to the main model when no second-pass model is selected."
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -2672,7 +2653,9 @@ class FeiHouEasyH3RemixLoader:
             video_vae=video_vae_obj,
             audio_vae=audio_vae_obj,
             lora_stack=first_stack,
-            second_sampling_enabled=not _is_none_model(second_sampling_model),
+            # The second-pass output can fall back to this shared main model
+            # when the optional second-pass selector is left at None.
+            second_sampling_enabled=True,
             second_fl2va_model_name=second_sampling_model,
             second_ref2va_model_name=second_sampling_model,
             second_sampling_use_lora=bool(second_stack),
@@ -2704,7 +2687,9 @@ class FeiHouEasyH3ModelAdapter:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return float("nan")
+        # Upstream MODEL/CLIP/VAE changes are already included in ComfyUI's
+        # ancestry cache key; the assembler has no external files of its own.
+        return "feihou-h3-assembler-v2"
 
     @staticmethod
     def assemble(text_encoder, video_vae, audio_vae, fl2va_model=None, ref2va_model=None):
@@ -2869,6 +2854,46 @@ def _trim_reference_audio(audio: Mapping, trim_range: Any) -> Mapping:
     return trimmed
 
 
+
+def _duration_alignment(value: Any) -> str:
+    """Keep the legacy Boolean input compatible without changing its slot."""
+    if value is True or str(value).strip().lower() in {"true", "1", "audio", "参考音频对齐"}:
+        return "audio"
+    if str(value).strip().lower() in {"video", "参考视频对齐"}:
+        return "video"
+    return "off"
+
+
+def _trim_reference_video(value: Any, trim_range: Any) -> Mapping:
+    """Crop source frames and their soundtrack together, before H3 resampling."""
+    frames, audio, fps = _video_parts(value)
+    if not math.isfinite(fps) or fps <= 0 or frames.shape[0] <= 0:
+        raise ValueError("参考视频为空或帧率无效 / Invalid reference video")
+    total = int(frames.shape[0])
+    start, end = _audio_trim_range(trim_range)
+    duration = total / fps
+    start = min(start, duration)
+    end = duration if end <= 0 else min(end, duration)
+    if end <= start:
+        raise ValueError("参考视频截取终点必须晚于起点 / Invalid video trim range")
+    first = min(total - 1, max(0, round(start * fps)))
+    last = min(total, max(first + 1, round(end * fps)))
+    if audio is not None:
+        rate = _audio_sample_rate(audio)
+        audio = dict(audio)
+        audio["waveform"] = audio["waveform"][..., round(first / fps * rate):round(last / fps * rate)]
+        if audio["waveform"].shape[-1] == 0:
+            audio = None
+    return {"images": frames[first:last], "audio": audio, "fps": fps}
+
+
+def _reference_video_duration(items: list[_MediaInput]) -> float:
+    for item in items:
+        if item.media_type == "video":
+            frames, _, fps = _video_parts(item.value)
+            return int(frames.shape[0]) / fps
+    raise ValueError("已选择参考视频对齐，但未加载参考视频 1 / Reference video 1 is missing")
+
 def _reference_audio_duration(items: list[_MediaInput]) -> float:
     """Return the trimmed duration of Audio 1 for digital-human/MV timing."""
     for item in items:
@@ -2969,7 +2994,7 @@ def _empty_image_conditioning(bundle, prompt, width, height, length, first_frame
     return conditioning, latent
 
 
-def _reference_conditioning(bundle, prompt, width, height, length, ref_image_size, items: list[_MediaInput]):
+def _reference_conditioning(bundle, prompt, width, height, length, ref_image_size, items: list[_MediaInput], *, text_only: bool = False):
     latent, frame_count = h3._empty_av_latent(width, height, length)
     ref_items = []
     ref_blocks = []
@@ -3004,7 +3029,8 @@ def _reference_conditioning(bundle, prompt, width, height, length, ref_image_siz
         target_h = max(h3.CANVAS_MULTIPLE, round(image_h * scale / h3.CANVAS_MULTIPLE) * h3.CANVAS_MULTIPLE)
         resized = h3._resize(image[:1], target_w, target_h, "disabled")
         ref_items.append({"type": "image", "data": resized})
-        ref_blocks.append({"kind": "image", "latent_h": target_h // 16, "latent_w": target_w // 16, "latent": bundle.video_vae.encode(resized)})
+        if not text_only:
+            ref_blocks.append({"kind": "image", "latent_h": target_h // 16, "latent_w": target_w // 16, "latent": bundle.video_vae.encode(resized)})
         tag_by_input[item.input_index] = f"<Picture {picture_ordinal}>"
 
     for video_ordinal, item in enumerate(videos, start=1):
@@ -3024,11 +3050,12 @@ def _reference_conditioning(bundle, prompt, width, height, length, ref_image_siz
         while count % 17 != 5:
             count -= 1
         frames = frames[:count]
-        video_latent = bundle.video_vae.encode(frames)
+        video_latent = None if text_only else bundle.video_vae.encode(frames)
         audio_latent = None
         audio_t = 0
         if soundtrack is not None:
-            audio_latent, audio_t = _encode_reference_audio(bundle.audio_vae, soundtrack)
+            if not text_only:
+                audio_latent, audio_t = _encode_reference_audio(bundle.audio_vae, soundtrack)
             audio_ordinal += 1
             soundtrack_pairs.append((audio_ordinal, video_ordinal))
             ref_items.append({"type": "audio"})
@@ -3038,27 +3065,30 @@ def _reference_conditioning(bundle, prompt, width, height, length, ref_image_siz
             "data": frames[sample_indexes],
             "timestamps": [i / 2.0 for i in range(len(sample_indexes))],
         })
-        ref_blocks.append({
-            "kind": "video_audio" if audio_t else "video",
-            "latent_t": video_latent.shape[2],
-            "latent_h": canvas_h // 16,
-            "latent_w": canvas_w // 16,
-            "ref_audio_t": audio_t,
-            "latent": video_latent,
-            "audio_latent": audio_latent,
-        })
+        if not text_only:
+            ref_blocks.append({
+                "kind": "video_audio" if audio_t else "video",
+                "latent_t": video_latent.shape[2],
+                "latent_h": canvas_h // 16,
+                "latent_w": canvas_w // 16,
+                "ref_audio_t": audio_t,
+                "latent": video_latent,
+                "audio_latent": audio_latent,
+            })
         tag_by_input[item.input_index] = f"<Video {video_ordinal}>"
 
     for item in audios:
         if not isinstance(item.value, Mapping) or "waveform" not in item.value:
             raise ValueError("Audio references must be AUDIO payloads")
-        audio_latent, audio_t = _encode_reference_audio(
-            bundle.audio_vae,
-            _trim_reference_audio(item.value, item.audio_trim),
-        )
+        if not text_only:
+            audio_latent, audio_t = _encode_reference_audio(
+                bundle.audio_vae,
+                _trim_reference_audio(item.value, item.audio_trim),
+            )
         audio_ordinal += 1
         ref_items.append({"type": "audio"})
-        ref_blocks.append({"kind": "audio", "ref_audio_t": audio_t, "audio_latent": audio_latent})
+        if not text_only:
+            ref_blocks.append({"kind": "audio", "ref_audio_t": audio_t, "audio_latent": audio_latent})
         tag_by_input[item.input_index] = f"<Audio {audio_ordinal}>"
 
     if not ref_items or all(item.get("type") == "audio" for item in ref_items):
@@ -3076,6 +3106,22 @@ def _reference_conditioning(bundle, prompt, width, height, length, ref_image_siz
     conditioning = bundle.clip.encode_from_tokens_scheduled(tokens)
     conditioning = node_helpers.conditioning_set_values(conditioning, {"minimax_refs": ref_blocks})
     return conditioning, latent, resolved_prompt
+
+
+def _validate_reference_media_transport(prompt, items):
+    """Fail closed instead of silently sampling without the selected references."""
+    if not any(item.media_type in {"image", "video"} for item in items):
+        raise ValueError(
+            "Easy H3: Reference-to-video received no image/video references. "
+            "Check uploaded media and frontend plugin conflicts, then reload the browser. "
+            "For text-only generation use image/first-last-frame mode with no media. "
+            "参考生视频未收到图片或视频，请检查素材及插件冲突并刷新浏览器；纯文生请使用图生/首尾帧模式且不接素材。"
+        )
+    if "__MINIMAX_H3_UNRESOLVED_REF_" in str(prompt):
+        raise ValueError(
+            "Easy H3: Unresolved media references in the prompt; reselect the references before sampling. "
+            "提示词中的媒体引用未解析，请重新选择引用素材，已停止采样。"
+        )
 
 
 class FeiHouEasyH3:
@@ -3104,6 +3150,8 @@ class FeiHouEasyH3:
             optional[f"media_trim_{index}"] = ("STRING", {"default": "", "hidden": True})
         optional["prompt_optimizer_applied"] = ("BOOLEAN", {"default": False, "hidden": True})
         optional["second_sampling_output_connected"] = ("BOOLEAN", {"default": False, "hidden": True})
+        # Socket only: never insert a widget into the legacy widgets_values order.
+        optional["production_shot"] = (SHOT_TYPE, {"forceInput": True})
         return {
             "required": {
                 "h3_bundle": ("MINIMAX_H3_BUNDLE",),
@@ -3113,7 +3161,7 @@ class FeiHouEasyH3:
                 "aspect_ratio": (list(ASPECT_RATIOS), {"default": ASPECT_WIDESCREEN}),
                 "width": ("INT", {"default": 1344, "min": 32, "max": nodes.MAX_RESOLUTION, "step": 32}),
                 "height": ("INT", {"default": 768, "min": 32, "max": nodes.MAX_RESOLUTION, "step": 32}),
-                "audio_duration_auto": ("BOOLEAN", {"default": False}),
+                "audio_duration_auto": (["off", "audio", "video"], {"default": "off", "tooltip": "自动时长对齐：使用参考音频 1 或参考视频 1 截取后的实际时长。"}),
                 "seconds": ("FLOAT", {"default": 10.0, "min": MIN_SECONDS, "max": MAX_SECONDS, "step": 0.1}),
                 "advanced": ("BOOLEAN", {"default": False}),
                 "fps": ("FLOAT", {"default": 24.0, "min": 1.0, "max": 120.0, "step": 1.0}),
@@ -3125,6 +3173,8 @@ class FeiHouEasyH3:
                 "prompt_optimizer_scene_guide": (prompt_schemes, {"default": default_prompt_scheme}),
                 "force_offload": ("BOOLEAN", {"default": False}),
                 "low_vram_streamed_attention": ("BOOLEAN", {"default": False}),
+                # Append only: UI display order must not change saved slots.
+                "reference_text_only": ("BOOLEAN", {"default": False, "tooltip": "Reference conditioning only: keep multimodal text encoding but skip all reference VAE latents. Changes fidelity; reference audio waveform conditioning is lost. Does not change one-pass image/first-last-frame conditioning."}),
             },
             "optional": optional,
         }
@@ -3143,12 +3193,33 @@ class FeiHouEasyH3:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return float("nan")
+        # Ordinary values and connected inputs are tracked by ComfyUI. Include
+        # file content so replacing media under the same name invalidates cache.
+        if (_as_bool(kwargs.get("advanced", False))
+                and _as_bool(kwargs.get("prompt_optimizer_enabled", False))
+                and not _as_bool(kwargs.get("prompt_optimizer_applied", False))):
+            # The backend optimizer reads mutable external service configuration.
+            return float("nan")
+        digest = hashlib.sha256(b"feihou-h3-media-v2")
+        for index in range(1, MAX_MEDIA + 1):
+            value = kwargs.get(f"media_{index}")
+            if not isinstance(value, str) or not value.strip():
+                continue
+            digest.update(str(index).encode())
+            digest.update(value.encode("utf-8"))
+            try:
+                with open(_embedded_media_path(value), "rb") as media:
+                    for chunk in iter(lambda: media.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            except (OSError, ValueError):
+                # Force execution to report a missing/unreadable file normally.
+                return float("nan")
+        return digest.hexdigest()
 
     @staticmethod
-    def _collect_media(kwargs: dict) -> list[_MediaInput]:
+    def _collect_media(kwargs: dict, media_count=MAX_MEDIA) -> list[_MediaInput]:
         items = []
-        for index in range(1, MAX_MEDIA + 1):
+        for index in range(1, media_count + 1):
             value = kwargs.get(f"media_{index}")
             if value is None or (isinstance(value, str) and not value.strip()):
                 continue
@@ -3180,8 +3251,38 @@ class FeiHouEasyH3:
     def generate(cls, h3_bundle, mode, prompt, resolution, aspect_ratio, width, height, audio_duration_auto, seconds, advanced, fps, keyframe_role, ref_image_size, reference_mention_mode, prompt_optimizer_enabled=False, prompt_optimizer_provider="", prompt_optimizer_scene_guide="none", force_offload=False, low_vram_streamed_attention=False, prompt_optimizer_applied=False, **kwargs):
         if not isinstance(h3_bundle, MiniMaxH3Bundle):
             raise ValueError("Connect a FeiHou Easy H3 Loader bundle")
+        production_shot = kwargs.get("production_shot")
+        if production_shot is not None:
+            if not isinstance(production_shot, dict) or production_shot.get("schema") != 1:
+                raise ValueError("Connect a FeiHou Easy H3 Production Pack Loader")
+            # Execution data is authoritative, not the asynchronously updated UI.
+            # Clearing the full gallery prevents a previous shot/manual selection
+            # from leaking unreferenced images into this shot's conditioning.
+            for index in range(1, MAX_MEDIA + 1):
+                for prefix in ("media_", "media_type_", "media_trim_"):
+                    kwargs.pop(f"{prefix}{index}", None)
+            for index, item in enumerate(production_shot["media"], 1):
+                kwargs[f"media_{index}"] = f"{item['subfolder']}/{item['filename']}"
+                kwargs[f"media_type_{index}"] = item["media_type"]
+                kwargs[f"media_trim_{index}"] = item.get("audio_trim", "")
+            params = production_shot["params"]
+            # A shot without images/videos is text-to-video: H3 reference mode needs visual media.
+            prompt = production_shot["prompt"]
+            mode = MODE_REFERENCE if production_shot["media"] else MODE_IMAGE
+            seconds = params["seconds"]
+            # The main node's alignment menu stays authoritative after preview.
+            # Production-pack preview migrates its legacy Boolean to the menu.
+            aspect_ratio = params.get("aspect_ratio", aspect_ratio)
+            # Package resolution never overrides the user's generation settings.
+            fps = params.get("fps", fps)
+            reference_mention_mode = REFERENCE_MENTION_INDEX
+            prompt_optimizer_enabled = False
+            logging.info("Easy H3 production shot %s/%s: %s (%ss, %s)",
+                         production_shot["index"], production_shot["total"],
+                         production_shot["id"], seconds, production_shot["range"])
         # ``advanced`` may itself come from an external input. Keep the backend
         # as the source of truth for this UI-only visibility gate.
+        reference_text_only = _as_bool(advanced) and _as_bool(kwargs.get("reference_text_only", False))
         h3_bundle.force_offload_enabled = _as_bool(advanced) and _as_bool(force_offload)
         if h3_bundle.force_offload_enabled:
             h3_bundle.release_residual_second_sampling_model()
@@ -3189,11 +3290,19 @@ class FeiHouEasyH3:
         mode = str(mode)
         keyframe_role = KEYFRAME_LAST if str(keyframe_role) == KEYFRAME_LAST else KEYFRAME_FIRST
         width, height = _canvas_dimensions(resolution, aspect_ratio, width, height)
-        items = cls._collect_media(kwargs)
-        audio_duration_enabled = _as_bool(audio_duration_auto)
+        items = cls._collect_media(kwargs, len(production_shot["media"]) if production_shot is not None else MAX_MEDIA)
+        # Decode/crop each video once; duration and conditioning share these frames.
+        items = [_MediaInput(item.input_index, item.media_type,
+                             _trim_reference_video(item.value, item.audio_trim), "")
+                 if item.media_type == "video" else item for item in items]
+        if mode == MODE_REFERENCE:
+            _validate_reference_media_transport(prompt, items)
+        alignment = _duration_alignment(audio_duration_auto)
+        audio_duration_enabled = alignment != "off"
         requested_audio_seconds = 0.0
         if audio_duration_enabled:
-            requested_audio_seconds = _reference_audio_duration(items)
+            requested_audio_seconds = (_reference_video_duration(items) if alignment == "video"
+                                       else _reference_audio_duration(items))
             seconds = requested_audio_seconds
         seconds = min(MAX_SECONDS, max(MIN_SECONDS, float(seconds)))
         # MiniMax H3 accepts only 5 + 17N frames.  Automatic audio timing
@@ -3223,26 +3332,34 @@ class FeiHouEasyH3:
         if second_sampling_requested:
             second_model_name = h3_bundle.second_ref2va_model_name if second_kind == "ref2va" else h3_bundle.second_fl2va_model_name
             if _is_none_model(second_model_name):
-                if h3_bundle.remix_loader:
-                    raise ValueError("A second-sampling model output is connected, but the Remix Loader has no second-pass model selected. Select one or disconnect that output.")
-                model_label = "REF2VA" if second_kind == "ref2va" else "FL2VA"
-                raise ValueError(f"A custom second-pass model is enabled, but no {model_label} second-pass model is selected. Select a model or disable the custom second-pass model.")
+                if not h3_bundle.remix_loader:
+                    model_label = "REF2VA" if second_kind == "ref2va" else "FL2VA"
+                    raise ValueError(f"A custom second-pass model is enabled, but no {model_label} second-pass model is selected. Select a model or disable the custom second-pass model.")
+                logging.info("Easy H3 Remix: second-pass output connected without a selected model; falling back to the main model plus second-pass LoRA")
             second_sampling_active = True
 
+        keyframe_images = None
+        highres_rebuilder = None
+        ref_size_is_match = str(ref_image_size or "").strip().lower() in {"match", "匹配"}
         if mode == MODE_REFERENCE and items:
-            if len(items) > MAX_MEDIA:
+            if production_shot is None and len(items) > MAX_MEDIA:
                 raise ValueError("Reference mode accepts at most fifteen media resources")
             counts = {"image": 0, "video": 0, "audio": 0}
             for item in items:
                 if item.media_type not in counts:
                     raise ValueError("Unsupported media resource")
                 counts[item.media_type] += 1
-            if counts["image"] > MAX_IMAGES or counts["video"] > MAX_VIDEOS or counts["audio"] > MAX_AUDIOS:
+            if counts["image"] > MAX_IMAGES or counts["video"] > MAX_VIDEOS or (production_shot is None and counts["audio"] > MAX_AUDIOS):
                 raise ValueError("Reference mode media limits are 9 images, 3 videos and 3 audio clips")
             if counts["image"] == 0 and counts["video"] == 0:
                 raise ValueError("Reference mode needs an image or video in addition to audio")
             model = h3_bundle.model_for("ref2va")
-            conditioning, latent, prompt_preview = _reference_conditioning(h3_bundle, prompt, width, height, length, ref_image_size, items)
+            conditioning, latent, prompt_preview = _reference_conditioning(h3_bundle, prompt, width, height, length, ref_image_size, items, text_only=reference_text_only)
+            highres_rebuilder = H3HighresRebuilder(
+                build=lambda w, h, trigger_prefix="", _p=prompt, _l=length, _r=ref_image_size, _i=tuple(items), _t=reference_text_only:
+                    _reference_conditioning(h3_bundle, f"{trigger_prefix}\n{_p}" if trigger_prefix else _p, w, h, _l, _r, list(_i), text_only=_t)[:2],
+                canvas_dependent=ref_size_is_match,
+            )
         else:
             first_frame, last_frame = cls._keyframes(items, keyframe_role)
             model = h3_bundle.model_for("fl2va")
@@ -3253,11 +3370,26 @@ class FeiHouEasyH3:
             # has no extra UI switch and leaves one-pass I2V/FL2V untouched.
             if second_sampling_active and items:
                 conditioning, latent, prompt_preview = _reference_conditioning(
-                    h3_bundle, prompt, width, height, length, ref_image_size, items
+                    h3_bundle, prompt, width, height, length, ref_image_size, items, text_only=reference_text_only
+                )
+                highres_rebuilder = H3HighresRebuilder(
+                    build=lambda w, h, trigger_prefix="", _p=prompt, _l=length, _r=ref_image_size, _i=tuple(items), _t=reference_text_only:
+                        _reference_conditioning(h3_bundle, f"{trigger_prefix}\n{_p}" if trigger_prefix else _p, w, h, _l, _r, list(_i), text_only=_t)[:2],
+                    canvas_dependent=ref_size_is_match,
                 )
             else:
                 conditioning, latent = _empty_image_conditioning(h3_bundle, prompt, width, height, length, first_frame, last_frame)
                 prompt_preview = str(prompt or "")
+                keyframe_images = tuple(
+                    (index, crop, frame[:1, ..., :3].detach().cpu().clone())
+                    for index, crop, frame in ((0, "disabled", first_frame), (length - 1, "center", last_frame))
+                    if isinstance(frame, torch.Tensor) and frame.ndim == 4
+                ) or None
+                highres_rebuilder = H3HighresRebuilder(
+                    build=lambda w, h, trigger_prefix="", _p=prompt, _l=length, _f=first_frame, _z=last_frame:
+                        _empty_image_conditioning(h3_bundle, f"{trigger_prefix}\n{_p}" if trigger_prefix else _p, w, h, _l, _f, _z),
+                    canvas_dependent=first_frame is not None or last_frame is not None,
+                )
         model = _clone_h3_model_with_memory_features(
             model,
             force_offload=h3_bundle.force_offload_enabled,
@@ -3272,6 +3404,8 @@ class FeiHouEasyH3:
                 force_offload=h3_bundle.force_offload_enabled,
                 streamed_attention=_as_bool(advanced) and _as_bool(low_vram_streamed_attention),
             )
+            if h3_bundle.force_offload_enabled:
+                model.set_attachments("feihou_h3_release_after_first", True)
         context = MiniMaxH3Context(
             conditioning=conditioning,
             latent=latent,
@@ -3281,10 +3415,16 @@ class FeiHouEasyH3:
             fps=float(fps),
             prompt_preview=prompt_preview,
             audio_1=_first_reference_audio(items),
+            reference_image_1=next((item.value[:1, ..., :3].detach().cpu().clone()
+                                    for item in items if item.media_type == "image"
+                                    and isinstance(item.value, torch.Tensor) and item.value.ndim == 4
+                                    and len(item.value) > 0), None),
             duration_control=H3DurationControl(
                 enabled=audio_duration_enabled,
                 target_seconds=requested_audio_seconds,
             ),
+            keyframe_images=keyframe_images,
+            highres_rebuilder=highres_rebuilder,
         )
         if h3_bundle.force_offload_enabled:
             _release_auxiliary_models_for_sampling(h3_bundle, phase="first-pass sampling")
@@ -3398,7 +3538,27 @@ class FeiHouEasyH3PromptPreview:
 _register_prompt_optimizer_route_when_ready()
 
 
+class FeiHouEasyH3Resolution:
+    CATEGORY = "FeiHou Easy H3"
+    FUNCTION = "resolve"
+    RETURN_TYPES = ("INT", "INT")
+    RETURN_NAMES = ("width", "height")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {
+            "resolution": (list(RESOLUTIONS), {"default": RESOLUTION_720}),
+            "aspect_ratio": (list(ASPECT_RATIOS), {"default": ASPECT_WIDESCREEN}),
+            "width": ("INT", {"default": 1344, "min": 32, "max": nodes.MAX_RESOLUTION, "step": 32}),
+            "height": ("INT", {"default": 768, "min": 32, "max": nodes.MAX_RESOLUTION, "step": 32}),
+        }}
+
+    def resolve(self, resolution, aspect_ratio, width=1344, height=768):
+        return _canvas_dimensions(resolution, aspect_ratio, width, height)
+
+
 NODE_CLASS_MAPPINGS = {
+    "FeiHouEasyH3Resolution": FeiHouEasyH3Resolution,
     "FeiHouEasyH3LoraStack": FeiHouEasyH3LoraStack,
     "FeiHouEasyH3Loader": FeiHouEasyH3Loader,
     "FeiHouEasyH3ModelAdapter": FeiHouEasyH3ModelAdapter,

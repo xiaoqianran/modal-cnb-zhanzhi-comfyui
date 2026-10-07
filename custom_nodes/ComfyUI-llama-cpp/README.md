@@ -1,10 +1,6 @@
 # ComfyUI-llama-cpp  
 Run LLM/VLM models natively in ComfyUI based on llama.cpp  
-**[[📃中文版](./README_zh.md)]**
-
-## Changelog  
-#### 2025-11-03  
-- Initial release, added support for Qwen3-VL  
+**[[📃中文版](./README_zh.md)]** 
 
 ## Preview  
 ![](./img/preview.jpg)
@@ -16,12 +12,14 @@ Run LLM/VLM models natively in ComfyUI based on llama.cpp
 cd ComfyUI/custom_nodes
 git clone https://github.com/lihaoyun6/ComfyUI-llama-cpp.git
 python -m pip install -r ComfyUI-llama-cpp/requirements.txt
+#For CUDA 13, please run:
+#python -m pip install -r ComfyUI-llama-cpp/requirements_cu131.txt
 ```
 
 #### Download models:  
 - Place your model files in the `ComfyUI/models/LLM` folder.  
 
-> If you need a VLM model to process image input, don't forget to download the `mmproj` weights.
+	> If you need a VLM model to process image input, don't forget to download the `mmproj` weights.
 
 ## Credits  
 - [llama-cpp-python](https://github.com/JamePeng/llama-cpp-python) @JamePeng  

@@ -1899,6 +1899,15 @@ class IO_Load_Tensor:
                     "max": 9999,
                     "tooltip": "index = 0：读取最新修改的文件；index > 0：寻找指定编号的文件。",
                 }),
+                "on_missing": (["error", "passthrough", "initial_data"], {
+                    "default": "error",
+                    "tooltip": "fold_name 文件夹内无文件（首次 batch）时的行为：error=抛错；passthrough=返回 None；initial_data=返回 initial_data 槽位的种子。后续 batch 仍正常读盘上最新文件。",
+                }),
+            },
+            "optional": {
+                "initial_data": (any_type, {
+                    "tooltip": "仅在 on_missing=initial_data 时生效。首次 batch 盘上无文件时返回该种子；后续 batch 仍读盘上最新落盘文件。",
+                }),
             },
         }
 
@@ -1909,15 +1918,23 @@ class IO_Load_Tensor:
     DESCRIPTION = "Load data saved by IO_Save_Tensor, flow_stage, or ComfyUI SaveLatent."
 
     @classmethod
-    def IS_CHANGED(cls, fold_name, index=0):
+    def IS_CHANGED(cls, fold_name, index=0, on_missing="error", initial_data=None):
         try:
             resolved_path = _resolve_bridge_tensor_path(fold_name, index)
             return f"{resolved_path}:{os.stat(resolved_path).st_mtime_ns}"
         except Exception:
             return float("NaN")
 
-    def load(self, fold_name, index=0):
-        resolved_path = _resolve_bridge_tensor_path(fold_name, index)
+    def load(self, fold_name, index=0, on_missing="error", initial_data=None):
+        try:
+            resolved_path = _resolve_bridge_tensor_path(fold_name, index)
+        except FileNotFoundError:
+            if on_missing == "passthrough":
+                return (None,)
+            if on_missing == "initial_data":
+                return (initial_data,)
+            raise
+
         data, metadata = comfy.utils.load_torch_file(resolved_path, safe_load=True, return_metadata=True)
 
         if metadata is not None and "stage_payload" in metadata:
@@ -2270,16 +2287,13 @@ class flow_stage_begin:
         node_key = str(unique_id or "")
         effective_run_id = str(run_id or "").strip()
         requested_index = int(stage_index)
-        single_stage = int(total) == 1
-        if single_stage:
-            effective_run_id = "default"
-        elif requested_index == 0:
+        if requested_index == 0:
             effective_run_id = ""
-        elif (not effective_run_id or effective_run_id == "default") and node_key:
-            effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "")
+        elif not effective_run_id or effective_run_id == "default":
+            effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "") if node_key else ""
 
         files = []
-        if effective_run_id and not single_stage:
+        if effective_run_id:
             run_dir = _stage_run_path(effective_run_id)
             state_path = _stage_state_path(run_dir)
             if os.path.isfile(state_path):
@@ -2317,15 +2331,12 @@ class flow_stage_begin:
         node_key = str(unique_id or "")
         effective_run_id = str(run_id or "").strip()
         new_run = requested_index == 0
-        single_stage = total == 1
-        if not single_stage and new_run and node_key:
+        if new_run and node_key:
             _stage_remove_queued_initial_tasks(PromptServer.instance, node_key)
-        if single_stage:
-            effective_run_id = "default"
-        elif new_run:
+        if new_run:
             effective_run_id = ""
-        elif (not effective_run_id or effective_run_id == "default") and node_key:
-            effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "")
+        elif not effective_run_id or effective_run_id == "default":
+            effective_run_id = str(_STAGE_ACTIVE_RUN_IDS.get(node_key) or "") if node_key else ""
 
         state = None
         run_dir = None
@@ -2336,14 +2347,14 @@ class flow_stage_begin:
         stage_index = 0 if new_run else requested_index - 1
         total_changed = False
         if stage_index == 0:
-            if not single_stage and not effective_run_id:
+            if not effective_run_id:
                 effective_run_id = _stage_new_run_id()
                 run_dir = _stage_run_dir(effective_run_id)
                 state = None
             data_1 = initial_data_1
             data_2 = initial_data_2
             data_3 = initial_data_3
-            if not new_run and not single_stage:
+            if not new_run:
                 state = {
                     "version": _STAGE_BRIDGE_VERSION,
                     "run_id": effective_run_id,

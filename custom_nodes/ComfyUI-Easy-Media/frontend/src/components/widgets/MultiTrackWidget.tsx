@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Download, ExternalLink, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -22,8 +22,10 @@ import {
   getMultiTrackTrackHeight,
   getInheritedTaskSegmentContent,
   getSelectedMultiTrackSegment,
+  mergeSelectedTaskSegments,
   MULTITRACK_DEFAULT_VOLUME_DB,
   MULTITRACK_MEDIA_TRACK_LIMIT,
+  MULTITRACK_MIN_DURATION_SECONDS,
   MULTITRACK_TRACK_COLORS,
   moveSelectedSegments,
   moveSegmentBetweenCompatibleTracks,
@@ -76,7 +78,7 @@ import { uuid } from '@/lib/uuid'
 import { loadBrowserVideoMetadata } from '@/lib/video-utils'
 import { adjustMultiTrackEditorNodeHeight } from '@/lib/timeline-node-size'
 import type { MultiTrack, MultiTrackSegment, MultiTrackSegmentContent, MultiTrackSourceType, MultiTrackTaskImage, MultiTrackType, TrackData } from '@/types/multitrack'
-import { MultiTrackRuler } from './multitrack/MultiTrackRuler'
+import { MultiTrackRuler, MULTITRACK_LEFT_GUTTER, MULTITRACK_RIGHT_RESERVE } from './multitrack/MultiTrackRuler'
 import { MultiTrackToolbar } from './multitrack/MultiTrackToolbar'
 import { PreviewArea } from './multitrack/PreviewArea'
 import { SplitTaskSegmentDialog } from './multitrack/SplitTaskSegmentDialog'
@@ -141,6 +143,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
   const [currentTime, setCurrentTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [zoom, setZoom] = useState(1)
+  const [isScrubbing, setIsScrubbing] = useState(false)
   const [snapEnabled, setSnapEnabled] = useState(true)
   const [timelineCollapsed, setTimelineCollapsed] = useState(false)
   const [selectedTaskMarkerId, setSelectedTaskMarkerId] = useState<string | null>(null)
@@ -159,10 +162,60 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
   const startedAtRef = useRef(0)
   const startTimeRef = useRef(0)
   const currentTimeRef = useRef(0)
+  const previousViewportTimeRef = useRef(0)
   const timelineWidth = Math.max(1, useElementWidth(timelineContainerRef))
   const scaledTimelineWidth = timelineWidth * zoom
   const canvasScale = useCanvasScale(app)
   const resolutionInput = useMultiTrackResolutionInput(node)
+  // React's wheel listener can be passive; cancel native scrolling before moving the timeline.
+  // useLayoutEffect attaches the non-passive listener before paint so the very first wheel
+  // gesture on the timeline is intercepted rather than falling through to native scroll.
+  useLayoutEffect(() => {
+    const container = timelineContainerRef.current
+    if (!container) return
+
+    function handleWheel(event: WheelEvent) {
+      if (!container || container.scrollWidth <= container.clientWidth || event.ctrlKey || event.metaKey) return
+      if (event.target instanceof Element && event.target.closest('[data-capture-wheel="true"]')) return
+
+      event.preventDefault()
+
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientWidth : 1
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+      container.scrollLeft = Math.max(0, Math.min(
+        container.scrollWidth - container.clientWidth,
+        container.scrollLeft + delta * unit,
+      ))
+    }
+
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => container.removeEventListener('wheel', handleWheel)
+  }, [timelineContainerRef])
+  useLayoutEffect(() => {
+    const previousTime = previousViewportTimeRef.current
+    previousViewportTimeRef.current = currentTime
+    const container = timelineContainerRef.current
+    if ((!isPlaying && !isScrubbing) || !container || !container.clientWidth || data.total_length <= 0) return
+
+    const visibleWidth = container.clientWidth
+    const playableWidth = Math.max(1, scaledTimelineWidth - MULTITRACK_LEFT_GUTTER - MULTITRACK_RIGHT_RESERVE)
+    const playheadX = MULTITRACK_LEFT_GUTTER + currentTime / data.total_length * playableWidth
+    const pageWidth = visibleWidth * 0.9
+    const margin = visibleWidth * 0.02
+    const maxScroll = Math.max(0, scaledTimelineWidth - visibleWidth)
+    const scrollLeft = container.scrollLeft
+
+    if (isPlaying && !isScrubbing && currentTime < previousTime) {
+      container.scrollLeft = 0
+    } else if (playheadX > scrollLeft + visibleWidth - margin) {
+      const pages = Math.ceil((playheadX - scrollLeft - visibleWidth + margin) / pageWidth)
+      container.scrollLeft = Math.min(maxScroll, scrollLeft + pages * pageWidth)
+    } else if ((playheadX < scrollLeft || (isScrubbing && currentTime < previousTime)) &&
+      playheadX < scrollLeft + margin) {
+      const pages = Math.ceil((scrollLeft + margin - playheadX) / pageWidth)
+      container.scrollLeft = Math.max(0, scrollLeft - pages * pageWidth)
+    }
+  }, [currentTime, isPlaying, isScrubbing, scaledTimelineWidth, data.total_length])
   const selectedSegment = selectedSegmentIds.size <= 1
     ? getSelectedMultiTrackSegment(data, selectedSegmentId)
     : null
@@ -175,6 +228,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
     : []
   const hasOnlySelectedTaskSegments = selectedTaskSegments.length === selectedSegmentIds.size
     && selectedTaskSegments.length > 1
+  const canMergeSelectedTaskSegments = mergeSelectedTaskSegments(data.tracks, selectedSegmentIds) !== null
   const previewSelectedSegment = selectedSegment ?? (hasOnlySelectedTaskSegments
     ? getSelectedMultiTrackSegment(data, selectedSegmentId)
     : null)
@@ -414,14 +468,16 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
     sourceType: MultiTrackSourceType,
     requestedStartFrame?: number,
     requestedEndFrame?: number,
+    previewUrl?: string,
   ) {
     const content = createMultiTrackVideoContent(filePath, sourceType)
+    if (previewUrl) content.url = previewUrl
     const src = mediaContentToViewUrl(content)
-    let duration = 1
+    let duration: number | undefined
     if (src) {
       try {
         const metadata = await loadBrowserVideoMetadata(src)
-        duration = Math.max(metadata.duration, 1)
+        if (Number.isFinite(metadata.duration) && metadata.duration > 0) duration = metadata.duration
       } catch (error) {
         console.error('[MultiTrackWidget] failed to read video metadata:', error)
       }
@@ -435,7 +491,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
         ? snapTimeToFrame(track.segments.reduce((max, segment) => Math.max(max, segment.end_frame), 0), latestData.frame_rate)
         : Math.max(0, Math.round(requestedStartFrame))
       const endFrame = requestedEndFrame === undefined
-        ? startFrame + Math.max(1, snapSecondsToFrame(duration, latestData.frame_rate))
+        ? startFrame + Math.max(1, snapSecondsToFrame(duration ?? MULTITRACK_MIN_DURATION_SECONDS, latestData.frame_rate))
         : Math.max(startFrame + 1, Math.round(requestedEndFrame))
       addedVideoRange.added = true
       addedVideoRange.startFrame = startFrame
@@ -450,7 +506,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
             color: track.color,
             content: {
               ...content,
-              duration,
+              ...(duration === undefined ? {} : { duration }),
             },
           }
           if (requestedStartFrame === undefined) return [...track.segments, nextSegment]
@@ -483,7 +539,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
     const content = createMultiTrackAudioContent(filePath, sourceType)
     if (previewUrl) content.url = previewUrl
     const src = mediaContentToViewUrl(content)
-    let duration = 5
+    let duration: number | undefined
     if (src) {
       try {
         duration = (await loadBrowserAudioMetadata(src)).duration
@@ -498,7 +554,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
         ? track.segments.reduce((max, segment) => Math.max(max, segment.end_frame), 0)
         : Math.max(0, Math.round(requestedStartFrame))
       const endFrame = requestedEndFrame === undefined
-        ? startFrame + Math.max(1, snapSecondsToFrame(duration, latestData.frame_rate))
+        ? startFrame + Math.max(1, snapSecondsToFrame(duration ?? MULTITRACK_MIN_DURATION_SECONDS, latestData.frame_rate))
         : Math.max(startFrame + 1, Math.round(requestedEndFrame))
       return {
         ...track,
@@ -508,7 +564,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
             start_frame: startFrame,
             end_frame: endFrame,
             color: track.color,
-            content: { ...content, duration },
+            content: { ...content, ...(duration === undefined ? {} : { duration }) },
           }
           if (requestedStartFrame === undefined) return [...track.segments, nextSegment]
           return insertSegmentAtFrame(track.segments, nextSegment)
@@ -544,8 +600,6 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
         ...track,
         segments: track.segments.map((segment) => {
           if (segment.id !== segmentId) return segment
-          const fallbackDuration = Math.max(1, segment.end_frame - segment.start_frame)
-            / Math.max(1, latestData.frame_rate)
           return {
             ...segment,
             end_frame: duration === null
@@ -554,7 +608,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
             origin_start_frame: segment.start_frame,
             content: {
               ...content,
-              duration: duration ?? fallbackDuration,
+              ...(duration === null ? {} : { duration }),
               muted: segment.content.muted ?? content.muted,
               volume_db: segment.content.volume_db ?? content.volume_db,
               shared_reference: segment.content.shared_reference === true,
@@ -699,14 +753,16 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
     segmentId: string,
     filePath: string,
     sourceType: MultiTrackSourceType,
+    previewUrl?: string,
   ) {
     const content = createMultiTrackVideoContent(filePath, sourceType)
+    if (previewUrl) content.url = previewUrl
     const src = mediaContentToViewUrl(content)
-    let duration = 1
+    let duration: number | undefined
     if (src) {
       try {
         const metadata = await loadBrowserVideoMetadata(src)
-        duration = Math.max(metadata.duration, 1)
+        if (Number.isFinite(metadata.duration) && metadata.duration > 0) duration = metadata.duration
       } catch (error) {
         console.error('[MultiTrackWidget] failed to read replacement video metadata:', error)
       }
@@ -722,7 +778,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
                 ...segment,
                 content: {
                   ...content,
-                  duration,
+                  ...(duration === undefined ? {} : { duration }),
                   shared_reference: segment.content.shared_reference === true,
                 },
               }
@@ -901,6 +957,17 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
     setSingleSelectedSegment(clonedSegmentId)
   }
 
+  function handleMergeSelectedTaskSegments() {
+    const result = mergeSelectedTaskSegments(data.tracks, selectedSegmentIds)
+    if (!result) return
+    commitNormalizedTrackChange({
+      ...data,
+      tracks: result.tracks,
+      total_length: calculateTotalLength(result.tracks, data.frame_rate),
+    })
+    setSingleSelectedSegment(result.mergedSegmentId)
+  }
+
   function handleSplitTaskSegment(segmentId: string, targetFrames: number) {
     let splitSegmentIds: string[] = []
     const updatedTracks = data.tracks.map((track) => {
@@ -942,7 +1009,8 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
           const nextSegment = segmentIndex >= 0 && segmentIndex < sortedSegments.length - 1
             ? sortedSegments[segmentIndex + 1]
             : null
-          const sourceDuration = segment.content.duration && segment.content.duration > 0
+          const hasReadableSlotSource = segment.content.source_type !== 'slot' || Boolean(segment.content.url)
+          const sourceDuration = hasReadableSlotSource && segment.content.duration && segment.content.duration > 0
             ? Math.max(1, snapSecondsToFrame(segment.content.duration, sourceData.frame_rate))
             : Number.POSITIVE_INFINITY
 
@@ -1427,7 +1495,7 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
             className={`grid shrink-0 transition-[grid-template-rows] duration-300 ease-in-out ${timelineCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}
           >
             <div className="min-h-0 shrink-0 overflow-hidden">
-              <div ref={timelineContainerRef} className="no-scrollbar shrink-0 overflow-x-auto overflow-y-hidden">
+              <div ref={timelineContainerRef} data-testid="multitrack-timeline-scroll" className="no-scrollbar shrink-0 overflow-x-auto overflow-y-hidden">
                 <div className="min-h-full" style={{ width: scaledTimelineWidth, minWidth: '100%' }}>
                   <MultiTrackRuler
                     totalLength={data.total_length}
@@ -1438,6 +1506,8 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
                     taskMarkers={data.task_markers ?? []}
                     selectedTaskMarkerId={selectedTaskMarkerId}
                     onSeek={setPlayheadTime}
+                    onScrubStart={() => setIsScrubbing(true)}
+                    onScrubEnd={() => setIsScrubbing(false)}
                     onSelectTaskMarker={(markerId) => {
                       setSingleSelectedSegment(null)
                       setSelectedTaskMarkerId(markerId)
@@ -1474,6 +1544,8 @@ export function MultiTrackWidget({ value, onChange, app, node }: Readonly<ReactW
                     onSharedReferenceChange={handleSharedReferenceChange}
                     onDistributeTaskSegments={handleDistributeTaskSegments}
                     onCloneTaskSegment={handleCloneSegment}
+                    canMergeSelectedTaskSegments={canMergeSelectedTaskSegments}
+                    onMergeSelectedTaskSegments={handleMergeSelectedTaskSegments}
                     onSplitTaskSegment={setSplittingTaskSegmentId}
                     onResizeSegment={handleResizeSegment}
                     onResizeSegmentPreview={handleResizeSegmentPreview}

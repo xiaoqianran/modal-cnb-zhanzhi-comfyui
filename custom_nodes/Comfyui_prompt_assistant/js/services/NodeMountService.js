@@ -316,12 +316,21 @@ class NodeMountService {
      */
     _isTextareaWidget(widget) {
         if (!widget) return false;
-        // 1. 明确的 customtext 类型
-        if (widget.type === 'customtext') return true;
+        
+        let targetWidget = widget;
+        if (typeof widget.resolveDeepest === 'function') {
+            try {
+                const deepest = widget.resolveDeepest();
+                if (deepest && deepest.widget) targetWidget = deepest.widget;
+            } catch (e) {}
+        }
+        
+        // 1. 明确的 customtext 类型 或 string
+        if (targetWidget.type === 'customtext' || targetWidget.type === 'string') return true;
         // 2. STRING 类型且 multiline: true
-        if (widget.type === 'STRING' && widget.options?.multiline) return true;
+        if (targetWidget.type === 'STRING' && targetWidget.options?.multiline) return true;
         // 3. 已经绑定了 textarea 元素
-        if (widget.element && widget.element.tagName === 'TEXTAREA') return true;
+        if (targetWidget.element && targetWidget.element.tagName === 'TEXTAREA') return true;
 
         return false;
     }
@@ -334,6 +343,14 @@ class NodeMountService {
      */
     _findVueNodeContainer(node, widget) {
         try {
+            let targetWidget = widget;
+            if (typeof widget.resolveDeepest === 'function') {
+                try {
+                    const deepest = widget.resolveDeepest();
+                    if (deepest && deepest.widget) targetWidget = deepest.widget;
+                } catch (e) {}
+            }
+
             // 查找带有 data-node-id 的 Vue 节点容器
             const nodeContainer = document.querySelector(`[data-node-id="${node.id}"]`);
             if (!nodeContainer) {
@@ -342,7 +359,7 @@ class NodeMountService {
             }
 
             // 获取widget名称用于查找对应的textarea
-            const widgetName = widget.name || widget.id;
+            const widgetName = targetWidget.name || targetWidget.id || widget.name;
             let textarea = null;
 
             // 识别节点类型
@@ -350,9 +367,9 @@ class NodeMountService {
             const isMarkdown = this._isMarkdownNode(node);
 
             // --- 策略1: 优先使用 widget.inputEl (如果已绑定且为 PrimeVue 组件) ---
-            if (widget.inputEl && widget.inputEl.tagName === 'TEXTAREA') {
-                if (nodeContainer.contains(widget.inputEl)) {
-                    textarea = widget.inputEl;
+            if (targetWidget.inputEl && targetWidget.inputEl.tagName === 'TEXTAREA') {
+                if (nodeContainer.contains(targetWidget.inputEl)) {
+                    textarea = targetWidget.inputEl;
 
                 }
             }
@@ -365,10 +382,40 @@ class NodeMountService {
                 let currentIndex = 0;
 
                 for (const w of node.widgets) {
+                    // Skip hidden widgets because they are not rendered in the DOM
+                    if (w.hidden || w.type === 'hidden') {
+                        continue;
+                    }
                     if (this._isTextareaWidget(w)) {
-                        if (w === widget || w.name === widget.name) { // 兼容对象引用或名称匹配
+                        // 尝试解包动态代理 (如 Subgraph 的 PromotedWidgetView) 以比对底层真实引用
+                        let wInternal = w;
+                        if (typeof w.resolveDeepest === 'function') {
+                            try {
+                                const deepest = w.resolveDeepest();
+                                if (deepest && deepest.widget) wInternal = deepest.widget;
+                            } catch (e) {}
+                        }
+
+                        if (w === widget || wInternal === targetWidget) {
                             targetIndex = currentIndex;
                             break;
+                        }
+                        // 支持 SubgraphNode 代理控件（利用核心来源标识严格比对，可彻底解决重名文本框冲突问题）
+                        else if (
+                            w.sourceNodeId && widget.sourceNodeId &&
+                            w.sourceWidgetName && widget.sourceWidgetName &&
+                            w.sourceNodeId === widget.sourceNodeId &&
+                            w.sourceWidgetName === widget.sourceWidgetName
+                        ) {
+                            targetIndex = currentIndex;
+                            break;
+                        }
+                        // 支持其他动态代理控件
+                        // 且无法通过解析到底层引用的情况
+                        // 通过名称精确匹配。如果名字存在重复，且无法解析到底层组件，这里会记录第一个匹配到的。
+                        else if (targetIndex === -1 && w.name && widget.name && w.name === widget.name) {
+                            // 暂存匹配到的索引，但不要 break，以防后面出现严格引用比对成功的对象
+                            targetIndex = currentIndex;
                         }
                         currentIndex++;
                     }
@@ -376,6 +423,9 @@ class NodeMountService {
 
                 if (targetIndex !== -1) {
                     // 2. 获取 DOM 中所有的 PrimeVue textarea（优先）或普通 textarea
+                    // 【修正】必须保证查找到的是真正与 widget 对应的 textarea
+                    // 有可能子图中有些 widget 被隐藏并未渲染，会导致 DOM 中的 textarea 数量
+                    // 少于 node.widgets 里收集到的数量。
                     const primeTextareas = Array.from(nodeContainer.querySelectorAll('textarea.p-textarea'));
                     const textareas = primeTextareas.length > 0
                         ? primeTextareas
@@ -385,8 +435,6 @@ class NodeMountService {
                     if (targetIndex < textareas.length) {
                         textarea = textareas[targetIndex];
                         logger.debugSample(() => `[NodeMountService] Vue模式: 索引匹配成功 [${targetIndex}] | Widget: ${widgetName} | 子图: ${isSubgraph}`);
-                    } else {
-
                     }
                 }
             }
@@ -469,7 +517,15 @@ class NodeMountService {
      */
     _findDomWidgetContainer(node, widget) {
         try {
-            const inputEl = widget.inputEl || widget.element;
+            let targetWidget = widget;
+            if (typeof widget.resolveDeepest === 'function') {
+                try {
+                    const deepest = widget.resolveDeepest();
+                    if (deepest && deepest.widget) targetWidget = deepest.widget;
+                } catch (e) {}
+            }
+
+            const inputEl = targetWidget.inputEl || targetWidget.element;
             if (!inputEl) {
                 logger.debug('[NodeMountService] Litegraph模式: 输入元素不存在');
                 return null;
@@ -496,7 +552,7 @@ class NodeMountService {
                 container: domWidgetContainer,
                 textarea: inputEl,
                 mode: RENDER_MODE.LITEGRAPH,
-                widgetName: widget.name || widget.id
+                widgetName: targetWidget.name || targetWidget.id
             };
         } catch (e) {
             logger.error(`[NodeMountService] dom-widget容器查找失败: ${e.message}`);

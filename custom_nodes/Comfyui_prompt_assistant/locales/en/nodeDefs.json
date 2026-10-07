@@ -13,11 +13,11 @@
             },
             "custom_rule_content": {
                 "name": "Custom Rule Content",
-                "tooltip": "Enter your custom rule here; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Enter your custom rule here"
             },
             "user_prompt": {
                 "name": "User Prompt",
-                "tooltip": "Your prompt to be enhanced; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Your prompt to be enhanced"
             },
             "llm_service": {
                 "name": "LLM Service",
@@ -29,7 +29,11 @@
             },
             "source_text": {
                 "name": "Source Text",
-                "tooltip": "Optional input text; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Optional input text"
+            },
+            "seed": {
+                "name": "Seed",
+                "tooltip": "Controls randomness of generation. Select non-fixed mode to force re-execution"
             }
         },
         "outputs": {
@@ -57,11 +61,11 @@
             },
             "custom_rule_content": {
                 "name": "Custom Rule Content",
-                "tooltip": "Custom rule content; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Custom rule content"
             },
             "user_prompt": {
                 "name": "User Prompt",
-                "tooltip": "Enter additional prompts here, sent with the rule; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Enter additional prompts here, sent with the rule"
             },
             "vlm_service": {
                 "name": "VLM Service",
@@ -70,6 +74,10 @@
             "ollama_auto_unload": {
                 "name": "Auto Unload",
                 "tooltip": "Auto unload Ollama model"
+            },
+            "seed": {
+                "name": "Seed",
+                "tooltip": "Controls randomness of generation. Select non-fixed mode to force re-execution"
             }
         },
         "outputs": {
@@ -89,7 +97,7 @@
         "inputs": {
             "source_text": {
                 "name": "Source Text",
-                "tooltip": "Text to translate; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Text to translate"
             },
             "target_language": {
                 "name": "Target Language",
@@ -106,6 +114,10 @@
             "ollama_auto_unload": {
                 "name": "Auto Unload",
                 "tooltip": "Auto unload Ollama model"
+            },
+            "seed": {
+                "name": "Seed",
+                "tooltip": "Controls randomness of generation. Select non-fixed mode to force re-execution"
             }
         },
         "outputs": {
@@ -129,11 +141,11 @@
             },
             "custom_rule_content": {
                 "name": "Custom Rule Content",
-                "tooltip": "Custom rule content; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Custom rule content"
             },
             "user_prompt": {
                 "name": "User Prompt",
-                "tooltip": "Enter additional prompts here, sent with the rule; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Enter additional prompts here, sent with the rule"
             },
             "vlm_service": {
                 "name": "VLM Service",
@@ -163,9 +175,13 @@
                 "name": "Video",
                 "tooltip": "Input Video"
             },
-            "image_sequence": {
+            "video_frames": {
                 "name": "Images",
-                "tooltip": "Input Image Sequence"
+                "tooltip": "Input image sequence (IMAGE batch)"
+            },
+            "seed": {
+                "name": "Seed",
+                "tooltip": "Controls randomness of generation. Select non-fixed mode to force re-execution"
             }
         },
         "outputs": {
@@ -193,7 +209,7 @@
             },
             "user_prompt": {
                 "name": "User Prompt",
-                "tooltip": "Enter additional prompts here, sent with the preset; 💡Input trigger word [R] to force re-execution"
+                "tooltip": "Enter additional prompts here, sent with the preset"
             },
             "vlm_service": {
                 "name": "VLM Service",
@@ -202,6 +218,10 @@
             "ollama_auto_unload": {
                 "name": "Auto Unload",
                 "tooltip": "Auto unload Ollama model"
+            },
+            "seed": {
+                "name": "Seed",
+                "tooltip": "Controls randomness of generation. Select non-fixed mode to force re-execution"
             }
         },
         "outputs": {

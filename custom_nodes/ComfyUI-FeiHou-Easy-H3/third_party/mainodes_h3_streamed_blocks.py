@@ -915,15 +915,36 @@ class H3StreamedBlocks:
             log.warning("H3StreamedBlocks: kv_store kvi8s needs the sageattention package; falling back to bf16 (exact)")
             cfg["kv_sage"] = False
         m = model.clone()
+        # Preserve user-owned implementations rather than silently replacing them.
+        object_paths = getattr(model, "object_patches", {})
+        if any("forward" in str(path) for path in object_paths):
+            log.warning("H3StreamedBlocks: existing forward object patch retained; streaming not installed (unverified composition)")
+            return (m,)
+        existing = model.model_options.get("transformer_options", {}).get("patches_replace", {}).get("dit", {})
+        preserved = 0
         for i, block in enumerate(blocks):
+            if ("double_block", i) in existing:
+                preserved += 1
+                continue
             m.set_model_patch_replace(_make_replacement(block, cfg, i), "dit", "double_block", i)
+        if preserved:
+            log.warning("H3StreamedBlocks: retained %d existing blocks; installed streaming on %d blocks; combined effect unverified", preserved, len(blocks)-preserved)
         fl = getattr(dm, "final_layer", None)
         if final_layer_chunk and fl is not None and hasattr(fl, "video_out") and hasattr(fl, "audio_out"):
             _exact = str(final_layer_gemm).startswith("exact")
 
-            def _fl_forward(x, t_emb, video_seg, audio_seg, _fl=fl, _c=int(final_layer_chunk), _e=_exact):
+            # Capture the bound original before patching. New ComfyUI versions
+            # pass sigma/schedule/shifts positionally; never bind them to our
+            # closure defaults (which previously replaced _fl with a Tensor).
+            _original_forward = fl.forward
+            def _fl_forward(x, t_emb, video_seg, audio_seg, *extra, _fl=fl, _c=int(final_layer_chunk), _e=_exact, _original=_original_forward, **kwargs):
+                # PDD head banks require the native sigma-dependent blending.
+                # Unknown future inputs also stay on the native implementation.
+                pdd = any(head.weight.shape[0] != head.out_features for head in (_fl.video_out, _fl.audio_out))
+                if pdd or len(extra) > 3 or any(k not in {"sigma", "sample_sigmas", "shifts"} for k in kwargs):
+                    return _original(x, t_emb, video_seg, audio_seg, *extra, **kwargs)
                 if x.shape[0] < cfg["min_tokens"]:
-                    return type(_fl).forward(_fl, x, t_emb, video_seg, audio_seg)
+                    return _original(x, t_emb, video_seg, audio_seg, *extra, **kwargs)
                 return streamed_final_layer_forward(_fl, x, t_emb, video_seg, audio_seg, chunk=_c,
                                                     probe=getattr(dm, "_h3_memprobe", None), exact_gemm=_e)
             m.add_object_patch("diffusion_model.final_layer.forward", _fl_forward)

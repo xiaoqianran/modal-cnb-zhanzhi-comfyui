@@ -1968,7 +1968,7 @@ class Image_Resize_sum:
                 "upscale_method":  (["nearest-exact", "bilinear", "area", "bicubic", "lanczos"], {"default": "bilinear" }),
                 "keep_proportion": (["resize", "stretch", "pad", "pad_edge", "crop"], ),
                 "pad_color": (["black", "white", "red", "green", "blue", "gray"], { "default": "black" }),
-                "crop_position": (["center", "top", "bottom", "left", "right"], { "default": "center" }),
+                "crop_position": (["center", "top", "bottom", "left", "right", "left_top", "left_bottom", "right_top", "right_bottom"], { "default": "center" }),
                 "divisible_by": ("INT", { "default": 2, "min": 0, "max": 512, "step": 1, }),
                 "pad_mask_remove": ("BOOLEAN", {"default": True,}),
             },
@@ -2089,6 +2089,26 @@ class Image_Resize_sum:
                     pad_right = 0
                     pad_top = (height - new_height) // 2
                     pad_bottom = height - new_height - pad_top
+                elif crop_position == "left_top":
+                    pad_left = 0
+                    pad_right = width - new_width
+                    pad_top = 0
+                    pad_bottom = height - new_height
+                elif crop_position == "left_bottom":
+                    pad_left = 0
+                    pad_right = width - new_width
+                    pad_top = height - new_height
+                    pad_bottom = 0
+                elif crop_position == "right_top":
+                    pad_left = width - new_width
+                    pad_right = 0
+                    pad_top = 0
+                    pad_bottom = height - new_height
+                elif crop_position == "right_bottom":
+                    pad_left = width - new_width
+                    pad_right = 0
+                    pad_top = height - new_height
+                    pad_bottom = 0
 
         elif keep_proportion == "crop":
             old_aspect = W / H
@@ -2118,6 +2138,18 @@ class Image_Resize_sum:
             elif crop_position == "right":
                 crop_x = W - crop_w
                 crop_y = (H - crop_h) // 2
+            elif crop_position == "left_top":
+                crop_x = 0
+                crop_y = 0
+            elif crop_position == "left_bottom":
+                crop_x = 0
+                crop_y = H - crop_h
+            elif crop_position == "right_top":
+                crop_x = W - crop_w
+                crop_y = 0
+            elif crop_position == "right_bottom":
+                crop_x = W - crop_w
+                crop_y = H - crop_h
 
         final_width = new_width
         final_height = new_height
@@ -3224,6 +3256,26 @@ class Image_solo_stitch:
     RETURN_NAMES = ("image","recover_image","original_image")
     FUNCTION = "inpaint_stitch"
 
+    @staticmethod
+    def composite_rgba(background, source, alpha):
+        background_float = background.astype(np.float32) / 255.0
+        source_rgb = source[:, :, :3].astype(np.float32) / 255.0
+        source_alpha = np.clip(alpha.astype(np.float32), 0.0, 1.0)
+        background_alpha = background_float[:, :, 3:4]
+        output_alpha = source_alpha + background_alpha * (1.0 - source_alpha)
+        premultiplied_rgb = (
+            source_rgb * source_alpha
+            + background_float[:, :, :3] * background_alpha * (1.0 - source_alpha)
+        )
+        output_rgb = np.divide(
+            premultiplied_rgb,
+            output_alpha,
+            out=np.zeros_like(premultiplied_rgb),
+            where=output_alpha > 0,
+        )
+        output = np.concatenate((output_rgb, output_alpha), axis=2)
+        return np.clip(output * 255.0, 0, 255).astype(np.uint8)
+
     def apply_smooth_blur(self, image, mask, smoothness, bg_color="Alpha"):
         batch_size = image.shape[0]
         result_images = []
@@ -3301,8 +3353,6 @@ class Image_solo_stitch:
             original_image = stitch["original_image"]
         else:
             original_image = torch.zeros((1, original_image_h, original_image_w, 3), dtype=torch.float32)
-        if opacity < 1.0:
-            inpainted_image = inpainted_image * opacity
         if inpainted_image.shape[1:3] != mask.shape[1:3]:
             mask = torch.nn.functional.interpolate(mask.unsqueeze(1), size=(inpainted_image.shape[1], inpainted_image.shape[2]), mode='nearest').squeeze(1)
         
@@ -3316,8 +3366,8 @@ class Image_solo_stitch:
         background_resized = cv2.resize(background_np, (original_w, original_h))
         
         result = np.zeros((original_h, original_w, 4), dtype=np.uint8)
-        result[:, :, :3] = background_resized.copy()
-        result[:, :, 3] = 255
+        result[:, :, :3] = background_resized[:, :, :3]
+        result[:, :, 3] = background_resized[:, :, 3] if background_resized.shape[2] >= 4 else 255
 
         if stitch_mode == "crop_mask":
             inpainted_image, mask = self.apply_smooth_blur(inpainted_image, mask, smoothness, bg_color="Alpha")
@@ -3352,13 +3402,23 @@ class Image_solo_stitch:
                 recover_img = fimage
                 return (fimage, recover_img, original_image)
             
-            alpha = mask_content / 255.0
+            alpha = mask_content.astype(np.float32) / 255.0
             expected_h = paste_y_end - paste_y_start
             expected_w = paste_x_end - paste_x_start
             
             if alpha.shape[0] != expected_h or alpha.shape[1] != expected_w:
                 alpha = cv2.resize(alpha, (expected_w, expected_h))
             alpha = np.expand_dims(alpha, axis=-1)
+            if inpainted_resized.ndim == 3 and inpainted_resized.shape[2] >= 4:
+                source_alpha = inpainted_resized[
+                    scaled_mask_crop_y:scaled_mask_crop_y2,
+                    scaled_mask_crop_x:scaled_mask_crop_x2,
+                    3,
+                ].astype(np.float32) / 255.0
+                if source_alpha.shape != alpha.shape[:2]:
+                    source_alpha = cv2.resize(source_alpha, (alpha.shape[1], alpha.shape[0]))
+                alpha *= source_alpha[:, :, None]
+            alpha *= opacity
             
             background_content = result[paste_y_start:paste_y_end, paste_x_start:paste_x_end, :3]
             if (background_content.shape[0] != alpha.shape[0] or 
@@ -3385,9 +3445,10 @@ class Image_solo_stitch:
                 background_content = background_content[:, :, :3]
             
             try:
-                blended = (inpaint_content * alpha + background_content * (1 - alpha)).astype(np.uint8)
-                result[paste_y_start:paste_y_end, paste_x_start:paste_x_end, :3] = blended
-                result[paste_y_start:paste_y_end, paste_x_start:paste_x_end, 3] = (alpha * 255).astype(np.uint8).squeeze()
+                background_rgba = result[paste_y_start:paste_y_end, paste_x_start:paste_x_end]
+                result[paste_y_start:paste_y_end, paste_x_start:paste_x_end] = self.composite_rgba(
+                    background_rgba, inpaint_content, alpha
+                )
             except Exception as e:
                 print(f"Warning: Error during blending operation: {e}, returning background image")
                 final_image_tensor = torch.from_numpy(background_resized / 255.0).float().unsqueeze(0)
@@ -3426,6 +3487,9 @@ class Image_solo_stitch:
                 max(0, paste_x_start - crop_x) : max(0, paste_x_end - crop_x)
             ]
             alpha = np.expand_dims(alpha_mask, axis=-1)
+            if inpaint_content.ndim == 3 and inpaint_content.shape[2] >= 4:
+                alpha *= inpaint_content[:, :, 3:4].astype(np.float32) / 255.0
+            alpha *= opacity
             
             background_content = result[paste_y_start:paste_y_end, paste_x_start:paste_x_end, :3]
             if (background_content.shape[0] != alpha.shape[0] or 
@@ -3449,9 +3513,10 @@ class Image_solo_stitch:
                 background_content = background_content[:, :, :3]
             
             try:
-                blended = (inpaint_content * alpha + background_content * (1 - alpha)).astype(np.uint8)
-                result[paste_y_start:paste_y_end, paste_x_start:paste_x_end, :3] = blended
-                result[paste_y_start:paste_y_end, paste_x_start:paste_x_end, 3] = (alpha * 255).astype(np.uint8).squeeze()
+                background_rgba = result[paste_y_start:paste_y_end, paste_x_start:paste_x_end]
+                result[paste_y_start:paste_y_end, paste_x_start:paste_x_end] = self.composite_rgba(
+                    background_rgba, inpaint_content, alpha
+                )
             except Exception as e:
                 print(f"Warning: Error during blending operation in crop_image mode: {e}, returning background image")
 
@@ -3460,8 +3525,8 @@ class Image_solo_stitch:
                 recover_img = fimage
                 return (fimage, recover_img, original_image)
 
-        final_rgb = result[:, :, :3]
-        final_image_tensor = torch.from_numpy(final_rgb / 255.0).float().unsqueeze(0)
+        final_image = result if bj_image.shape[-1] >= 4 else result[:, :, :3]
+        final_image_tensor = torch.from_numpy(final_image / 255.0).float().unsqueeze(0)
         fimage = Blend().blend_images(bj_image, final_image_tensor, blend_factor, blend_mode)[0]       
         recover_img, Fina_mask, stitch_info, scale_factor = Image_Resize_sum().resize(
             image=fimage,

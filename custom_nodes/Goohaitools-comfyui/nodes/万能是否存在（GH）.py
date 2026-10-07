@@ -17,6 +17,7 @@ class AnyType(str):
 
 
 ANY = AnyType("*")
+MASK_VISIBLE_THRESHOLD = 0.02
 
 
 class GoohaiAnyExists:
@@ -45,12 +46,19 @@ class GoohaiAnyExists:
         except Exception:
             return False
 
+    @staticmethod
+    def _clean_mask_tensor(value):
+        """Remove near-black mask noise that is not visually distinguishable."""
+        if not torch.is_tensor(value) or value.numel() == 0:
+            return value
+        return torch.where(value > MASK_VISIBLE_THRESHOLD, value, torch.zeros_like(value))
+
     @classmethod
     def _is_empty(cls, value, input_type):
         if value is None or (ExecutionBlocker and isinstance(value, ExecutionBlocker)):
             return True
         if input_type == "MASK":
-            # 纯黑 MASK 视为空，但仍透传原始遮罩。
+            # 纯黑或仅含不可见低值残差的 MASK 视为空。
             return cls._is_black_tensor(value)
         if input_type == "LATENT" and isinstance(value, dict) and "samples" in value:
             return cls._is_black_tensor(value.get("samples"))
@@ -121,10 +129,15 @@ class GoohaiAnyExists:
                         }.get(key, key)
                     break
         input_type = self._runtime_type(Any, gh_input_type)
+        if input_type == "MASK":
+            # Qwen Image 2.1 RGBA outputs can reload as masks containing tiny
+            # alpha residuals (for example 1/255 to 3/255). Remove values that
+            # still look black in a mask preview before testing or forwarding.
+            Any = self._clean_mask_tensor(Any)
         empty = self._is_empty(Any, input_type)
         if not empty:
             return (Any, True)
-        # MASK 的纯黑输入保留原对象；None 则生成 64x64 黑遮罩。
+        # 空 MASK 保留清理后的原尺寸对象；None 则生成 64x64 黑遮罩。
         if input_type == "MASK" and Any is not None:
             return (Any, False)
         if Any is None and input_type == "ANY":
@@ -132,5 +145,58 @@ class GoohaiAnyExists:
         return (self._placeholder(input_type), False)
 
 
-NODE_CLASS_MAPPINGS = {"GoohaiAnyExists": GoohaiAnyExists}
-NODE_DISPLAY_NAME_MAPPINGS = {"GoohaiAnyExists": "万能是否存在(GH)"}
+class GoohaiRouteBlocker:
+    """按开关透传、输出空值或静默阻断一条 Any 类型线路。"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "是否阻断": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "label_on": "阻断",
+                        "label_off": "通过",
+                    },
+                ),
+                "阻断模式": (
+                    ["仅输出空值", "中断后续分支"],
+                    {"default": "仅输出空值"},
+                ),
+            },
+            "optional": {
+                "any": (ANY,),
+            }
+        }
+
+    RETURN_TYPES = (ANY,)
+    RETURN_NAMES = ("any",)
+    FUNCTION = "route"
+    CATEGORY = "孤海工具箱"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, input_types):
+        return True
+
+    @staticmethod
+    def route(any=None, 是否阻断=False, 阻断模式="仅输出空值"):
+        if not 是否阻断:
+            return (any,)
+        # 仅输出普通 None：下游仍会继续执行，由下游自行处理空值。
+        if 阻断模式 == "仅输出空值":
+            return (None,)
+        # ComfyUI 原生的静默执行阻断，效果等同于 Ctrl+M 禁用后续线路。
+        if isinstance(ExecutionBlocker, type):
+            return (ExecutionBlocker(None),)
+        return (None,)
+
+
+NODE_CLASS_MAPPINGS = {
+    "GoohaiAnyExists": GoohaiAnyExists,
+    "GoohaiRouteBlocker": GoohaiRouteBlocker,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "GoohaiAnyExists": "万能是否存在(GH)",
+    "GoohaiRouteBlocker": "路由阻断",
+}

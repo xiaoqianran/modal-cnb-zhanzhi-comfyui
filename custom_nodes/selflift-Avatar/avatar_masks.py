@@ -106,3 +106,14 @@ def normalize_masks(mask, streams):
 def restore_kept(outputs, anchors, masks):
     return [torch.where(mask.to(out.device) == 0, anchor.to(out), out)
             for out, anchor, mask in zip(outputs, anchors, masks)]
+
+
+def validate_tiling_masks(masks):
+    if masks is None:
+        return
+    if len(masks) != 2 or not bool((masks[0] == 1).all()) or not bool((masks[1] == 0).all()):
+        raise ValueError(
+            "selflift-Avatar: highres_tiling with noise_mask currently requires "
+            "video mask = 1 everywhere and audio mask = 0 everywhere. "
+            "Disable highres_tiling for video preservation, partial audio or soft masks."
+        )
