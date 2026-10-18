@@ -341,21 +341,19 @@ class Data_select:
                         "clip4",
                         "unet_name", 
                         "ckpt_name",
+                        "sampler",
+                        "scheduler",
                         "pos", 
                         "neg",
+                        "audio_vae", 
+                        "cfg",
+                        "steps",
                         "width",
                         "height",
                         "batch",
                         "data",
                         "data1",
                         "data2",
-                        "data3",
-                        "data4",
-                        "data5",
-                        "data6",
-                        "data7",
-                        "data8",
-                        "data9",
                         ], {}),
             },
         }
@@ -893,7 +891,10 @@ class sum_load_MiniMaxH3:
                 "vae": (available_vaes,),
                 "audio_vae": (available_vaes,),
                 "steps": ("INT", {"default": 20, "min": 1, "max": 999999}),
-                "cfg": ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step": 0.5, "round": 0.01}),
+                "cfg": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 100.0, "step": 0.5, "round": 0.01,
+                    "tooltip": "Compatibility-only; MiniMax H3 always uses CFG 1.0.",
+                }),
                 "sampler": (comfy.samplers.KSampler.SAMPLERS, ),
                 "scheduler": (comfy.samplers.KSampler.SCHEDULERS, ),
             },
@@ -969,7 +970,8 @@ class sum_load_MiniMaxH3:
             "audio_vae": audio_vae_obj,
             "clip": clip,
             "steps": steps,
-            "cfg": cfg,
+            # Keep the legacy input socket without enabling a second H3 guidance branch.
+            "cfg": 1.0,
             "sampler": sampler,
             "scheduler": scheduler,
             "clip_type": clip_type,
@@ -1878,7 +1880,6 @@ class basic_Ksampler_custom:
         if negative is None:    
             negative = context.get("negative",None)
         clip = context.get("clip",None)
-        negative = _apt_default_negative(negative, clip)
         positive = _apt_default_positive(positive, clip)
 
         context_latent = context.get("latent")
@@ -1896,6 +1897,7 @@ class basic_Ksampler_custom:
             noise = RandomNoise().get_noise(seed)[0] 
 
         if guider is None:
+            negative = _apt_default_negative(negative, clip)
             guider = CFGGuider().get_guider(model, positive, negative, cfg)[0]
 
         if sigmas is None:

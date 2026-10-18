@@ -1,5 +1,74 @@
 # Third-party notices
 
+## H14 token-row LoRA scope
+
+Thanks to baslack / Scriptorium for the original token-row LoRA idea and prototype,
+and to ComfyUI and Wuli-art / sandpies. See [source boundaries](THIRD_PARTY_NOTICES/H14-SOURCES.md)
+and the retained [Scriptorium MIT license](THIRD_PARTY_NOTICES/H14-Scriptorium-LICENSE.txt).
+No checkpoint, private reference or review media is bundled. Shared attention can
+still affect the other modality; acknowledgement is not an isolation or speed guarantee.
+
+## H13 AudioFirst and ordinary native Hybrid
+
+Thanks to sepiablue-ai / AudioFirst, Wuli-art, sandpies, FlashGen / Kijai,
+smhfacct and MiniMax. See [H13 sources and license boundaries](THIRD_PARTY_NOTICES/H13-SOURCES.md).
+Code and separately downloaded weights retain their respective terms; neither
+models nor private references are bundled, and acknowledgement is not universal
+quality or speed certification.
+
+## Optional FreeToken-portable prompt proposal
+
+The independent H09 prompt provider calls FreeVideo's `prompt_vlm` at
+`ebc94ecdeec3cbfe74040fe69a5116a62bf01dcd` (Apache-2.0), whose portable
+single-request ops credit [FlashML-org/FreeToken](https://github.com/FlashML-org/FreeToken)
+`555efd89447232a555e05d187256b76a51c1aaa0` (Apache-2.0).
+Thanks to FreeVideo, FreeToken and Qwen authors. This is not the complete
+FreeToken platform, and upstream source is separately prepared with its
+original notices, not vendored here. The separate
+[Qwen3-VL-4B-Instruct model](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct)
+retains Apache-2.0 terms; weights are not bundled. Proposals require explicit
+adoption and are not fact or perceptual-quality certification. See
+[usage and limits](docs/H09_PROMPT_PROVIDER.md).
+
+## FreeVideo prepared INT8 independent integration
+
+The additive H09 INT8 adapter targets [FlashML-org/FreeVideo](https://github.com/FlashML-org/FreeVideo)
+v0.3.20, commit `ebc94ecdeec3cbfe74040fe69a5116a62bf01dcd`, and its
+separate prepared rowwise ConvRot INT8 catalog. Thanks to FreeVideo, OpenVDN
+and MiniMax authors. Upstream engine code and dependencies are separately
+prepared under their original notices; this adapter does not bundle the model,
+install the launcher, or replace the existing FP8 implementation.
+The [OpenVDN model](https://huggingface.co/OpenVDN/vdn-minimax-h3-edge)
+at `da37681f5a1f7015fdb63482142b865111b687d3` retains its own model terms;
+public download is not a redistribution grant. See [INT8 boundaries](docs/H09_FREEVIDEO_INT8_EXP.md).
+
+## Veda R2VA predictor integration
+
+The additive R2VA nodes use the predictor format, reference-span layout and
+independent reference/generated tile-budget semantics documented in
+[`veda-sparse/Veda-on-ComfyUI`](https://github.com/veda-sparse/Veda-on-ComfyUI)
+at `8d7ac153ac215d636eaf1b5910b0536c3de9e6ed` (MIT).
+Thanks to the Veda-Sparse / Miowtion authors. Existing vendored modules and
+their [MIT notice](h3_t8/veda_vendor/LICENSE) are retained unchanged.
+The new adapter uses T8 PyTorch Flex, not the upstream Sage-derived INT8 kernel;
+that INT8 kernel is not copied or redistributed by this integration.
+The [R2VA predictor](https://huggingface.co/Veda-Sparse/Minimax-H3-R2VA-Veda-Preview)
+is a separately downloaded MiniMax H3 Community License asset, not an MIT
+weight bundled with the plugin. See [R2VA usage and validation limits](docs/VEDA_R2VA_EXP.md).
+
+## Akatz Labs Person Remover V1 (experimental integration)
+
+Thanks to Akatz Labs for [MiniMax H3 Person Remover V1](https://huggingface.co/akatz-ai/MiniMax-H3-Person-Remover-LoRA),
+revision `bbc23bf8d6ef833aef43afc0ae740b7cf937d763`, its model card and native workflow.
+Powered by MiniMax H3; this modification is not an official MiniMax release.
+The separately downloaded weights remain subject to the MiniMax H3 Community License;
+they are not included in the plugin. Source, weights and dataset rights remain separate.
+The author's [H3 Relay](https://github.com/akatz-ai/h3-relay) is a separate GPL-3.0 project.
+T8 implements independent separated window/PCM contracts on native ComfyUI interfaces;
+it does not install or replace Relay or copy its global layout patch or cache records.
+See [the experimental usage and verification boundary](docs/H09_PERSON_REMOVAL_EXP.md).
+
+
 ## H16-3 chunked PASS2 reference
 
 The optional `DeciiaChunkedPass2Sampler` was designed after reviewing the public
@@ -467,3 +536,7 @@ SOFTWARE.
 The upstream files themselves also identify portions derived from LightX2V
 (Apache-2.0). Those source annotations and links are retained in the vendored
 files.
+
+## H11 additive adapters and resource recipes
+
+See [H11 source acknowledgements](THIRD_PARTY_NOTICES/H11-SOURCES.md) for Spark-H3 (zechengtang), Wuli-art and sandpies, FlashML FreeVideo/FreeToken, T8 Semantic Bridge Trainer and Sam Wasserman. Separately downloaded source, wheels and model weights retain their respective licenses; no weights are bundled, and acknowledgement is not general quality or speed qualification.

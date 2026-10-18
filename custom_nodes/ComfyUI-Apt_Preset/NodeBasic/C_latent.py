@@ -686,7 +686,7 @@ def _load_minimax_h3_upscaler(model_name):
     return model.to(dtype=torch.bfloat16).eval().requires_grad_(False)
 
 
-def _upscale_minimax_h3_video_latent(latent, model_name, scale):
+def _upscale_minimax_h3_video_latent(latent, model_name, scale, model=None):
     if not torch.cuda.is_available():
         raise RuntimeError("latent_minimaxH3_scale requires CUDA")
 
@@ -705,7 +705,8 @@ def _upscale_minimax_h3_video_latent(latent, model_name, scale):
         return latent
 
     device = comfy.model_management.get_torch_device()
-    model = _load_minimax_h3_upscaler(model_name)
+    if model is None:
+        model = _load_minimax_h3_upscaler(model_name)
     feature_elements = batch * model.conv_in.out_channels * frames * output_height * output_width
     model_memory = sum(parameter.nelement() * parameter.element_size() for parameter in model.parameters())
     memory_required = model_memory + feature_elements * model.conv_in.weight.element_size() * 8
@@ -733,6 +734,17 @@ def _upscale_minimax_h3_video_latent(latent, model_name, scale):
 
 
 class latent_minimaxH3_scale:
+    def __init__(self):
+        self._cached_model_name = None
+        self._cached_model = None
+
+    def _get_model(self, model_name):
+        if self._cached_model_name != model_name:
+            self._cached_model = None
+            self._cached_model = _load_minimax_h3_upscaler(model_name)
+            self._cached_model_name = model_name
+        return self._cached_model
+
     @classmethod
     def INPUT_TYPES(cls):
         models = _minimax_h3_upscale_models()
@@ -758,7 +770,9 @@ class latent_minimaxH3_scale:
             raise ValueError("latent_minimaxH3_scale requires a MiniMax H3 AV latent containing video and audio streams")
 
         video_latent, audio_latent = LTXVSeparateAVLatent.execute(latent).result
-        scaled_video = _upscale_minimax_h3_video_latent(video_latent, model, scale)
+        scaled_video = _upscale_minimax_h3_video_latent(
+            video_latent, model, scale, model=self._get_model(model)
+        )
         return LTXVConcatAVLatent.execute(scaled_video, audio_latent).result
 
 

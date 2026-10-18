@@ -51,6 +51,13 @@ _GENERATE_LOCK = asyncio.Lock()
 _CORE_EPOCH = str(uuid.uuid4())
 _FILM_EXPORT_LOCK = asyncio.Lock()
 _FILM_EXPORT_TASKS = {}
+_DIRECTOR_UI_MODULES = frozenset((
+    "assets_ui.mjs", "bundle_ui.mjs", "candidate_diagnostics.mjs", "compare_ui.mjs",
+    "content_hash.mjs", "continuity_recipes.mjs", "creation_library.mjs", "creation_ui.mjs",
+    "film_ui.mjs", "frame_ui.mjs", "layout_ui.mjs", "modal_ui.mjs", "preflight_ui.mjs",
+    "radar_state.mjs", "radar_ui.mjs", "references_ui.mjs", "sampling_ui.mjs", "session.mjs",
+    "storyboard_ui.mjs", "tasks_ui.mjs", "trim_ui.mjs", "workbench.mjs", "workbench.css",
+))
 
 
 def _record_deleted_queue_receipt(store, prompt_id):
@@ -1014,6 +1021,19 @@ def register_director_routes():
         return web.FileResponse(
             Path(__file__).resolve().parents[1] / "web" / "director" / "session.mjs"
         )
+
+    @routes.get(PREFIX + "/ui-modules/{name}")
+    async def ui_module(request):
+        # Stable same-origin module base, independent of custom-node folder name.
+        # Do not reuse /assets: that namespace belongs to user input assets.
+        name = request.match_info["name"]
+        if name not in _DIRECTOR_UI_MODULES:
+            raise web.HTTPNotFound()
+        root = Path(__file__).resolve().parents[1] / "web" / "director"
+        path = root / name
+        if path.is_symlink() or not path.is_file() or path.resolve().parent != root.resolve():
+            raise web.HTTPNotFound()
+        return web.FileResponse(path)
 
     @routes.get(PREFIX + "/sampling_ui.mjs")
     async def sampling_ui(_request):

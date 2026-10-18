@@ -6,10 +6,14 @@ Windows 命名预算：仓库相对路径≤140、JSON文件名≤96字符；新
 
 分离式 S01–S29 / Veda 的保存位置见 [总索引](SEPARATED_WORKFLOWS.md)；最新 B8 / C1 / C2 音频修正版完整/恢复配对图见 [64-reviewed-audio-followup](64-reviewed-audio-followup/README.md)，不覆盖旧图。
 
-本次新增：[H05 11项已审短名工作流](83-h05-reviewed/README.md)，旧入口全部保留。
+本次新增：[VM01 视觉标记已审工作流与独立框选编辑器](84-visual-marker/README.md)；此前 [H05 11项已审短名工作流](83-h05-reviewed/README.md)及旧入口全部保留。
 
 | 目录 | 主要用途 |
 |---|---|
+| [89-h14-reviewed](89-h14-reviewed/README.md) | 两项已审普通LoRA／生成音频行作用域同条件来源图；参数与接线保持，非声纹隔离或提速认证 |
+| [88-h13-reviewed](88-h13-reviewed/README.md) | 两项已审AudioFirst同条件先音后画／Wuli普通Hybrid原生八步来源图；不覆盖旧图，参考素材自行选择 |
+| [87-h11-reviewed](87-h11-reviewed/README.md) | 七项审核通过的八份Spark／Wuli／audio-only及只读接口来源图；资源配置与边界见目录说明 |
+| [84-visual-marker](84-visual-marker/README.md) | 已接受的干净图／整框图／显式clean-VAE与marked-Qwen分流三张4+4，以及不采样的独立框选编辑器；残框限制保留，无新权重 |
 | [75-radar-r6-reference](75-radar-r6-reference/README.md) | 10张原生保存来源图：参考包、独立Full/Cold采样、Full/Light解码、master模块与配方卡UI；须选自己的合法资产和实际缓存 |
 | [74-radar-r6-delivery](74-radar-r6-delivery/README.md) | 三张先保存master再裁切／留边的模块，原声逐包保持，失败保留原片 |
 | [73-temporal-dialogue-scope](73-temporal-dialogue-scope/README.md) | 8张v5／H16 Full-Cold；窗口对白新分支，外置EAV／Relay；固定v5通过、H16及效果模板仅CPU资格 |
@@ -82,6 +86,10 @@ Windows 命名预算：仓库相对路径≤140、JSON文件名≤96字符；新
 | `33-selflift-taomate` | 已完成绑定样片验收的 SelfLift 4+4、TST/EAV/Relay/KJ/Sol 组合、两段8秒接缝与 TaoMate 原生3/4步工作流（EXP；不作普适画质或提速承诺） |
 | `34-semantic-bridge` | Semantic Bridge／BUNNY 普通条件、Relay、内循环及独立双采；640×320→896×448两段8秒4+4配方已验收，其他路线仍按EXP说明 |
 | `36-avatar-voice` | 本地 Avatar 录音驱动4+4、可选TAEH3预览／定向取消、原生Ref2VA普通／情绪对白与双采／长视频接线；人审待、不发布 |
+
+新增入口：[H09／Veda R2VA九张已审来源图](86-h09-reviewed/README.md)：独立R2VA、prepared INT8、人物前缀续接、原声切窗、导演候选、参考路由和文字提案。旧配方保留，各项接受范围见说明。
+
+新增入口：[H07七项已审配方](85-h07-reviewed/README.md)：可选新音频时钟、清唱、有限背景合成、姿态、同Stage X2、动作拟音和专用PDD7+1。旧配方不覆盖。
 
 新增入口：[FreeVideo 新四档 Full／Cold](76-freevideo-quality/README.md)。Light8+3／Medium12指定样片人审通过，16／20仅CPU结构支持；[旧8+2／4+4](72-freevideo-split/README.md)保持。
 

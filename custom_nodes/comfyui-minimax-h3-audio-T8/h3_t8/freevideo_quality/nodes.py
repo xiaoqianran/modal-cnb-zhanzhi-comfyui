@@ -10,6 +10,7 @@ from ..freevideo_exp.runtime import canonical, with_lora
 from ..freevideo_exp.effects import with_eav, build_relay_conditioning
 from . import runtime as fv
 from .profiles import LABELS, plan
+from ..freevideo_phase_live import core_progress
 
 MODEL = io.Custom("H3_T8_FREEVIDEO_QUALITY_MODEL")
 STAGE = io.Custom("H3_T8_FREEVIDEO_QUALITY_STAGE")
@@ -20,7 +21,7 @@ def callbacks(total):
     import comfy.model_management
     import comfy.utils
     bar = comfy.utils.ProgressBar(total)
-    return comfy.model_management.throw_exception_if_processing_interrupted, lambda n, count: bar.update_absolute(n, count)
+    return comfy.model_management.throw_exception_if_processing_interrupted, core_progress(bar, total)
 
 
 class MiniMaxH3FreeVideoQualityLoaderEXPT8(io.ComfyNode):

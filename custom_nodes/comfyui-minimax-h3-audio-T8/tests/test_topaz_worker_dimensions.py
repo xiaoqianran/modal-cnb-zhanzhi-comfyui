@@ -39,7 +39,7 @@ def test_worker_geometry_and_publication_gates(runtime, monkeypatch, tmp_path, c
     monkeypatch.setattr(worker.sys, 'argv', ['worker', str(request)])
     monkeypatch.setattr(worker, 'local_module', lambda name:
         {'topaz_contract': contract, 'topaz_media': media}[name])
-    monkeypatch.setattr(media, 'decoded_pcm_digests', lambda *a: [])
+    monkeypatch.setattr(media, 'decoded_pcm_digests', lambda *a, **kw: [])
     monkeypatch.setattr(worker.shutil, 'disk_usage',
         lambda _: SimpleNamespace(free=700 * 1024**2 if case == 'disk_advisory' else 10**12))
     calls = []
@@ -47,7 +47,11 @@ def test_worker_geometry_and_publication_gates(runtime, monkeypatch, tmp_path, c
     def external(command, *, stdout, stderr, **kwargs):
         calls.append(command)
         code = 0
-        if '-show_frames' in command:
+        if '-decoders' in command:
+            stdout.write(b' V..... h264_cuvid   NVIDIA H264\n V..... hevc_cuvid   NVIDIA HEVC\n')
+        elif '-show_entries' in command and 'stream=codec_name' in command:
+            stdout.write(b'{"streams":[{"codec_name":"h264"}]}')
+        elif '-show_frames' in command:
             original = command[-1] == str(source)
             dimensions = (1024, 512) if original else (
                 (2048, 1024) if case in ('legacy', 'wrong_output') else (1536, 768))
@@ -99,3 +103,8 @@ def test_worker_geometry_and_publication_gates(runtime, monkeypatch, tmp_path, c
     enhancement = [command for command in calls if '-vf' in command]
     assert len(enhancement) == (0 if case == 'invalid_target' else 1)
     assert all('download=0' in command[command.index('-vf') + 1] for command in enhancement)
+    for command in calls:
+        if command[-1] == str(source) or '-i' in command:
+            assert command[command.index('-codec:v') + 1] == 'h264_cuvid'
+            if '-i' in command:
+                assert command.index('-codec:v') < command.index('-i')

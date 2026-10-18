@@ -123,6 +123,22 @@ def test_session_relative_radar_module_has_actual_native_core_static_route(radar
     assert expected.read_bytes()
 
 
+def test_ui_modules_are_directory_name_independent_and_allowlisted(radar_routes):
+    from aiohttp import web
+    _store, handlers = radar_routes
+    handler = handlers[director_routes.PREFIX + "/ui-modules/{name}"]
+    root = Path(director_routes.__file__).resolve().parents[1] / "web/director"
+    actual = {path.name for path in root.iterdir() if path.suffix in (".mjs", ".css")}
+    assert director_routes._DIRECTOR_UI_MODULES == actual
+    for name in sorted(actual):
+        response = asyncio.run(handler(types.SimpleNamespace(match_info={"name": name})))
+        assert response.status == 200 and response._path.resolve() == (root / name).resolve()
+    for name in ("../session.mjs", "..%2fsession.mjs", "index.html", "unknown.mjs", "secret.json"):
+        with pytest.raises(web.HTTPNotFound):
+            asyncio.run(handler(types.SimpleNamespace(match_info={"name": name})))
+    assert director_routes.PREFIX + "/assets/{asset_id}" in handlers
+
+
 def test_readonly_reference_plan_redacts_paths_and_separates_video_audio_ordinals(radar_routes, monkeypatch):
     import hashlib
     import uuid

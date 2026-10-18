@@ -44,10 +44,11 @@ def main():
     output_bit_depths = ({'delivery_h264': (8,), 'delivery_hevc_main10': (10,),
                           'lossless_master': (16,)}[output_profile])
     source = Path(spec['source']['path'])
+    source_decoder = media.video_decoder(runtime, source, env, job, 'source')
     source_video = media.analyze_video(json.loads(run(
-        media.probe_command(runtime, source, frames=True), 'source_video_probe')),
+        media.probe_command(runtime, source, frames=True, decoder=source_decoder), 'source_video_probe')),
         allowed_bit_depths=source_bit_depths)
-    source_audio = json.loads(run(media.probe_command(runtime, source, packets=True), 'source_audio_probe'))
+    source_audio = json.loads(run(media.probe_command(runtime, source, packets=True, decoder=source_decoder), 'source_audio_probe'))
     if output_profile in contract.DELIVERY_OUTPUT_PROFILES:
         suffix = media.delivery_suffix(source_audio)
         audio_mode = media.delivery_audio_mode(source_audio)
@@ -60,7 +61,7 @@ def main():
     encoder_help = (job / 'encoder_probe.stdout').read_text(encoding='utf8')
     if ('Encoder ' + encoder + ' ') not in encoder_help:
         raise RuntimeError('Official FFmpeg lacks the required Topaz output encoder')
-    source_pcm = media.decoded_pcm_digests(runtime, source, source_audio, env, job / 'source_pcm.stderr')
+    source_pcm = media.decoded_pcm_digests(runtime, source, source_audio, env, job / 'source_pcm.stderr', decoder=source_decoder)
     settings = dict(spec['settings'])
     scale = settings.pop('scale')
     size_mode = settings.pop('size_mode', 'scale')
@@ -91,7 +92,7 @@ def main():
     (job / 'disk_preflight.json').write_text(json.dumps(disk_preflight, indent=2), encoding='utf8')
     pending = job / ('enhanced.pending' + suffix)
     command = contract.regular_command(runtime, source, pending, size_mode=size_mode,
-        output_profile=output_profile, audio_mode=audio_mode, **settings)
+        output_profile=output_profile, audio_mode=audio_mode, decoder=source_decoder, **settings)
     (job / 'command.json').write_text(json.dumps(command, indent=2), encoding='utf8')
     revalidate()
     run(command, 'enhancement')
@@ -101,12 +102,13 @@ def main():
         geometry['post_ai_resampling'] = 'lanczos_exact_target_dimensions'
     else:
         geometry['post_ai_resampling'] = 'none'
+    output_decoder = media.video_decoder(runtime, pending, env, job, 'output')
     output_video = media.analyze_video(json.loads(run(
-        media.probe_command(runtime, pending, frames=True), 'output_video_probe')),
+        media.probe_command(runtime, pending, frames=True, decoder=output_decoder), 'output_video_probe')),
         allowed_bit_depths=output_bit_depths)
-    output_audio = json.loads(run(media.probe_command(runtime, pending, packets=True), 'output_audio_probe'))
+    output_audio = json.loads(run(media.probe_command(runtime, pending, packets=True, decoder=output_decoder), 'output_audio_probe'))
     video_audit = media.compare_video(source_video, output_video, width, height)
-    output_pcm = media.decoded_pcm_digests(runtime, pending, output_audio, env, job / 'output_pcm.stderr')
+    output_pcm = media.decoded_pcm_digests(runtime, pending, output_audio, env, job / 'output_pcm.stderr', decoder=output_decoder)
     if audio_mode == 'copy':
         audio_audit = media.compare_audio_packets(source_audio, output_audio, video_audit['common_shift'])
         audio_audit['pcm'] = media.compare_pcm_digests(source_pcm, output_pcm)
@@ -114,7 +116,7 @@ def main():
         audio_audit = media.compare_transcoded_audio(source_audio, output_audio,
             video_audit['common_shift'], source_pcm, output_pcm)
     run([str(runtime.executable('ffmpeg.exe')), '-v', 'error', '-xerror', '-err_detect', 'explode',
-        '-nostdin', '-protocol_whitelist', 'file,pipe', '-i', str(pending), '-map', '0:v:0',
+        '-nostdin', '-protocol_whitelist', 'file,pipe', *contract.decoder_options(output_decoder), '-i', str(pending), '-map', '0:v:0',
         '-map', '0:a?', '-f', 'null', '-'], 'strict_decode')
     revalidate()
     target = job / ('enhanced' + suffix)
@@ -127,6 +129,7 @@ def main():
         'parameter_audit': spec.get('parameter_audit', {}),
         'settings': {**settings, 'scale': scale, 'size_mode': size_mode,
                      'output_profile': output_profile}, 'geometry': geometry,
+        'input_decoders': {'source': source_decoder, 'output': output_decoder},
         'format_conversion': {
             'mode': ('automatic_h264_sdr' if output_profile == 'delivery_h264'
                      else 'explicit_output_profile'),

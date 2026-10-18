@@ -1,0 +1,489 @@
+{
+  "id": "d5b697af-03c3-40b2-9172-26e052d18aec",
+  "revision": 0,
+  "last_node_id": 8,
+  "last_link_id": 7,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MiniMaxH3FreeTokenRequestEXPT8",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        390,
+        436.66666666666674
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "original_text",
+          "name": "original_text",
+          "type": "STRING",
+          "widget": {
+            "name": "original_text"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "seconds",
+          "name": "seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "seconds"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "image_roles_json",
+          "name": "image_roles_json",
+          "type": "STRING",
+          "widget": {
+            "name": "image_roles_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "protected_literals_json",
+          "name": "protected_literals_json",
+          "type": "STRING",
+          "widget": {
+            "name": "protected_literals_json"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "request",
+          "name": "request",
+          "type": "T8_H3_PROMPT_REQUEST",
+          "links": [
+            1,
+            2
+          ]
+        },
+        {
+          "localized_name": "original_text",
+          "name": "original_text",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3FreeTokenRequestEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "A fixed medium shot of one adult woman in a blue blouse against a neutral gray wall. She smiles gently and says exactly once in Mandarin: “你好，今天天气不错。” No other people, objects, actions, dialogue, subtitles, music or cuts. Do not invent gestures, handedness, accessories or clothing details.",
+        5,
+        "[]",
+        "[\"你好，今天天气不错。\"]"
+      ],
+      "widgets_values_named": {
+        "original_text": "A fixed medium shot of one adult woman in a blue blouse against a neutral gray wall. She smiles gently and says exactly once in Mandarin: “你好，今天天气不错。” No other people, objects, actions, dialogue, subtitles, music or cuts. Do not invent gestures, handedness, accessories or clothing details.",
+        "seconds": 5,
+        "image_roles_json": "[]",
+        "protected_literals_json": "[\"你好，今天天气不错。\"]"
+      }
+    },
+    {
+      "id": 2,
+      "type": "MiniMaxH3FreeTokenRewriteEXPT8",
+      "pos": [
+        440,
+        0
+      ],
+      "size": [
+        390,
+        150
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "request",
+          "name": "request",
+          "type": "T8_H3_PROMPT_REQUEST",
+          "link": 1
+        },
+        {
+          "localized_name": "runtime_config",
+          "name": "runtime_config",
+          "type": "STRING",
+          "widget": {
+            "name": "runtime_config"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "proposal",
+          "name": "proposal",
+          "type": "T8_H3_PROMPT_PROPOSAL",
+          "links": [
+            3
+          ]
+        },
+        {
+          "localized_name": "candidate_text",
+          "name": "candidate_text",
+          "type": "STRING",
+          "links": [
+            4
+          ]
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3FreeTokenRewriteEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "runtime_config": ""
+      }
+    },
+    {
+      "id": 3,
+      "type": "MiniMaxH3FreeTokenAdoptEXPT8",
+      "pos": [
+        880,
+        0
+      ],
+      "size": [
+        390,
+        176
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "request",
+          "name": "request",
+          "type": "T8_H3_PROMPT_REQUEST",
+          "link": 2
+        },
+        {
+          "localized_name": "proposal",
+          "name": "proposal",
+          "type": "T8_H3_PROMPT_PROPOSAL",
+          "link": 3
+        },
+        {
+          "localized_name": "confirm_adopt",
+          "name": "confirm_adopt",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "confirm_adopt"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "links": [
+            6
+          ]
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3FreeTokenAdoptEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        false
+      ],
+      "widgets_values_named": {
+        "confirm_adopt": false
+      }
+    },
+    {
+      "id": 4,
+      "type": "PreviewAny",
+      "pos": [
+        880,
+        300
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 5,
+      "type": "PreviewAny",
+      "pos": [
+        880,
+        600
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 6,
+      "type": "PreviewAny",
+      "pos": [
+        1320,
+        0
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 7,
+      "type": "PreviewAny",
+      "pos": [
+        1320,
+        300
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 8,
+      "type": "Note",
+      "title": "已审来源；先配置自己的资源",
+      "pos": [
+        0,
+        -720
+      ],
+      "size": [
+        900,
+        300
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "properties": {},
+      "widgets_values": [
+        "节点2明确选择自己的prepared Qwen3-VL-4B FreeToken配置；不是旧ComfyUI Qwen文件。Request→Rewrite→Adopt分离，confirm_adopt=false仍输出原稿。审核通过不代表自动采用，本例仅整理格式，不证明改写优于原稿；无H3采样，图片模式/新素材需另行检查。\n2026-10-11定向人审r3通过。此资源适配/分支拆出仅静态接线校验，未重复执行；旧图不改，尚未发布。"
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "T8_H3_PROMPT_REQUEST"
+    ],
+    [
+      2,
+      1,
+      0,
+      3,
+      0,
+      "T8_H3_PROMPT_REQUEST"
+    ],
+    [
+      3,
+      2,
+      0,
+      3,
+      1,
+      "T8_H3_PROMPT_PROPOSAL"
+    ],
+    [
+      4,
+      2,
+      1,
+      4,
+      0,
+      "*"
+    ],
+    [
+      5,
+      2,
+      2,
+      5,
+      0,
+      "*"
+    ],
+    [
+      6,
+      3,
+      0,
+      6,
+      0,
+      "*"
+    ],
+    [
+      7,
+      3,
+      1,
+      7,
+      0,
+      "*"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        120,
+        120
+      ]
+    },
+    "workflow_title": "H09 · B3 · reviewed source",
+    "h09_reviewed_source": {
+      "case": "B3",
+      "review_id": "a25f36b7eb0ac6fa988f01e5ff9c20464d1920a322893900c73f2f30dcc18d86",
+      "revision": 3,
+      "feedback_sha256": "af75d8d7c5d2fbb1675e2fa0c1d8c075e8f9d01af0cd39f905af61c3fa77b0c1",
+      "parent_native_sha256": "0f43b45c53bb8c16315f698502e08ccc1f73bcee7b6866e84546c575467eddc0",
+      "resource_adaptations_reexecuted": false,
+      "subset_only": false,
+      "automatic_adoption": false,
+      "scope": "specific_reference_routing_or_text_format_NOT_generated_quality_or_all_inputs"
+    }
+  },
+  "version": 0.4
+}

@@ -88,6 +88,7 @@
     "Wan/Wan21_Uni3C_controlnet_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/WanVideo_comfy/-/lfs/d7dd1bfe5f34dea607a749d72f206908e76a908b9999cb28c53c3eb167ddd709"
   },
   "diffusion_models": {
+    "Cobijada_H3_Hybrid_Uncensored_pruned_hybrid_int8_convrot_pruned.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/85a4573a861810bfb250b3cc38f492870b6a3b01048feaa02a85bc7c511b7ca1",
     "qwen_image_2.1_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/89f4158d066cc33906a199fca85634f766892dd78f49b6698dabf187ac86c4bc",
     "DasiwaMinimaxH3_dasiwaHybridV2_int8.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/4cb8e1eaa9c3e5c664822760890bcbe6078455401cfa43205baf322e856d25f8",
     "minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/a629cfea8d89a071b140c6e1935dc9a23e72de6badc18975a2bb9e6d1423d76d",
@@ -146,6 +147,10 @@
     "MelBandRoFormer/MelBandRoformer_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/MelBandRoFormer_comfy/-/lfs/6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
   },
   "loras": {
+    "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/ddfdd94f4c9a0f32bf3649bb8e98ca20db572e4db6bcd9cca546a5b33ea32d11",
+    "minimax_h3_dmad_full_dareties_v4_step600_comfy_fro.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/4d4ea608992d72303e4971f78728f587f43ecb72490f365a042ed82e37a907ce",
+    "MysticXXX_MMH3-V1.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/7dd837f4c5420d4ec59f3ff1757b3f9d264a6c0f120d65d9c4f59c77584dd0be",
+    "H3_Fight_Flow_V1.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/579e8eca67b6d70f4db94b2db67cd938751d576ee3d72aba875dae3d911f7398",
     "H3_speed_slider_1.1.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/593b074e8eb17bf9f858c3586fc12f53038dbfdd9634e146fe34a17e2661ca40",
     "Motion_Repair_V2.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/edfa0e2858caeba7be9108883f61da8525d3c58af998c94ac7a449d9603d7574",
     "H3_VBVR_Pro_attn_only_r.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/35ab9d6aa1d4d4ba716cbc426499463f8b868599e68e7914f89b1a82455cf4a6",
@@ -154,7 +159,6 @@
 	  "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/c8168ebc17bbacc4296103dda2fec1ba85b24392fa08cf2bfbcef0cff0dc3cc8",
 	  "minimax_h3_lms_v1.0_r64_r.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/8400b520f399737fc208253b1ef9560d436e4c3981259ba451a83ddf018d55e0",
 	  "minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/a117f18682a22a0381cadd9832da0afe9912f604305b3e44310b5aa1919734cc",
-	  "Motion_Repair.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/a678a3657cefd5c2c2712f892da2f71be53c3f252e335557e918854f8abc579f",
 	  "H3_Combat_V2.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/5b3edb09e9d6029439badf9bc9db4ba4a355ae679b0810888de82c4793c0bac8",
 	  "GunFu.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/975083859a69cd1bd503e026e987c27cf2b66e97d992db353d2ceb7d0b175791",
     "MiniMax H3真实电影质感 V1.0.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/bd439f4b4ebda48dec768f69ecabaf66f28c1ebc7dedc4d11aed2eacb368f219",
@@ -234,6 +238,7 @@
     "flux1-redux-dev.safetensors": "https://cnb.cool/ai-models/black-forest-labs/FLUX.1-Redux-dev/-/lfs/a1b3bdcb4bdc58ce04874b9ca776d61fc3e914bb6beab41efb63e4e2694dca45"
   },
   "text_encoders": {
+    "qwen3vl_32b_h3_ultra_uncensored_heretic_int8_convrot.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/d84547412144b7c50a6ec77437a889b869d3ace88da77ef1775d3d2a4901c192",
     "qwen3vl_8b_int8_convrot.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f",
     "qwen3vl_32b_minimax_h3_int8_convrot.safetensors": "https://cnb.cool/ai-models/Comfy-Org/MiniMax-H3/-/lfs/bc2ced0fbea64757fa9acddccfc0b3f4819d1dcf1da6c124d690d368be283923",
     "Ace-Step/qwen_4b_ace15.safetensors": "https://cnb.cool/ai-models/Comfy-Org/ace_step_1.5_ComfyUI_files/-/lfs/ffe5ffb855086c2ab55e467e9859fb01894781020a0376484dd19de166b79873",

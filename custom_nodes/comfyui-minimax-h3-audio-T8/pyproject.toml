@@ -1,6 +1,6 @@
 [project]
 name = "minimax-h3-audio-t8"
-version = "1.95.0"
+version = "1.101.0"
 description = "MiniMax H3 joint AV, audio refine, long-video, reference control, motion analysis, temporal restoration, and acceleration nodes for ComfyUI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,6 +21,46 @@ PublisherId = "t8star"
 DisplayName = "MiniMax H3 Audio T8"
 Icon = "https://avatars.githubusercontent.com/u/96167788"
 includes = [
+    "docs/RELEASE_1.101.0.md", "docs/H14_TOKEN_SCOPE.md",
+    "THIRD_PARTY_NOTICES/H14-SOURCES.md", "THIRD_PARTY_NOTICES/H14-Scriptorium-LICENSE.txt",
+    "docs/RELEASE_1.100.0.md", "docs/H13_AUDIO_FIRST_HYBRID.md", "THIRD_PARTY_NOTICES/H13-SOURCES.md",
+    "tools/prepare_h13_wuli_hybrid.py",
+    "docs/RELEASE_1.99.0.md", "docs/H11_NATIVE_EXTENSIONS.md", "docs/H11_RESOURCES_AND_SCOPE.md",
+    "THIRD_PARTY_NOTICES/H11-SOURCES.md",
+    "tools/prepare_h11_spark_runtime.py", "tools/download_h11_wuli.py",
+    "docs/RELEASE_1.98.2.md",
+    "docs/RELEASE_1.98.1.md",
+    "docs/VEDA_R2VA_EXP.md",
+    "docs/H09_PERSON_REMOVAL_EXP.md",
+    "docs/H09_FREEVIDEO_INT8_EXP.md",
+    "docs/H09_PRODUCTION_RECIPES.md",
+    "docs/H09_REFERENCE_JOIN.md",
+    "docs/H09_SOURCE_AUDIO_PLAN.md",
+    "docs/H09_PROMPT_PROVIDER.md",
+    "docs/H09_FROZEN_RESEARCH.md",
+    "tools/prepare_h09_person_assets.py",
+    "tools/prepare_h09_freevideo_int8.py",
+    "tools/prepare_h09_int8_runtime.py",
+    "tools/probe_h09_int8_kernels.py",
+    "tools/check_h09_masked_kernel.py",
+    "tools/audit_h09_int8_prepared.py",
+    "tools/import_h09_recipe.py",
+    "tools/prepare_h09_prompt_provider.py",
+    "tools/run_h09_prompt_proposal.py",
+    "docs/RELEASE_1.98.0.md",
+
+    "docs/FREEVIDEO_AUDIO_CLOCK_EXP.md",
+    "docs/H07_DIAGNOSTICS_EXP.md",
+    "docs/H07_DELIVERY_EXP.md",
+    "docs/H07_REFERENCE_COSTS.md",
+    "docs/H07_SONG_MASTER_EXP.md",
+    "docs/H07_BACKGROUND_EXP.md",
+    "docs/H07_POSE_ASSETS_EXP.md",
+    "docs/H07_X2_DECODE_EXP.md",
+    "docs/H07_FOLEY_USAGE.md",
+    "docs/RELEASE_1.97.0.md",
+
+    "docs/RELEASE_1.96.0.md", "docs/VISUAL_MARKER_EXP.md",
     "docs/RELEASE_1.95.0.md", "docs/H05_REVIEWED_WORKFLOWS.md",
     "docs/SOURCE_CONFORM_EXP.md", "docs/QWEN_REFERENCE_VIEW_EXP.md",
     "docs/FREEVIDEO_DECODER_EXP.md", "docs/H05_ATTENTION_STORAGE.md",

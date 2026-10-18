@@ -3,7 +3,7 @@ import { api } from "../../scripts/api.js";
 
 // AD MiniMax Guide frontend.
 
-const AD_GUIDE_UI_VERSION = "2026.09.30-guide-v161-stage-flow-init";
+const AD_GUIDE_UI_VERSION = "2026.10.14-guide-v169-stage-index";
 globalThis.__AD_MINIMAX_GUIDE_UI41_MODULE__ = true;
 console.info(`[ADMiniMaxGuide] frontend ${AD_GUIDE_UI_VERSION} loaded`);
 const NODE_CLASS = "AD_MiniMax_guide";
@@ -11,6 +11,11 @@ const REF2_GENERATE_NODE_CLASS = "AD_MinMax_Ref2_generate";
 const REF2_PREPARE_NODE_CLASS = "AD_MinMax_Ref2";
 const REF2_UNIFIED_NODE_CLASS = "AD_MinMax_Ref2_sample";
 const FL2_GENERATE_NODE_CLASS = "AD_MinMax_FL2_generate";
+const FL2_PREPARE_NODE_CLASS = "AD_MinMax_FL2";
+const DEPRECATED_NODE_TITLES = {
+    [REF2_GENERATE_NODE_CLASS]: "AD_MinMax_Ref2_generate_废弃",
+    [FL2_GENERATE_NODE_CLASS]: "AD_MinMax_FL2_generate_废弃",
+};
 const FLOW_STAGE_BEGIN_CLASS = "flow_stage_begin";
 const MEDIA_RELAY_CLASS = "basicIn_media";
 const MEDIA_EDITOR_CLASS = "AD_Media_editor";
@@ -317,6 +322,7 @@ const MATERIAL_LABELS = {
     audio: "Audio",
 };
 const LOADERS = {
+    text: { classType: "basicIn_string", label: ZH_BROWSER ? "普通文本" : "Text" },
     batch: { classType: "text_MinimaxH3", label: ZH_BROWSER ? "批量文本" : "Batch text" },
     image: { classType: "LoadImage", label: TEXT.loadImage },
     video: { classType: "LoadVideo", label: TEXT.loadVideo },
@@ -351,7 +357,7 @@ let nativeThemeWatcherInstalled = false;
 let lastVueNodesMode = null;
 
 function isTarget(node) {
-    return [NODE_CLASS, REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, "sum_QwenImage2"].includes(String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || ""));
+    return [NODE_CLASS, REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, FL2_PREPARE_NODE_CLASS, "sum_QwenImage2"].includes(String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || ""));
 }
 
 function isMediaRelayNode(node) {
@@ -375,7 +381,7 @@ function isMultiPromptNode(node) {
 }
 
 function isChxTarget(node) {
-    return [REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, "sum_QwenImage2"].includes(String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || ""));
+    return [REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, FL2_PREPARE_NODE_CLASS, "sum_QwenImage2"].includes(String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || ""));
 }
 
 function isRef2GenerateTarget(node) {
@@ -406,7 +412,7 @@ function getPassModeName(node) {
 
 
 function isMulTarget(node) {
-    return [REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS].includes(String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || ""));
+    return [REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, FL2_PREPARE_NODE_CLASS].includes(String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || ""));
 }
 
 function isQwen2Target(node) {
@@ -420,7 +426,7 @@ function promptEditorPlaceholder(node) {
 
 function isStagePromptTarget(node) {
     const nodeClass = String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || "");
-    return nodeClass === NODE_CLASS || [REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, "sum_QwenImage2"].includes(nodeClass);
+    return nodeClass === NODE_CLASS || [REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, FL2_PREPARE_NODE_CLASS, "sum_QwenImage2"].includes(nodeClass);
 }
 
 function isGuideTarget(node) {
@@ -431,8 +437,12 @@ function isFl2GenerateTarget(node) {
     return String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || "") === FL2_GENERATE_NODE_CLASS;
 }
 
+function isFl2PrepareTarget(node) {
+    return String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || "") === FL2_PREPARE_NODE_CLASS;
+}
+
 function isFl2Target(node) {
-    return isFl2GenerateTarget(node);
+    return isFl2GenerateTarget(node) || isFl2PrepareTarget(node);
 }
 
 function isLoader(node) {
@@ -511,8 +521,9 @@ function localizeNodeInstance(node) {
         return;
     }
     if (!isTarget(node)) return;
+    const nodeClass = String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || "");
     node.title = isChxTarget(node)
-        ? String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || "")
+        ? (DEPRECATED_NODE_TITLES[nodeClass] || nodeClass)
         : TEXT.mainTitle;
     for (let index = (node.inputs?.length || 0) - 1; index >= 0; index -= 1) {
         const name = String(node.inputs[index]?.name || "");
@@ -681,12 +692,15 @@ function normalizeLinks(node, removeMissing = false) {
     const seen = new Set();
     let hasText = false;
     const isMultiStage = isMultiPromptNode(node);
+    const isQwen2 = isQwen2Target(node);
     for (const link of links) {
         const sourceId = Number(link?.source_id);
         const sourceSlot = Number(link?.source_slot) || 0;
         let mediaType = String(link?.media_type || "image").toLowerCase();
         if (!Number.isFinite(sourceId) || !["image", "video", "audio", "latent", "text", "batch", "image_batch"].includes(mediaType)) continue;
-        if ((mediaType === "text" && (hasText || isMultiStage)) || (["batch", "image_batch"].includes(mediaType) && !isMultiStage)) continue;
+        if ((mediaType === "text" && (hasText || (isMultiStage && !isQwen2))) || (["batch", "image_batch"].includes(mediaType) && !isMultiStage)) continue;
+        if (isQwen2 && ["text", "batch"].includes(mediaType)
+            && normalized.some((item) => ["text", "batch"].includes(item.media_type))) continue;
         if (Number.isFinite(Number(node?.id)) && sourceId === Number(node.id) && !link?.cached) continue;
         const key = `${sourceId}:${sourceSlot}:${mediaType}`;
         if (seen.has(key)) continue;
@@ -698,7 +712,9 @@ function normalizeLinks(node, removeMissing = false) {
             if (!detectedType) continue;
             mediaType = detectedType;
             if (!isSupportedMaterialSourceFormat(source, mediaType)) continue;
-            if ((mediaType === "text" && (hasText || isMultiStage)) || (["batch", "image_batch"].includes(mediaType) && !isMultiStage)) continue;
+            if ((mediaType === "text" && (hasText || (isMultiStage && !isQwen2))) || (["batch", "image_batch"].includes(mediaType) && !isMultiStage)) continue;
+            if (isQwen2 && ["text", "batch"].includes(mediaType)
+                && normalized.some((item) => ["text", "batch"].includes(item.media_type))) continue;
         }
         if (mediaType === "batch" && normalized.some((item) => item.media_type === "batch")) continue;
         if (mediaType === "image_batch" && normalized.some((item) => item.media_type === "image_batch")) continue;
@@ -740,6 +756,31 @@ function getMediaType(sourceType, sourceNode = null) {
     if (type.includes("STRING")) return "text";
     if (String(sourceNode?.comfyClass || sourceNode?.type || "") === "flow_stage_begin") return "image";
     return null;
+}
+
+function qwenExternalTextLink(node) {
+    if (!isQwen2Target(node)) return null;
+    return ensureLinks(node).find((link) => String(link?.media_type || "") === "text") || null;
+}
+
+function qwenExternalTextValue(node) {
+    const link = qwenExternalTextLink(node);
+    if (!link) return null;
+    const source = (node.graph || app.graph)?.getNodeById?.(Number(link.source_id));
+    const widget = (source?.widgets || []).find((item) => ["input_text", "text", "prompt", "string"].includes(String(item?.name || "")));
+    return String(widget?.value ?? "");
+}
+
+function refreshQwenExternalTextTargets(sourceNode) {
+    const sourceId = Number(sourceNode?.id);
+    if (!Number.isFinite(sourceId)) return;
+    for (const target of app.graph?._nodes || []) {
+        if (!isQwen2Target(target)) continue;
+        const link = qwenExternalTextLink(target);
+        if (!link || Number(link.source_id) !== sourceId) continue;
+        renderEditorFromNode(target, true);
+        target.setDirtyCanvas?.(true, true);
+    }
 }
 
 function mediaLimits(node) {
@@ -926,6 +967,13 @@ function addVirtualLink(targetNode, sourceNode, sourceSlot, sourceType, mediaTyp
         Number(link.source_id) === sourceId && Number(link.source_slot) === Number(sourceSlot)
     );
     if (exists) return false;
+    if (isQwen2Target(targetNode) && ["text", "batch"].includes(mediaType)) {
+        for (let index = links.length - 1; index >= 0; index -= 1) {
+            if (!["text", "batch"].includes(String(links[index]?.media_type || ""))) continue;
+            removeMentionsForMaterial(targetNode, links[index]);
+            links.splice(index, 1);
+        }
+    }
     if (!canAccept(targetNode, mediaType)) return false;
     const targetLinks = ensureLinks(targetNode);
     targetLinks.push({
@@ -937,6 +985,7 @@ function addVirtualLink(targetNode, sourceNode, sourceSlot, sourceType, mediaTyp
     });
     resequence(targetNode);
     refreshMaterialTray(targetNode);
+    renderEditorFromNode(targetNode, true);
     targetNode.setDirtyCanvas?.(true, true);
     app.graph?.setDirtyCanvas?.(true, true);
     app.graph?.change?.();
@@ -1191,6 +1240,7 @@ function removeVirtualLink(node, index) {
     }
     resequence(node);
     refreshMaterialTray(node);
+    renderEditorFromNode(node, true);
     node.setDirtyCanvas?.(true, true);
     app.graph?.setDirtyCanvas?.(true, true);
     app.graph?.change?.();
@@ -1470,7 +1520,7 @@ function openCreateMenu(canvas, targetNode, event, allowedTypes) {
         setNativeSearchVisualSuppression(false);
         clearTemporaryRenderLink(canvas);
     };
-    if (isMultiPromptNode(targetNode) || isMediaRelayNode(targetNode)) allowedTypes = [...allowedTypes, "batch"];
+    if (isMultiPromptNode(targetNode) || isMediaRelayNode(targetNode)) allowedTypes = [...new Set([...allowedTypes, "batch"])];
     const items = allowedTypes.filter((type) => canAcceptCreateTarget(targetNode, type)).map((type) => ({
         content: LOADERS[type].label,
         callback: () => {
@@ -1856,7 +1906,7 @@ function installQuickCreateCapture(canvas) {
         const allowed = isFl2Target(pending.targetNode)
             ? ["image"]
             : isQwen2Target(pending.targetNode)
-                ? ["image", "batch"]
+                ? ["image", "text"]
                 : ["image", "video", "audio"];
         if (scheduleDeferredInputCreateMenu(canvas, event, pending, allowed)) {
             lastCapturedDropAt = performance.now();
@@ -2112,7 +2162,8 @@ function patchGraphToPrompt() {
             // Qwen2 节点：不在 graphToPrompt 时重新读 DOM，避免 contenteditable 序列化差异导致缓存失效；编辑器内容已在输入事件时同步到 properties
             if (!promptIsLinked && node.__adGuideEditor && !isQwen2Target(node)) syncPromptFromEditor(node, false);
             const orderedLinks = normalizeLinks(node).filter((link) => Boolean(output[String(link.source_id)]));
-            const textLink = orderedLinks.find((link) => String(link.media_type || "") === "text");
+            const textLink = orderedLinks.find((link) => String(link.media_type || "") === "text")
+                || (isQwen2Target(node) ? qwenExternalTextLink(node) : null);
             const carryLink = isMulTarget(node) ? orderedLinks.find(isStageDataLink) || null : null;
             const transportLinks = orderedLinks.filter((link) => !["text", "batch", "image_batch"].includes(String(link.media_type || "")) && link !== carryLink);
             transportLinks.forEach((link, index) => {
@@ -2127,54 +2178,48 @@ function patchGraphToPrompt() {
                 else delete promptNode.inputs.stage_data;
                 // sum_QwenImage2 + text link：把 text 节点的字符串作为 prompt 公共前缀，喂给后端
                 // （AD_MinMax_Ref2 不把 text 喂给后端，但 sum_QwenImage2 后端 prompt 是 STRING，可以接）
-                let qwenTextPrefix = "";
-                if (isQwen2Target(node) && textLink) {
-                    const textNode = node.graph?._nodes?.find?.((n) => Number(n.id) === Number(textLink.source_id));
-                    const textWidget = (textNode?.widgets || []).find((w) => ["text", "prompt", "string"].includes(String(w.name || "")));
-                    qwenTextPrefix = String(textWidget?.value ?? "");
-                }
-                promptNode.inputs.prompt = qwenTextPrefix;
-                promptNode.inputs.stage_prompts = JSON.stringify(docs.map((doc, index) => {
-                    const runtimePrompt = prependMediaEditorCommonPrefix(
-                        node,
-                        buildRuntimePrompt(node, transportLinks, doc, index),
-                    );
-                    const finalPrompt = index === 0 && qwenTextPrefix
-                        ? qwenTextPrefix + runtimePrompt
-                        : runtimePrompt;
-                    return getWidget(node, "single_stage_time")
-                        ? {
-                            prompt: finalPrompt,
-                            single_stage_time: doc.single_stage_time,
-                            ...(doc.motion_context != null ? { motion_context: canonicalMotionContext(doc.motion_context) } : {}),
-                        }
-                        : finalPrompt;
-                }));
+                const qwenExternalTextInput = isQwen2Target(node) && textLink
+                    ? [String(textLink.source_id), Number(textLink.source_slot) || 0]
+                    : null;
+                const serializedStagePrompts = JSON.stringify(docs.map((doc, index) => {
+                        const runtimePrompt = prependMediaEditorCommonPrefix(
+                            node,
+                            buildRuntimePrompt(node, transportLinks, doc, index),
+                        );
+                        return getWidget(node, "single_stage_time")
+                            ? {
+                                prompt: runtimePrompt,
+                                single_stage_time: doc.single_stage_time,
+                                ...(doc.motion_context != null ? { motion_context: canonicalMotionContext(doc.motion_context) } : {}),
+                            }
+                            : runtimePrompt;
+                    }));
+                promptNode.inputs.prompt = qwenExternalTextInput ?? "";
+                promptNode.inputs.stage_prompts = qwenExternalTextInput == null
+                    ? serializedStagePrompts
+                    : "[]";
                 // stage_index 已从外部节点连接时，保留外部链接，不被 UI 阶段选择覆盖
                 // 同时检查前端 input.link 和序列化数据（连线在序列化里是 [source_id, slot] 数组）
                 const stageIdxInput = node.inputs?.find((input) => String(input?.name || "") === "stage_index");
                 const serializedStageLink = Array.isArray(promptNode.inputs.stage_index) ? promptNode.inputs.stage_index : null;
-                if (isRef2PrepareTarget(node)) promptNode.inputs.stage_index_from_flow = false;
-                if (isRef2PrepareTarget(node) && serializedStageLink) {
+                if (isRef2PrepareTarget(node) || isFl2PrepareTarget(node)) promptNode.inputs.stage_index_from_flow = false;
+                if ((isRef2PrepareTarget(node) || isFl2PrepareTarget(node) || isQwen2Target(node)) && serializedStageLink) {
                     const stageSource = app.graph?.getNodeById?.(Number(serializedStageLink[0]));
                     if (String(stageSource?.comfyClass || stageSource?.type || "") === FLOW_STAGE_BEGIN_CLASS) {
                         const requestedStage = Number(getWidget(stageSource, "stage_index")?.value ?? 0);
                         if (Number.isFinite(requestedStage)) {
-                            const zeroBasedStage = Math.max(0, requestedStage === 0 ? 0 : requestedStage - 1);
+                            const stageNumber = Math.max(1, Math.trunc(requestedStage));
                             // Remove flow_stage_begin from the prepare node's cache ancestry. The server-side
                             // stage scheduler updates this literal for each automatically queued stage.
-                            promptNode.inputs.stage_index = zeroBasedStage;
-                            promptNode.inputs.stage_index_from_flow = true;
-                            const boundedStage = Math.min(Math.max(0, docs.length - 1), zeroBasedStage);
-                            node.properties[STAGE_PROMPT_INDEX_PROP] = boundedStage;
-                            node.properties[PROMPT_DOC_PROP] = docs[boundedStage];
-                            setTimeout(() => { try { selectStagePrompt(node, zeroBasedStage); } catch (_) {} }, 0);
+                            promptNode.inputs.stage_index = stageNumber;
+                            if (isRef2PrepareTarget(node) || isFl2PrepareTarget(node)) promptNode.inputs.stage_index_from_flow = true;
+                            setTimeout(() => { try { selectStagePrompt(node, stageNumber - 1); } catch (_) {} }, 0);
                         }
                     }
                 }
                 const stageIdxExternallyLinked = Boolean(stageIdxInput?.link) && Boolean(serializedStageLink);
-                if (isRef2PrepareTarget(node) && !stageIdxExternallyLinked) {
-                    promptNode.inputs.stage_index = Math.max(0, Number(node.properties?.[STAGE_PROMPT_INDEX_PROP]) || 0);
+                if ((isRef2PrepareTarget(node) || isFl2PrepareTarget(node)) && !stageIdxExternallyLinked) {
+                    promptNode.inputs.stage_index = Math.max(1, (Number(node.properties?.[STAGE_PROMPT_INDEX_PROP]) || 0) + 1);
                 }
                 if (isGuideTarget(node)) {
                     if (!stageIdxExternallyLinked) {
@@ -2182,11 +2227,11 @@ function patchGraphToPrompt() {
                     }
                 }
                 if (isQwen2Target(node)) {
-                    // sum_QwenImage2 后端接收 0-based stage_index
+                    // sum_QwenImage2 与其他阶段节点统一接收 1-based stage_index；0 兼容为第一段。
                     // 把 Ref2 占位符反向替换成 Qwen 官方 <imageN> 标签，
                     // 后端 _qwen2_strip_tags 会去掉这些标签，tokenizer 通过 images 参数自动注入图片嵌入
                     if (!stageIdxExternallyLinked) {
-                        promptNode.inputs.stage_index = Math.max(0, Number(node.properties?.[STAGE_PROMPT_INDEX_PROP]) || 0);
+                        promptNode.inputs.stage_index = Math.max(1, (Number(node.properties?.[STAGE_PROMPT_INDEX_PROP]) || 0) + 1);
                     }
                     promptNode.inputs.stage_prompts = rewriteQwenTags(promptNode.inputs.stage_prompts);
                 }
@@ -2197,23 +2242,14 @@ function patchGraphToPrompt() {
                         const srcNode = app.graph?.getNodeById?.(Number(linkRef[0]));
                         const srcVal = Number(getWidget(srcNode, "stage_index")?.value ?? srcNode?.value ?? 0);
                         if (Number.isFinite(srcVal)) {
-                            const sourceIsFlowStage = String(srcNode?.comfyClass || srcNode?.type || "") === FLOW_STAGE_BEGIN_CLASS;
-                            const uiIndex = sourceIsFlowStage
-                                ? Math.max(0, srcVal === 0 ? 0 : srcVal - 1)
-                                : (isQwen2Target(node) ? Math.max(0, srcVal) : Math.max(0, srcVal - 1));
+                            const uiIndex = Math.max(0, srcVal <= 1 ? 0 : srcVal - 1);
                             setTimeout(() => { try { selectStagePrompt(node, uiIndex); } catch (_) {} }, 0);
                         }
                     }
                 }
             } else if (textLink) {
                 // sum_QwenImage2 后端 prompt 是 STRING；展开 text 节点的字符串值，否则保持 Ref2 的 [source_id, slot]
-                if (isQwen2Target(node)) {
-                    const textNode = node.graph?._nodes?.find?.((n) => Number(n.id) === Number(textLink.source_id));
-                    const textWidget = (textNode?.widgets || []).find((w) => ["text", "prompt", "string"].includes(String(w.name || "")));
-                    promptNode.inputs.prompt = String(textWidget?.value ?? "");
-                } else {
-                    promptNode.inputs.prompt = [String(textLink.source_id), Number(textLink.source_slot) || 0];
-                }
+                promptNode.inputs.prompt = [String(textLink.source_id), Number(textLink.source_slot) || 0];
             } else if (!promptIsLinked) {
                 const fallbackPrompt = buildRuntimePrompt(node, transportLinks);
                 promptNode.inputs.prompt = isQwen2Target(node) ? rewriteQwenTags(fallbackPrompt) : fallbackPrompt;
@@ -2651,6 +2687,7 @@ function scheduleMaterialRestoreRefresh(node) {
             if (delay >= 250) repairDetachedPromptEditor(node);
             normalizeLinks(node, delay >= 800);
             refreshMaterialTray(node);
+            renderEditorFromNode(node, true);
             requestMentionPreviewRefresh();
             node.setDirtyCanvas?.(true, true);
         }, delay);
@@ -2688,29 +2725,36 @@ function watchMediaSourceNode(node) {
         widget.callback = function onMediaSourceWidgetChange(value) {
             const result = originalCallback?.apply(this, arguments);
             requestMentionPreviewRefresh();
+            refreshQwenExternalTextTargets(node);
             return result;
         };
         const element = widget.inputEl || widget.element;
-        element?.addEventListener?.("change", requestMentionPreviewRefresh, true);
-        element?.addEventListener?.("input", requestMentionPreviewRefresh, true);
+        const refresh = () => {
+            requestMentionPreviewRefresh();
+            refreshQwenExternalTextTargets(node);
+        };
+        element?.addEventListener?.("change", refresh, true);
+        element?.addEventListener?.("input", refresh, true);
     }
 }
 
 function installMediaSourceNode(nodeType, nodeData) {
     const name = String(nodeData?.name || "").toLowerCase();
-    if (name !== MEDIA_RELAY_CLASS.toLowerCase() && name !== MEDIA_EDITOR_CLASS.toLowerCase() && name !== "text_minimaxh3" && !name.includes("loadimage") && !name.includes("loadvideo") && !name.includes("loadaudio")) return;
+    if (name !== MEDIA_RELAY_CLASS.toLowerCase() && name !== MEDIA_EDITOR_CLASS.toLowerCase() && name !== "text_minimaxh3" && name !== "basicin_string" && !name.includes("loadimage") && !name.includes("loadvideo") && !name.includes("loadaudio")) return;
     if (nodeType.prototype.__adGuideMediaSourceInstalled) return;
     nodeType.prototype.__adGuideMediaSourceInstalled = true;
     const originalCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function onNodeCreatedH3MediaSource() {
         const result = originalCreated?.apply(this, arguments);
         watchMediaSourceNode(this);
+        setTimeout(() => refreshQwenExternalTextTargets(this), 0);
         return result;
     };
     const originalConfigure = nodeType.prototype.onConfigure;
     nodeType.prototype.onConfigure = function onConfigureH3MediaSource(info) {
         const result = originalConfigure?.apply(this, arguments);
         watchMediaSourceNode(this);
+        refreshQwenExternalTextTargets(this);
         requestMentionPreviewRefresh();
         return result;
     };
@@ -2848,6 +2892,9 @@ function sourcePreviewUrl(node, mediaType) {
     if (!node) return "";
     if (mediaType === "audio") return "";
     if (mediaType === "image") {
+        if (String(node.comfyClass || node.type || "") === "view_bridge_image" && node.__viewBridgeSourcePreviewUrl) {
+            return node.__viewBridgeSourcePreviewUrl;
+        }
         const currentImageUrl = mediaViewUrlFromWidgets(node, ["image", "file", "filename"]);
         if (currentImageUrl) return currentImageUrl;
     }
@@ -3148,6 +3195,9 @@ function importBatchPrompts(node, link) {
     node.setDirtyCanvas?.(true, true);
     app.graph?.afterChange?.();
     app.graph?.change?.();
+    if (isRef2PrepareTarget(node) || isFl2PrepareTarget(node)) {
+        initializeFlowStageTotal(node, docs.length, true);
+    }
     if (isMediaEditorNode(node)) window.dispatchEvent(new CustomEvent(MEDIA_RELAY_EVENT, {
         detail: { nodeId: Number(node.id), autoTextStageCount: docs.length },
     }));
@@ -3813,8 +3863,20 @@ function renderEditorFromNode(node, force = false) {
     const editor = node?.__adGuideEditor;
     const widget = getWidget(node, "prompt");
     if (!editor || !widget || (document.activeElement === editor && !force)) return;
+    const externalText = qwenExternalTextValue(node);
+    const externallyControlled = externalText != null;
+    editor.contentEditable = externallyControlled ? "false" : "true";
+    editor.tabIndex = externallyControlled ? -1 : 0;
+    editor.setAttribute("aria-readonly", String(externallyControlled));
+    editor.classList.toggle("is-external-text", externallyControlled);
     const doc = node.properties?.[PROMPT_DOC_PROP];
     editor.textContent = "";
+    if (externallyControlled) {
+        appendPromptTextWithDialogueBlocks(editor, externalText, node);
+        closeMentionMenu(node);
+        closePromptTagMenu(node);
+        return;
+    }
     if (!Array.isArray(doc?.parts)) {
         appendPromptTextWithDialogueBlocks(editor, String(widget.value || ""), node);
         return;
@@ -3862,7 +3924,7 @@ function renderEditorFromNode(node, force = false) {
 function syncPromptFromEditor(node, markDirty = true) {
     const editor = node?.__adGuideEditor;
     const widget = getWidget(node, "prompt");
-    if (!editor || !widget || node.__adGuideEditorSyncing) return;
+    if (!editor || !widget || node.__adGuideEditorSyncing || qwenExternalTextLink(node)) return;
     node.__adGuideEditorSyncing = true;
     try {
         const doc = serializeEditorDoc(editor);
@@ -4533,7 +4595,7 @@ function updateStagePromptBar(node) {
             if (motion._state) motion._state.value = motion.value;
         }
     }
-    if (isGuideTarget(node)) {
+    if (isGuideTarget(node) || isQwen2Target(node)) {
         const stageIndex = getWidget(node, "stage_index");
         if (stageIndex) {
             stageIndex.value = index + 1;
@@ -4588,20 +4650,22 @@ function installStageMotionWidgetSync(node) {
 }
 
 function installGuideStageIndexSync(node) {
-    if (!isGuideTarget(node)) return;
+    if (!isGuideTarget(node) && !isQwen2Target(node)) return;
     const widget = getWidget(node, "stage_index");
     if (!widget || widget.__adGuideStageIndexSync) return;
     widget.__adGuideStageIndexSync = true;
     const original = widget.callback;
     widget.callback = function guideStageIndexChanged(value) {
         const result = original?.apply(this, arguments);
-        selectStagePrompt(node, Math.max(0, Number(value) - 1));
+        const stageNumber = Number(value);
+        const index = stageNumber <= 1 ? 0 : stageNumber - 1;
+        selectStagePrompt(node, Math.max(0, index));
         return result;
     };
 }
 
-function selectStagePrompt(node, nextIndex) {
-    syncPromptFromEditor(node, false);
+function selectStagePrompt(node, nextIndex, syncCurrent = true) {
+    if (syncCurrent) syncPromptFromEditor(node, false);
     const docs = ensureStagePromptDocs(node);
     const index = Math.max(0, Math.min(docs.length - 1, Number(nextIndex) || 0));
     node.properties[STAGE_PROMPT_INDEX_PROP] = index;
@@ -4651,7 +4715,7 @@ function deleteStagePrompt(node) {
     const index = Number(node.properties[STAGE_PROMPT_INDEX_PROP]) || 0;
     docs.splice(index, 1);
     node.properties[STAGE_PROMPT_DOCS_PROP] = docs;
-    selectStagePrompt(node, Math.min(index, docs.length - 1));
+    selectStagePrompt(node, Math.min(index, docs.length - 1), false);
 }
 
 function createStagePromptBar(node) {
@@ -6941,6 +7005,7 @@ function qwen2WidgetValuesArray(values) {
         values.resolution,
         values.width,
         values.height,
+        values.prompt_enhance,
     ];
 }
 
@@ -6953,6 +7018,7 @@ function currentQwen2WidgetValues(node) {
         resolution: Number(getWidgetValue(node, "resolution", 1024)),
         width: Number(getWidgetValue(node, "width", 1024)),
         height: Number(getWidgetValue(node, "height", 1024)),
+        prompt_enhance: Boolean(getWidgetValue(node, "prompt_enhance", false)),
     };
 }
 
@@ -6963,14 +7029,15 @@ function repairQwen2ConfiguredWidgetValues(node, info) {
         ? info.properties[PROMPT_DOC_PROP].text
         : null;
     const finiteOr = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
-    const validCurrentLayout = raw.length >= 7
+    const validCurrentLayout = raw.length >= 8
         && typeof raw[0] === "string"
         && typeof raw[1] === "string"
         && typeof raw[2] === "string"
         && typeof raw[3] === "boolean"
         && typeof raw[4] === "number" && Number.isFinite(raw[4])
         && typeof raw[5] === "number" && Number.isFinite(raw[5])
-        && typeof raw[6] === "number" && Number.isFinite(raw[6]);
+        && typeof raw[6] === "number" && Number.isFinite(raw[6])
+        && typeof raw[7] === "boolean";
     // v144 使用 output_size BOOLEAN：
     // [prompt, stage_prompts, negative_prompt, ref_size_mode, resolution,
     //  output_size, width, height]。新版本丢弃 output_size，保留宽高。
@@ -6998,7 +7065,7 @@ function repairQwen2ConfiguredWidgetValues(node, info) {
         source = {
             prompt: raw[0], stage_prompts: raw[1], negative_prompt: raw[2],
             ref_size_mode: raw[3], resolution: raw[4],
-            width: raw[5], height: raw[6],
+            width: raw[5], height: raw[6], prompt_enhance: raw[7],
         };
     } else if (previousBooleanLayout) {
         source = {
@@ -7025,6 +7092,7 @@ function repairQwen2ConfiguredWidgetValues(node, info) {
         resolution: finiteOr(source.resolution, 1024),
         width: finiteOr(source.width, 1024),
         height: finiteOr(source.height, 1024),
+        prompt_enhance: source.prompt_enhance === true,
     };
     for (const [name, value] of Object.entries(values)) setConfiguredWidgetValue(node, name, value);
     node.properties ||= {};
@@ -7126,7 +7194,7 @@ function normalizeMulOutputs(node) {
     if (!isMulTarget(node) && !isRef2RefineTarget(node)) return false;
     const desired = isRef2RefineTarget(node)
         ? [["context", "RUN_CONTEXT"], ["refined_latent", "LATENT"], ["segment_video", "VIDEO"], ["merged_video", "VIDEO"], ["segment_image", "IMAGE"]]
-        : String(node?.comfyClass || node?.type || node?.constructor?.nodeData?.name || "") === REF2_PREPARE_NODE_CLASS
+        : (isRef2PrepareTarget(node) || isFl2PrepareTarget(node))
             ? [["context", "RUN_CONTEXT"], ["model", "MODEL"], ["length", "INT"], ["text", "STRING"]]
             : [["context", "RUN_CONTEXT"], ["segment_video", "VIDEO"], ["merged_video", "VIDEO"], ["text", "STRING"]];
     const current = [...(node.outputs || [])];
@@ -7724,7 +7792,7 @@ function installMediaEditorNode(nodeType, nodeData) {
 }
 
 function installNode(nodeType, nodeData) {
-    if (![NODE_CLASS, REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, "sum_QwenImage2"].includes(nodeData?.name)) return;
+    if (![NODE_CLASS, REF2_GENERATE_NODE_CLASS, REF2_PREPARE_NODE_CLASS, FL2_GENERATE_NODE_CLASS, FL2_PREPARE_NODE_CLASS, "sum_QwenImage2"].includes(nodeData?.name)) return;
     pruneTransportInputs(nodeData);
     if (Object.prototype.hasOwnProperty.call(nodeType.prototype, "__adGuideEasyNodeInstalledUI41")) return;
     nodeType.prototype.__adGuideEasyNodeInstalledUI41 = true;
@@ -7771,6 +7839,7 @@ function installNode(nodeType, nodeData) {
         if (isMulTarget(this)) {
             normalizeMulOutputs(this);
             if (isFl2GenerateTarget(this)) repairFl2GenerateConfiguredWidgetValues(this, info);
+            else if (isFl2PrepareTarget(this)) repairConfiguredWidgetValues(this, info);
             else repairMulConfiguredWidgetValues(this, info);
         } else if (isQwen2Target(this)) {
             repairQwen2ConfiguredWidgetValues(this, info);
@@ -8209,6 +8278,7 @@ function install() {
     patchEditorKeyHandling();
     installNativeThemeWatcher();
     api.addEventListener("node-feedback", syncStagePromptFromFlowFeedback);
+    window.addEventListener("apt-media-source-preview-change", requestMentionPreviewRefresh);
     window.addEventListener(MEDIA_RELAY_EVENT, (event) => {
         requestMentionPreviewRefresh();
         if (event?.detail?.thumbnailUrl) {
@@ -8229,7 +8299,7 @@ function install() {
         for (const target of app.graph?._nodes || []) {
             if (!isTarget(target) || !mediaRelayIds(target).some((value) => Number(value) === relayId)) continue;
             syncMediaRelayToTarget(target, relayNode, Boolean(event?.detail?.removed));
-            if (isRef2PrepareTarget(target) && Number.isInteger(autoTextStageCount) && autoTextStageCount > 0) {
+            if ((isRef2PrepareTarget(target) || isFl2PrepareTarget(target)) && Number.isInteger(autoTextStageCount) && autoTextStageCount > 0) {
                 initializeFlowStageTotal(target, autoTextStageCount, true);
             }
         }
@@ -8309,6 +8379,9 @@ function install() {
         color: var(--ad-guide-native-widget-text, var(--input-text, #ddd)); caret-color: var(--ad-guide-native-widget-text, var(--input-text, #ddd));
         font-family: Consolas, "Courier New", monospace; font-size: var(--ad-guide-prompt-text-size); font-weight: 400;
         font-style: normal; line-height: var(--ad-guide-native-widget-line-height, normal); letter-spacing: 0;
+      }
+      .ad-guide-prompt-editor.is-external-text {
+        opacity: .55; cursor: not-allowed !important; caret-color: transparent; user-select: text;
       }
       .ad-guide-prompt-editor :not(.ad-guide-mention-chip):not(.ad-guide-mention-chip *):not(.ad-guide-dialogue-block):not(.ad-guide-dialogue-block *) {
         font-family: Consolas, "Courier New", monospace !important; font-size: var(--ad-guide-prompt-text-size) !important;

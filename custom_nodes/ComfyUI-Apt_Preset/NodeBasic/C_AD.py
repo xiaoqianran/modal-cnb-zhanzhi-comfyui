@@ -1035,11 +1035,11 @@ from fractions import Fraction
 from comfy_api.latest import io, Input, InputImpl, Types
 from comfy_extras.nodes_audio import load as load_audio
 from comfy_execution.graph import ExecutionBlocker
-from comfy_extras.nodes_custom_sampler import CFGGuider, KSamplerSelect, RandomNoise, SplitSigmas
+from comfy_extras.nodes_custom_sampler import BasicGuider, KSamplerSelect, RandomNoise, SplitSigmas
 from comfy_extras.nodes_lt import LTXVSeparateAVLatent
 from nodes import VAEDecode
 from ..office_unit import BasicScheduler
-from ..NodeChx.main_nodes import basic_Ksampler_custom, AD_CreateVideo, _apt_default_negative, _apt_default_positive, _apt_replace_av_video_latent, _apt_second_pass_positive
+from ..NodeChx.main_nodes import basic_Ksampler_custom, AD_CreateVideo, _apt_default_positive, _apt_replace_av_video_latent, _apt_second_pass_positive
 from .C_latent import latent_minimaxH3_scale
 
 
@@ -4149,14 +4149,10 @@ class _AD_MinMaxBase:
             active_context = new_context(
                 context, model=_ad_install_native_redraw(original_model, latent, sigmas)
             )
-        guider = None
+        clip = active_context.get("clip")
+        positive = _apt_default_positive(active_context.get("positive"), clip)
+        guider = BasicGuider().get_guider(active_context.get("model"), positive)[0]
         if sampling_policy is not None:
-            clip = active_context.get("clip")
-            positive = _apt_default_positive(active_context.get("positive"), clip)
-            negative = _apt_default_negative(active_context.get("negative"), clip)
-            guider = CFGGuider().get_guider(
-                active_context.get("model"), positive, negative, active_context.get("cfg")
-            )[0]
             guider = _ad_h3_wrap_guider(guider, sampling_policy, latent or active_context.get("latent"))
         with _ad_h3_vae_tile_scope(active_context.get("vae"), vae_tile):
             result = basic_Ksampler_custom().sample(
@@ -4194,7 +4190,6 @@ class _AD_MinMaxBase:
         model = active_context.get("model")
         clip = active_context.get("clip")
         positive = _apt_default_positive(active_context.get("positive"), clip)
-        negative = _apt_default_negative(active_context.get("negative"), clip)
         context_latent = active_context.get("latent")
         if latent is None:
             latent = context_latent
@@ -4209,9 +4204,7 @@ class _AD_MinMaxBase:
             )[0]
         sampler = KSamplerSelect().get_sampler(active_context.get("sampler"))[0]
         noise = RandomNoise().get_noise(int(seed))[0]
-        guider = CFGGuider().get_guider(
-            model, positive, negative, active_context.get("cfg")
-        )[0]
+        guider = BasicGuider().get_guider(model, positive)[0]
         if sampling_policy is not None:
             guider = _ad_h3_wrap_guider(guider, sampling_policy, latent)
 
@@ -4266,7 +4259,6 @@ class _AD_MinMaxBase:
             latent=denoised,
             model=model,
             positive=positive,
-            negative=negative,
         )
         if not decode_images:
             sampled_context["images"] = None
@@ -4283,7 +4275,6 @@ class _AD_MinMaxBase:
         model = original_model
         clip = context.get("clip")
         positive = _apt_default_positive(context.get("positive"), clip)
-        negative = _apt_default_negative(context.get("negative"), clip)
         if sigmas is None:
             sigmas = BasicScheduler().get_sigmas(
                 model,
@@ -4292,9 +4283,7 @@ class _AD_MinMaxBase:
                 float(denoise),
             )[0]
         model = _ad_install_native_redraw(model, latent, sigmas)
-        guider = CFGGuider().get_guider(
-            model, positive, negative, context.get("cfg")
-        )[0]
+        guider = BasicGuider().get_guider(model, positive)[0]
         if sampling_policy is not None:
             guider = _ad_h3_wrap_guider(guider, sampling_policy, latent)
         noise = RandomNoise().get_noise(int(seed))[0]
@@ -4317,7 +4306,6 @@ class _AD_MinMaxBase:
             latent=denoised_latent,
             model=model,
             positive=positive,
-            negative=negative,
         )
         if not decode_images:
             sampled_context["images"] = None
@@ -4600,7 +4588,7 @@ def _ad_stage_info(stage_info):
     if isinstance(stage_info, int):
         # flow_stage_begin 的 INT 输出是 1-based（UI 显示口径），转成 0-based 内部索引。
         # run_id/total 不由滚动索引提供：run_id 留空，total 由各调用方按 prompt 数补全。
-        return None, int(stage_info), None
+        return None, max(0, int(stage_info) - 1), None
     if not isinstance(stage_info, collections.abc.Mapping):
         raise TypeError("AD MiniMax H3: stage_info must come from flow_stage_begin")
     if int(stage_info.get("version", -1)) != _AD_STAGE_INFO_VERSION:
@@ -4749,13 +4737,28 @@ def _ad_stage_output_prompts(stage_prompts, prompt, stage_info):
     return output
 
 
-def _ad_segmented_ref2_text(stage_prompts, prompt, stage_info, values):
+def _ad_segmented_ref2_text(stage_prompts, prompt, single_stage_time, motion_context, stage_info, values):
+    entries = _ad_stage_entries(stage_prompts, prompt, single_stage_time)
+    if not entries:
+        entries = [{
+            "prompt": str(prompt or ""),
+            "single_stage_time": _ad_stage_time(single_stage_time),
+        }]
+    total = len(entries) if stage_info is None else (_ad_stage_info(stage_info)[2] or len(entries))
     parts = []
-    for stage_index, stage_prompt in enumerate(
-        _ad_stage_output_prompts(stage_prompts, prompt, stage_info), start=1
-    ):
-        parts.append(f"#segment{stage_index}---------")
-        parts.append(_ad_preview_prompt(stage_prompt, values))
+    for stage_index in range(total):
+        entry = entries[min(stage_index, len(entries) - 1)]
+        stage_motion = entry.get("motion_context", motion_context)
+        _ad_ref2_motion_context_plan(stage_motion)
+        parts.append(
+            f"【Segment {stage_index + 1}】"
+            f"【Duration {entry['single_stage_time']:.1f}s】"
+            f"【Motion {stage_motion}】"
+        )
+        parts.append(_ad_preview_prompt(entry["prompt"], values))
+        parts.append("")
+    if parts:
+        parts.pop()
     return "\n".join(parts)
 
 
@@ -6009,7 +6012,9 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
             media_values["media"] = stage_data
         if context is None:
             blocker = ExecutionBlocker(None)
-            text = _ad_segmented_ref2_text(stage_prompts, prompt, stage_info, media_values)
+            text = _ad_segmented_ref2_text(
+                stage_prompts, prompt, single_stage_time, motion_context, stage_info, media_values
+            )
             return blocker, blocker, blocker, text
         selected_prompt, selected_kwargs, references = _ad_select_prompt_media(
             selected_prompt,
@@ -6023,7 +6028,7 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
         missing = [name for name, value in (("clip", clip), ("vae", vae)) if value is None]
         if missing:
             raise ValueError(f"AD_MinMax_Ref2_generate context is missing: {', '.join(missing)}")
-        negative = _apt_default_negative(context.get("negative"), clip)
+        negative = context.get("negative")
 
         items = self._collect_media(selected_kwargs)
         selected_context_latents = [item[2] for item in items if item[1] == "latent"]
@@ -6158,7 +6163,7 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
             latent = dict(latent)
             latent["apt_h3_native_masked_export_frames"] = motion_context_frames
         output_text = _ad_segmented_ref2_text(
-            stage_prompts, prompt, stage_info, media_values
+            stage_prompts, prompt, single_stage_time, motion_context, stage_info, media_values
         )
         sample_state = {
             "has_context_latent": bool(has_context_latent),
@@ -6456,7 +6461,7 @@ class AD_MinMax_Ref2(AD_MinMax_Ref2_generate):
         stage_index_connected = isinstance(prompt_inputs.get("stage_index"), (list, tuple))
         standalone_stage_test = bool(
             stage_index is not None
-            and int(stage_index) > 0
+            and _ad_stage_info(int(stage_index))[1] > 0
             and not stage_index_connected
             and not stage_index_from_flow
         )
@@ -6571,6 +6576,9 @@ class AD_MinMax_Ref2_generate_refine(_AD_MinMaxBase):
     STAGE_DATA_KEY = "stage_data_2"
     BRIDGE_CHANNEL = "data2"
     NODE_NAME = "AD_MinMax_Ref2_generate_refine_废弃"
+
+    def __init__(self):
+        self._latent_scaler = latent_minimaxH3_scale()
 
     LATENT_TILE_PRESETS = _AD_H3_LATENT_TILE_PRESETS
 
@@ -6735,7 +6743,7 @@ class AD_MinMax_Ref2_generate_refine(_AD_MinMaxBase):
                 ).result
             else:
                 low_sigmas = sigmas
-            work = latent_minimaxH3_scale().execute(
+            work = self._latent_scaler.execute(
                 first_latent, latent_model, latent_scale
             )[0]
             work = apply_continuation(work)
@@ -7035,10 +7043,9 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
             list(cls.LATENT_TILE_CHOICES),
             {"default": "None",
              "tooltip": (
-                 "None：不分块。百万像素以下的 H3 潜空间采样分块。质量优先档会按画幅和长边自动选择 "
-                 "192-320 像素重叠并启用中央桥接；慢速档使用 256 重叠和中央桥接，接缝最好；"
-                 "中速档使用 192 重叠，接缝表现中等；快速档使用 128 重叠，速度更快但接缝较差。"
-                 "6|64 和 8|64 仅用于非常省显存/极限省显存。"
+                 "None：不分块。质量优先档会按画幅和长边自动选择 "
+                 "注意：sample要用euler效果最好"
+
              )},
         )
         required["create_video"] = (
@@ -7046,7 +7053,7 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
             {
                 "default": True,
                 "label": "Create Video",
-                "tooltip": "When disabled, only sample latent; skip image/audio decoding and video creation.",
+                "tooltip": "关闭后仅输出latent，不输出视频",
             },
         )
         return {
@@ -7496,6 +7503,7 @@ class _AD_MinMax_FL2Stage(_AD_MinMax_FL2Base):
                 context=None, model=None, stage_info=None, stage_data=None,
                 _compensate_context=False, **kwargs):
         node_name = self.__class__.__name__
+        requested_visible_length = kwargs.pop("_visible_length", None)
         continuation_method = kwargs.pop("continuation_method", "guide")
         if continuation_method not in ("native_masked_av", "guide"):
             raise ValueError(f"{node_name}: invalid continuation_method: {continuation_method}")
@@ -7511,7 +7519,7 @@ class _AD_MinMax_FL2Stage(_AD_MinMax_FL2Base):
             _run_id, stage_index, _total = _ad_stage_info(stage_info)
         selected_prompt, _references = _ad_stage_prompt_plan(stage_prompts, prompt, stage_info)
 
-        if stage_data is None and stage_info is not None and stage_index > 0:
+        if stage_data is None and isinstance(stage_info, collections.abc.Mapping) and stage_index > 0:
             stage_data = stage_info.get("stage_data")
 
         media_values = dict(kwargs)
@@ -7561,7 +7569,11 @@ class _AD_MinMax_FL2Stage(_AD_MinMax_FL2Base):
                 )
             image_sources.insert(0, previous_last)
 
-        visible_length = _ad_h3_frame_count(length)
+        visible_length = (
+            _ad_h3_frame_count(length)
+            if requested_visible_length is None
+            else max(1, int(requested_visible_length))
+        )
         sample_length = (
             _ad_h3_frame_count(visible_length + motion_context_frames)
             if _compensate_context and has_context_latent
@@ -7776,6 +7788,107 @@ class AD_MinMax_FL2_generate(_AD_MinMax_FL2Stage):
         if stage_info is not None:
             _stage_save_checkpoint_data(stage_info, denoise_latent1, "data1")
         return first_pass_context, video, merged_video, text
+
+
+class AD_MinMax_FL2(_AD_MinMax_FL2Stage):
+    """Prepare FL2 conditioning and latent state without sampling."""
+
+    RETURN_TYPES = ("RUN_CONTEXT", "MODEL", "INT", "STRING")
+    RETURN_NAMES = ("context", "model", "length", "text")
+    CATEGORY = "Apt_Preset/AD"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inherited = _AD_MinMax_FL2Stage.INPUT_TYPES()
+        required = dict(inherited["required"])
+        required.pop("length", None)
+        required.pop("motion_context", None)
+        stage_prompts = required.pop("stage_prompts")
+        required["single_stage_time"] = ("FLOAT", {
+            "default": _AD_STAGE_TIME_DEFAULT,
+            "min": _AD_STAGE_TIME_MIN,
+            "max": _AD_STAGE_TIME_MAX,
+            "step": 0.1,
+            "round": 0.1,
+        })
+        required["stage_prompts"] = stage_prompts
+        inherited_optional = dict(inherited["optional"])
+        inherited_optional.pop("stage_info", None)
+        optional = {}
+        for name, definition in inherited_optional.items():
+            optional[name] = definition
+            if name == "model":
+                optional["stage_index"] = ("INT", {"forceInput": True})
+        optional["stage_index_from_flow"] = ("BOOLEAN", {"default": False})
+        return {
+            "required": required,
+            "optional": optional,
+            "hidden": {"unique_id": "UNIQUE_ID", "workflow_prompt": "PROMPT"},
+        }
+
+    def check_lazy_status(self, stage_prompts, prompt="", stage_index=None, **kwargs):
+        return super().check_lazy_status(
+            stage_prompts, prompt=prompt, stage_info=stage_index, **kwargs
+        )
+
+    def execute(self, prompt, width, height, single_stage_time, stage_prompts,
+                context=None, model=None, stage_index=None, stage_data=None,
+                stage_index_from_flow=False, unique_id=None, workflow_prompt=None, **kwargs):
+        stage_info = stage_index
+        stage_time, segment_start_seconds, _total_seconds = _ad_stage_time_plan(
+            stage_prompts, prompt, single_stage_time, stage_info
+        )
+        visible_start = round(segment_start_seconds * float(_H3_FPS))
+        visible_end = round((segment_start_seconds + stage_time) * float(_H3_FPS))
+        visible_length = max(1, visible_end - visible_start)
+        stage_motion = _ad_stage_motion_context(
+            stage_prompts, prompt, "guide_39", stage_info
+        )
+        motion_frames, continuation_method = _ad_ref2_motion_context_plan(stage_motion)
+        motion_context = "None" if motion_frames == 0 else str(motion_frames)
+        continuation_method = (
+            "native_masked_av" if continuation_method == "native_redraw_av" else "guide"
+        )
+        prepared_context, _trim_frames, text = super().execute(
+            prompt, width, height, visible_length, stage_prompts, motion_context,
+            context=context, model=model, stage_info=stage_info, stage_data=stage_data,
+            _compensate_context=True, _visible_length=visible_length,
+            continuation_method=continuation_method, **kwargs,
+        )
+        if not isinstance(prepared_context, collections.abc.Mapping):
+            blocker = ExecutionBlocker(None)
+            return prepared_context, blocker, blocker, text
+
+        entries = _ad_stage_entries(stage_prompts, prompt, single_stage_time)
+        total = len(entries) or 1
+        current_stage = 0 if stage_info is None else _ad_stage_info(stage_info)[1]
+        has_context_latent = bool(prepared_context.get("apt_h3_has_context_latent"))
+        sample_length = _ad_h3_frame_count(
+            visible_length + (motion_frames if has_context_latent else 0)
+        )
+        latent = dict(prepared_context["latent"])
+        latent["apt_h3_ref2_sample_state"] = {
+            "has_context_latent": has_context_latent,
+            "visible_length": int(visible_length),
+            "sample_length": int(sample_length),
+            "motion_context_enabled": motion_frames > 0,
+            "motion_context_frames": int(motion_frames),
+            "continuation_method": continuation_method,
+            "deferred_context": False,
+            "stage_info": None,
+            "run_id": None,
+            "stage_index": int(current_stage),
+            "stage_total": int(total),
+            "selected_prompt": prepared_context.get("pos", ""),
+            "sample_text": text,
+            "output_text": text,
+            "reference_media_mode": "default",
+            "audio_reference_ids": (),
+            "audio_timeline_offset": 0.0,
+        }
+        prepared_context = new_context(prepared_context, latent=latent)
+        prepared_context["apt_h3_one_pass_sampled"] = False
+        return prepared_context, prepared_context.get("model"), int(sample_length), text
 
 
 #endregion----------MiniMax H3 Guide---------------

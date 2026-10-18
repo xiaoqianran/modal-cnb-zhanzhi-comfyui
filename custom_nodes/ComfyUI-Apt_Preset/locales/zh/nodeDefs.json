@@ -394,6 +394,42 @@
       "height": { "name": "高度" }
     }
   },
+  "UC_ksampler_custom": {
+    "display_name": "UC_自定义采样器",
+    "inputs": {
+      "context": { "name": "context" },
+      "seed": { "name": "随机种子" },
+      "denoise": { "name": "降噪" },
+      "VAE_Decode": { "name": "VAE_Decode" },
+      "tile_size": { "name": "分块预设" },
+      "sample_parameters": { "name": "采样参数来源" },
+      "steps": { "name": "步数" },
+      "cfg": { "name": "CFG" },
+      "sampler_name": { "name": "采样器" },
+      "scheduler": { "name": "调度器" },
+      "latent_size": { "name": "latent尺寸来源" },
+      "ratio_selected": { "name": "比例预设" },
+      "batch_size": { "name": "批次数量" },
+      "width": { "name": "宽度" },
+      "height": { "name": "高度" },
+      "model": { "name": "模型" },
+      "positive": { "name": "正向条件" },
+      "negative": { "name": "负向条件" },
+      "noise": { "name": "噪声" },
+      "guider": { "name": "引导器" },
+      "sampler": { "name": "采样器对象" },
+      "sigmas": { "name": "西格玛" },
+      "latent": { "name": "latent" },
+      "image": { "name": "图像" }
+    },
+    "outputs": {
+      "0": { "name": "context" },
+      "1": { "name": "latent" },
+      "2": { "name": "noise_latent" },
+      "3": { "name": "图像" },
+      "4": { "name": "音频" }
+    }
+  },
   "UC_Ksampler_refine": {
     "display_name": "UC_高清修复采样",
     "inputs": {
@@ -4333,27 +4369,30 @@
     },
     "outputs": {
       "0": {
-        "name": "画布"
+        "name": "PS预设包"
       },
       "1": {
-        "name": "遮罩"
+        "name": "画布"
       },
       "2": {
-        "name": "滑块"
+        "name": "遮罩"
       },
       "3": {
-        "name": "随机种子"
+        "name": "滑块"
       },
       "4": {
-        "name": "正向提示词"
+        "name": "随机种子"
       },
       "5": {
-        "name": "负向提示词"
+        "name": "正向提示词"
       },
       "6": {
-        "name": "宽"
+        "name": "负向提示词"
       },
       "7": {
+        "name": "宽"
+      },
+      "8": {
         "name": "高"
       }
     }
@@ -6789,6 +6828,36 @@
     }
   },
 
+
+
+  "color_transferColor": {
+    "display_name": "color_transferColor",
+    "inputs": {
+      "ref_img": {
+        "name": "参考图像"
+      },
+      "ref_mask": {
+        "name": "参考图遮罩"
+      },
+      "target_image": {
+        "name": "目标图像"
+      },
+      "method": {
+        "name": "配色方案"
+      },
+      "strength": {
+        "name": "强度"
+      },
+      "target_mask": {
+        "name": "目标图遮罩"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图像"
+      }
+    }
+  },
 
 
   "Image_Detail_HL_frequencye_visual": {
@@ -12830,6 +12899,9 @@
         "resolution": {
             "name": "基准分辨率"
         },
+        "prompt_enhance": {
+            "name": "提示词增强"
+        },
         "output_size": {
             "name": "输出尺寸"
         }
@@ -12839,6 +12911,47 @@
       
     }
 },
+
+
+
+
+"View_video_combine": {
+    "display_name": "View_视频合并",
+    "inputs": {
+      "frame_rate": {
+        "name": "帧率"
+      },
+      "filename_prefix": {
+        "name": "文件名前缀"
+      },
+      "format": {
+        "name": "格式"
+      },
+      "save_output": {
+        "name": "保存输出"
+      },
+      "video": {
+        "name": "视频"
+      },
+      "images": {
+        "name": "图像"
+      },
+      "audio": {
+        "name": "音频"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "视频"
+      },
+      "1": {
+        "name": "文件名称"
+      }
+    }
+  },
+
+
+
 
   "csv_write_data": {
     "display_name": "CSV_写入数据",

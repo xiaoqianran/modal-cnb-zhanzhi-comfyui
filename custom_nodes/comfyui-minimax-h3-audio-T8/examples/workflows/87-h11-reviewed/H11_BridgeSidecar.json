@@ -1,0 +1,224 @@
+{
+  "id": "3bba14ea-3c9a-445b-a84b-d797232a91a8",
+  "revision": 0,
+  "last_node_id": 3,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MiniMaxH3SemanticBridgeSidecarPresetEXPT8",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        390,
+        256
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_name",
+          "name": "model_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "model_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sidecar_path",
+          "name": "sidecar_path",
+          "type": "STRING",
+          "widget": {
+            "name": "sidecar_path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "confirm_adopt",
+          "name": "confirm_adopt",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "confirm_adopt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "device",
+          "name": "device",
+          "type": "COMBO",
+          "widget": {
+            "name": "device"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "semantic_bridge",
+          "name": "semantic_bridge",
+          "type": "T8_SEMANTIC_BRIDGE",
+          "links": null
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SemanticBridgeSidecarPresetEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "t8_compat/wushu_bridge_wushu_v1.safetensors",
+        "",
+        false,
+        "cpu"
+      ],
+      "widgets_values_named": {
+        "model_name": "t8_compat/wushu_bridge_wushu_v1.safetensors",
+        "sidecar_path": "",
+        "confirm_adopt": false,
+        "device": "cpu"
+      }
+    },
+    {
+      "id": 2,
+      "type": "MiniMaxH3SemanticBridgeSidecarPresetEXPT8",
+      "pos": [
+        0,
+        300
+      ],
+      "size": [
+        390,
+        256
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_name",
+          "name": "model_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "model_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sidecar_path",
+          "name": "sidecar_path",
+          "type": "STRING",
+          "widget": {
+            "name": "sidecar_path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "confirm_adopt",
+          "name": "confirm_adopt",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "confirm_adopt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "device",
+          "name": "device",
+          "type": "COMBO",
+          "widget": {
+            "name": "device"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "semantic_bridge",
+          "name": "semantic_bridge",
+          "type": "T8_SEMANTIC_BRIDGE",
+          "links": null
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SemanticBridgeSidecarPresetEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "t8_compat/wushu_bridge_wushu_v1.safetensors",
+        "",
+        true,
+        "cpu"
+      ],
+      "widgets_values_named": {
+        "model_name": "t8_compat/wushu_bridge_wushu_v1.safetensors",
+        "sidecar_path": "",
+        "confirm_adopt": true,
+        "device": "cpu"
+      }
+    },
+    {
+      "id": 3,
+      "type": "MarkdownNote",
+      "pos": [
+        0,
+        -300
+      ],
+      "size": [
+        1000,
+        250
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "# H11 · 人工审核通过的来源示例\n\n先选择自己准确桥权重和对应inference_settings.json。sidecar_path留空只查所选权重同目录。本图并排false/true明确比较，true是该分支显式选择，不是节点默认值；没有Apply或采样。本次开发者Wushu说明fixture只验证传输与采用，不是新训练效果；完整SHA/内嵌契约优先。\n\n2026-10-12实际人审r7通过。仅本例媒体/接口范围，不保证所有模型、双采阶段、长窗或硬件；资源路径适配没有重新采样。原种子、尺寸、步数、时钟、音轨与全部边保持；旧工作流不迁移。详见本目录README。"
+      ],
+      "widgets_values_named": {
+        "text": "# H11 · 人工审核通过的来源示例\n\n先选择自己准确桥权重和对应inference_settings.json。sidecar_path留空只查所选权重同目录。本图并排false/true明确比较，true是该分支显式选择，不是节点默认值；没有Apply或采样。本次开发者Wushu说明fixture只验证传输与采用，不是新训练效果；完整SHA/内嵌契约优先。\n\n2026-10-12实际人审r7通过。仅本例媒体/接口范围，不保证所有模型、双采阶段、长窗或硬件；资源路径适配没有重新采样。原种子、尺寸、步数、时钟、音轨与全部边保持；旧工作流不迁移。详见本目录README。"
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        120,
+        120
+      ]
+    },
+    "workflow_title": "H11_BridgeSidecar · reviewed source",
+    "h11_reviewed_source": {
+      "review_id": "474d1311024ffa56ab50e404af7f7808f14ddc7e8e1d861b5766da35ef8a48eb",
+      "revision": 7,
+      "case": "B1",
+      "original_saved_sha256": "812e42e268035351d3b71ac0ef177db95ff3d9925de92145790f2cbbf5d84afc",
+      "accepted_media_sha256": [],
+      "resource_adaptations_reexecuted": false,
+      "automatic_adoption": false,
+      "scope": "specific_accepted_media_or_interface_NOT_all_models_or_stages"
+    }
+  },
+  "version": 0.4
+}

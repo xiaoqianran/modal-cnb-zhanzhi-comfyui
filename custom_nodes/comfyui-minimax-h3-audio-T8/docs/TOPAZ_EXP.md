@@ -1,5 +1,24 @@
 # 正式 Topaz 高清后处理（开发候选）
 
+## v1.98.2：解码崩溃与多显卡监控修复
+
+部分官方FFmpeg构建没有H.264／HEVC软件解码器，默认QSV在无Intel核显机器上可能崩溃。
+节点现在在自有worker内读取解码器清单，软件解码器存在时优先保留，否则显式选择CUVID；
+该选择覆盖视频／音频探测、增强／插帧输入、PCM与最终严格解码。只有明确codec-ID不匹配
+才允许其他编码沿用默认路径；超时、损坏、硬件错误或崩溃不自动重试、下载或转码。
+Main10按完整解码帧格式判定位深，混合格式、HDR、VFR和音画审计仍严格拒绝。
+
+Topaz不再误用DLSS的单显卡准入检查。`gpu_device_index`保留原含义及默认0，
+资源记录观察所选NVIDIA物理序号（nvidia-smi／NVML）及UUID；双NVIDIA模拟测试覆盖0／1。
+混合厂商机器若Topaz导出命令的GPU编号与NVML不同，需先核对设备映射，不宣称自动识别。
+DLSS自身的原单卡门禁不变；不要求禁用第二块显卡，也不停止其他ComfyUI。
+
+修复参考并感谢[wonkwq的诊断和补丁](https://github.com/T8mars/comfyui-minimax-h3-audio-T8/issues/30)，
+以及[#23多显卡反馈](https://github.com/T8mars/comfyui-minimax-h3-audio-T8/issues/23)。
+本次117项定向CPU回归通过；本机官方程序对既有72帧H.264的software／CUVID与FFV1严格解码通过，
+H.264两路音频packet／PCM一致。不代表新增完整增强画质、所有Topaz版本、实际双显卡或插帧GPU验收。
+时间轴规整PR #29另有VFR误判等风险，尚未合并，不靠改时序绕过解码问题。
+
 > **2026-09-20 最新资格：** 本机正式 `iris-3` 已对 Meridian 73 帧、864×1184、24fps 输入完成真实
 > `tvai_up` 2×运行，输出 1728×2368，GPU 利用率最高记录 99%，原双声道 32kHz 音频包及解码 PCM
 > 保持一致，用户实际播放确认没有问题。同时兼容新版官方 TensorRT 定义中的 `[C]`／`[R]` 占位符。

@@ -240,14 +240,14 @@ class Unpack_photoshop:
             "optional": {}
         }
 
-    RETURN_TYPES = ("IMAGE", "MASK", "FLOAT", "INT", "STRING", "STRING", "INT", "INT",)
-    RETURN_NAMES = ("Canvas", "Mask", "Slider", "Seed", "pos", "neg", "W", "H",)
+    RETURN_TYPES = ("FPIPE2", "IMAGE", "MASK", "FLOAT", "INT", "STRING", "STRING", "INT", "INT",)
+    RETURN_NAMES = ("ps_pack", "Canvas", "Mask", "Slider", "Seed", "pos", "neg", "W", "H",)
     FUNCTION = "unpack"
     CATEGORY = "Apt_Preset/stack"
 
     def unpack(self, ps_pack):
         Canvas, Mask, Slider, Seed, pos, neg, W, H = ps_pack
-        return ( Canvas, Mask, Slider, Seed, pos, neg, W, H )
+        return (ps_pack, Canvas, Mask, Slider, Seed, pos, neg, W, H)
 
 
 

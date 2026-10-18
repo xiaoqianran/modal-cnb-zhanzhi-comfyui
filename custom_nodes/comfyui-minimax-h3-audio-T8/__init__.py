@@ -48,6 +48,25 @@ if __package__:
     from .nodes_external_reference_image_import import NODES as _external_image_node_classes
     from .nodes_dense_transfer_exp import NODES as _dense_transfer_node_classes
     from .nodes_external_reference_av_import import NODES as _external_av_node_classes
+    from .nodes_visual_marker import NODES as _visual_marker_node_classes
+    from .freevideo_quality.audio_nodes import NODES as _freevideo_audio_node_classes
+    from .nodes_h07_reports import NODES as _h07_report_node_classes
+    from .nodes_h07_delivery import NODES as _h07_delivery_node_classes
+    from .nodes_veda_r2va import NODES as _veda_r2va_node_classes
+    from .nodes_branch_guide import NODES as _branch_guide_node_classes
+    from .nodes_person_removal import NODES as _person_removal_node_classes
+    from .freevideo_int8.nodes import NODES as _freevideo_int8_node_classes
+    from .nodes_source_audio_plan import NODES as _source_audio_plan_node_classes
+    from .nodes_refmod_bridge import NODES as _refmod_bridge_node_classes
+    from .nodes_prompt_provider import NODES as _prompt_provider_node_classes
+    from .nodes_h11_spark import NODES as _h11_spark_node_classes
+    from .nodes_h11_wuli import NODES as _h11_wuli_node_classes
+    from .nodes_h11_bridge import NODES as _h11_bridge_node_classes
+    from .nodes_h11_audio_reference import NODES as _h11_audio_reference_node_classes
+    from .nodes_h11_phases import NODES as _h11_phase_node_classes
+    from .nodes_h11_prompt_ticket import NODES as _h11_prompt_ticket_node_classes
+    from .nodes_audio_first import NODES as _audio_first_node_classes
+    from .nodes_token_lora import NODES as _token_lora_node_classes
 else:  # Allows direct test collection from a hyphenated custom-node directory.
     import importlib.util
     import sys
@@ -136,6 +155,25 @@ else:  # Allows direct test collection from a hyphenated custom-node directory.
     _external_image_node_classes = import_module(f"{_package_name}.nodes_external_reference_image_import").NODES
     _dense_transfer_node_classes = import_module(f"{_package_name}.nodes_dense_transfer_exp").NODES
     _external_av_node_classes = import_module(f"{_package_name}.nodes_external_reference_av_import").NODES
+    _visual_marker_node_classes = import_module(f"{_package_name}.nodes_visual_marker").NODES
+    _freevideo_audio_node_classes = import_module(f"{_package_name}.freevideo_quality.audio_nodes").NODES
+    _h07_report_node_classes = import_module(f"{_package_name}.nodes_h07_reports").NODES
+    _h07_delivery_node_classes = import_module(f"{_package_name}.nodes_h07_delivery").NODES
+    _veda_r2va_node_classes = import_module(f"{_package_name}.nodes_veda_r2va").NODES
+    _branch_guide_node_classes = import_module(f"{_package_name}.nodes_branch_guide").NODES
+    _person_removal_node_classes = import_module(f"{_package_name}.nodes_person_removal").NODES
+    _freevideo_int8_node_classes = import_module(f"{_package_name}.freevideo_int8.nodes").NODES
+    _source_audio_plan_node_classes = import_module(f"{_package_name}.nodes_source_audio_plan").NODES
+    _refmod_bridge_node_classes = import_module(f"{_package_name}.nodes_refmod_bridge").NODES
+    _prompt_provider_node_classes = import_module(f"{_package_name}.nodes_prompt_provider").NODES
+    _h11_spark_node_classes = import_module(f"{_package_name}.nodes_h11_spark").NODES
+    _h11_wuli_node_classes = import_module(f"{_package_name}.nodes_h11_wuli").NODES
+    _h11_bridge_node_classes = import_module(f"{_package_name}.nodes_h11_bridge").NODES
+    _h11_audio_reference_node_classes = import_module(f"{_package_name}.nodes_h11_audio_reference").NODES
+    _h11_phase_node_classes = import_module(f"{_package_name}.nodes_h11_phases").NODES
+    _h11_prompt_ticket_node_classes = import_module(f"{_package_name}.nodes_h11_prompt_ticket").NODES
+    _audio_first_node_classes = import_module(f"{_package_name}.nodes_audio_first").NODES
+    _token_lora_node_classes = import_module(f"{_package_name}.nodes_token_lora").NODES
 
 
 class _HyperFlowLongVideoExtension(_BaseExtension):
@@ -162,7 +200,14 @@ class _ModularSamplingExtension(_HyperFlowLongVideoExtension):
                 *_freevideo_quality_node_classes, *_qwen_view_node_classes, *_source_conform_node_classes,
                 *_freevideo_decoder_node_classes, *_res_history_node_classes, *_res_stage_node_classes,
                 *_res_effects_node_classes, *_lanpaint_clock_node_classes, *_external_image_node_classes,
-                *_dense_transfer_node_classes, *_external_av_node_classes]
+                *_dense_transfer_node_classes, *_external_av_node_classes, *_visual_marker_node_classes,
+                *_freevideo_audio_node_classes, *_h07_report_node_classes, *_h07_delivery_node_classes,
+                *_veda_r2va_node_classes, *_branch_guide_node_classes, *_person_removal_node_classes,
+                *_freevideo_int8_node_classes, *_source_audio_plan_node_classes, *_refmod_bridge_node_classes,
+                *_prompt_provider_node_classes, *_h11_spark_node_classes,
+                *_h11_wuli_node_classes, *_h11_bridge_node_classes, *_h11_audio_reference_node_classes,
+                *_h11_phase_node_classes, *_h11_prompt_ticket_node_classes, *_audio_first_node_classes,
+                *_token_lora_node_classes]
 
 
 def comfy_entrypoint():

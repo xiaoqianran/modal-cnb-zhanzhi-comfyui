@@ -39,7 +39,7 @@ from server import PromptServer
 
 #--------------------------------------------------------------------
 
-from nodes import MAX_RESOLUTION, SaveImage, VAEDecode, VAELoader, common_ksampler
+from nodes import MAX_RESOLUTION, LoadImage, SaveImage, VAEDecode, VAELoader, common_ksampler
 import sys
 import math
 import random
@@ -3170,9 +3170,11 @@ class view_bridge_image:
 
     def edit(self, image, mask=None, operation="None", image_update=None, output_mask=False):
         image_id = tensor_to_hash(image)
+        image_changed = False
         if self.image_id is None:
             self.image_id = image_id
         elif image_id != self.image_id:
+            image_changed = True
             image_update = None
             self.image_id = image_id
             self.cached_mask = None
@@ -3182,7 +3184,7 @@ class view_bridge_image:
         mask = normalize_view_bridge_mask(mask, batch_size, height, width)
 
         # 优先使用 image_update 中的图像
-        if image_update is not None and 'images' in image_update:
+        if image_update is not None and image_update.get('images'):
             images = image_update['images']
             filename = images[0]['filename']
             subfolder = images[0]['subfolder']
@@ -3198,6 +3200,7 @@ class view_bridge_image:
 
             image_path = os.path.join(base_dir, subfolder, name)
             img = node_helpers.pillow(Image.open, image_path)
+            _, source_images = create_temp_file(image)
         else:
             # 否则使用 preview_image
             if mask is not None:
@@ -3213,6 +3216,10 @@ class view_bridge_image:
 
             image_path, images = create_temp_file(preview_image)
             img = node_helpers.pillow(Image.open, image_path)
+            if preview_image is image:
+                source_images = images
+            else:
+                _, source_images = create_temp_file(image)
 
         # 从图像中提取 mask
         output_masks = []
@@ -3293,7 +3300,7 @@ class view_bridge_image:
             final_mask = current_result
 
         # 返回结果
-        return {"ui": {"images": images}, "result": (image, final_mask)}
+        return {"ui": {"images": images, "source_images": source_images, "clear_image_update": [image_changed]}, "result": (image, final_mask)}
 
     # 以下静态方法保持不变
     @staticmethod
@@ -4144,6 +4151,20 @@ class IO_EasyMark:
 
 
 #region----------------IO_load_image_list
+
+
+class IO_load_mage(LoadImage):
+    @classmethod
+    def INPUT_TYPES(cls):
+        input_dir = folder_paths.get_input_directory()
+        files = []
+        for root, _, filenames in os.walk(input_dir):
+            files.extend(os.path.relpath(os.path.join(root, filename), input_dir).replace(os.sep, "/") for filename in filenames)
+        files = folder_paths.filter_files_content_types(files, ["image"])
+        files = sorted(set(files + [f"{filename} [input]" for filename in files]))
+        return {"required": {"image": (files, {"image_upload": True})}}
+
+    CATEGORY = "Apt_Preset/IO_Port"
 
 
 

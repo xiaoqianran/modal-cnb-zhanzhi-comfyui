@@ -4,9 +4,10 @@ const NODE_CLASSES = new Set([
     "UC_create_context",
     "UC_load_model",
     "UC_ksampler",
+    "UC_ksampler_custom",
     "UC_Ksampler_refine",
 ]);
-const SAMPLING_WIDGETS = ["steps", "cfg", "sampler", "scheduler"];
+const SAMPLING_WIDGETS = ["steps", "cfg", "sampler", "sampler_name", "scheduler"];
 const LATENT_SIZE_WIDGETS = ["ratio_selected", "batch_size", "width", "height"];
 const SAMPLE_PARAMETERS_WIDGET = "sample_parameters";
 const COLLAPSE_WIDGET = "collapse_sampling_parameters";
@@ -83,7 +84,7 @@ function applySamplingParametersState(node, controlName) {
 }
 
 function installSamplingSettingsControl(node, nodeName) {
-    const usesSourceSwitch = nodeName === "UC_ksampler" || nodeName === "UC_Ksampler_refine";
+    const usesSourceSwitch = nodeName === "UC_ksampler" || nodeName === "UC_ksampler_custom" || nodeName === "UC_Ksampler_refine";
     const controlName = usesSourceSwitch ? SAMPLE_PARAMETERS_WIDGET : COLLAPSE_WIDGET;
     const controlWidget = getWidget(node, controlName);
     if (!controlWidget) return;
@@ -164,7 +165,7 @@ app.registerExtension({
         nodeType.prototype.onNodeCreated = function onBasicUnitContextCreated() {
             const result = originalCreated?.apply(this, arguments);
             installSamplingSettingsControl(this, nodeData.name);
-            if (nodeData.name === "UC_ksampler") installLatentSizeControl(this);
+            if (nodeData.name === "UC_ksampler" || nodeData.name === "UC_ksampler_custom") installLatentSizeControl(this);
             return result;
         };
 
@@ -172,7 +173,7 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function onBasicUnitContextConfigured() {
             const result = originalConfigured?.apply(this, arguments);
             installSamplingSettingsControl(this, nodeData.name);
-            if (nodeData.name === "UC_ksampler") installLatentSizeControl(this);
+            if (nodeData.name === "UC_ksampler" || nodeData.name === "UC_ksampler_custom") installLatentSizeControl(this);
             return result;
         };
     },

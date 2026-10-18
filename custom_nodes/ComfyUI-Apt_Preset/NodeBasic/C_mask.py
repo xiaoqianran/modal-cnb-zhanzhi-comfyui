@@ -583,8 +583,8 @@ class create_mask_solo:
                     {"default": "circle"},
                 ),
                 "coord_center": (
-                    ['default', 'image_center'],
-                    {"default": "default"}
+                    ['left_top', 'image_center'],
+                    {"default": "left_top"}
                 ),
                 "X_offset": ("INT", {"default": 0, "min": -10000, "max": 10000, "step": 1}),
                 "Y_offset": ("INT", {"default": 0, "min": -10000, "max": 10000, "step": 1}),
@@ -653,24 +653,31 @@ class create_mask_solo:
         mask = Image.new("L", (bg_width, bg_height), 0)
         mask_draw = ImageDraw.Draw(mask)
         
-        # 根据坐标中心选项计算基准点
-        if coord_center == 'image_center':
-            base_x = bg_width // 2
-            base_y = bg_height // 2
-        else:  # default - 左上角作为基准点
-            base_x = 0
-            base_y = 0
-        
-        # 计算最终的形状位置（基准点 + 偏移量）
-        center_x = base_x + X_offset
-        center_y = base_y + Y_offset
-        
         # 使用wide和height控制形状大小
         shape_width = wide * scale
         shape_height = height * scale
         
         # 对于正方形、圆形等对称形状，使用最小边长的一半作为半径
         radius = int(min(shape_width, shape_height) / 2)
+
+        if coord_center == 'image_center':
+            center_x = bg_width // 2 + X_offset
+            center_y = bg_height // 2 + Y_offset
+        elif shape == 'rectangle':
+            center_x = X_offset + int(shape_width / 2)
+            center_y = Y_offset + int(shape_height / 2)
+        elif shape == 'ellipse':
+            center_x = X_offset + radius
+            center_y = Y_offset + int(radius * 0.7)
+        elif shape == 'semicircle':
+            center_x = X_offset + radius
+            center_y = Y_offset
+        elif shape == 'quarter_circle':
+            center_x = X_offset
+            center_y = Y_offset
+        else:
+            center_x = X_offset + radius
+            center_y = Y_offset + radius
         
         # 绘制各种形状
         if shape == 'circle':

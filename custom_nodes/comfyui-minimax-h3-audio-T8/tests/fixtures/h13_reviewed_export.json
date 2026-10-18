@@ -1,0 +1,572 @@
+{
+  "schema": "t8.h13.reviewed-export.v1",
+  "review_id": "c21678fded3be91ec0e4a2195b29439e8d93f49ef02ced4fa208fa24a02243d2",
+  "revision": 2,
+  "feedback_sha256": "c53014a3c00cb179f82a997a9a0e1069212cb4e80172b6d899b43c183f9eb3c1",
+  "automatic_accept": false,
+  "records": [
+    {
+      "relative_path": "examples/workflows/88-h13-reviewed/H13_AudioFirst.json",
+      "case": "A1",
+      "source_sha256": "5bd4a7481fdfb0fc20fd56eab986c0275c32ce25c09edbf3fba7dfee5cb89e59",
+      "template_sha256": "80e22125183b924814eac9ab255feb1ef31582e8e53576ccc3fe7a08b7041db8",
+      "history_sha256": "d1179a2ab69b592b8c29bc2595d2ff2303e6e6490d30c8b9f7ef0eeb6c57d465",
+      "accepted_media_sha256": [
+        "f03dcf207024b586e42ba01e3ab1e0c8216d39a312878b89441a27f93bf524ec"
+      ],
+      "links_sha256": "2c8717bef2c0ddd3bd29aec999fe1ced39f946e9d6cbe716f82026fa53fb3b60",
+      "execution_nodes": 25,
+      "all_execution_parameters_and_edges_exact": true,
+      "execution_api": {
+        "1": {
+          "class_type": "UNETLoader",
+          "inputs": {
+            "unet_name": "wuli_h3_turbo_8step_v1_comfyui_int8_convrot.safetensors",
+            "weight_dtype": "default"
+          }
+        },
+        "2": {
+          "class_type": "CLIPLoader",
+          "inputs": {
+            "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+            "type": "minimax",
+            "device": "default"
+          }
+        },
+        "3": {
+          "class_type": "VAELoader",
+          "inputs": {
+            "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+          }
+        },
+        "4": {
+          "class_type": "VAELoader",
+          "inputs": {
+            "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+          }
+        },
+        "5": {
+          "class_type": "MiniMaxH3ImageToVideo",
+          "inputs": {
+            "prompt": "integrated_multimodal_description: One continuous static medium close-up shot of a young adult Chinese woman sitting by a window in a quiet cafe. She has shoulder-length dark hair and wears a plain blue shirt. Soft natural daylight, realistic skin, stable face and hair, neutral background, no colorful flashing lights. At 1.0 seconds she looks directly at the camera and smiles gently. Between 1.0 and 3.5 seconds she says exactly once, clearly and naturally: <d>[Chinese]你好，今天天气不错。</d> After speaking she closes her lips and gives one small nod. The camera does not cut. overall_soundscape: A clear normal female conversational voice, faint quiet room ambience, no other voices, no repeated dialogue, no singing. non_diegetic_music: None.",
+            "width": 864,
+            "height": 480,
+            "length": 124,
+            "clip": [
+              "2",
+              0
+            ],
+            "vae": [
+              "3",
+              0
+            ]
+          }
+        },
+        "6": {
+          "class_type": "BasicScheduler",
+          "inputs": {
+            "scheduler": "simple",
+            "steps": 8,
+            "denoise": 1,
+            "model": [
+              "7",
+              0
+            ]
+          }
+        },
+        "7": {
+          "class_type": "MiniMaxH3SigmaShift",
+          "inputs": {
+            "shift_video": 12,
+            "shift_audio": 3,
+            "model": [
+              "1",
+              0
+            ]
+          }
+        },
+        "8": {
+          "class_type": "BasicGuider",
+          "inputs": {
+            "model": [
+              "7",
+              0
+            ],
+            "conditioning": [
+              "5",
+              0
+            ]
+          }
+        },
+        "9": {
+          "class_type": "RandomNoise",
+          "inputs": {
+            "noise_seed": 904512
+          }
+        },
+        "10": {
+          "class_type": "KSamplerSelect",
+          "inputs": {
+            "sampler_name": "euler"
+          }
+        },
+        "11": {
+          "class_type": "SamplerCustomAdvanced",
+          "inputs": {
+            "noise": [
+              "9",
+              0
+            ],
+            "guider": [
+              "8",
+              0
+            ],
+            "sampler": [
+              "10",
+              0
+            ],
+            "sigmas": [
+              "6",
+              0
+            ],
+            "latent_image": [
+              "21",
+              0
+            ]
+          }
+        },
+        "12": {
+          "class_type": "VAEDecode",
+          "inputs": {
+            "samples": [
+              "22",
+              0
+            ],
+            "vae": [
+              "3",
+              0
+            ]
+          }
+        },
+        "13": {
+          "class_type": "VAEDecodeAudio",
+          "inputs": {
+            "samples": [
+              "22",
+              0
+            ],
+            "vae": [
+              "4",
+              0
+            ]
+          }
+        },
+        "14": {
+          "class_type": "ImageFromBatch",
+          "inputs": {
+            "batch_index": 0,
+            "length": 120,
+            "image": [
+              "12",
+              0
+            ]
+          }
+        },
+        "15": {
+          "class_type": "TrimAudioDuration",
+          "inputs": {
+            "start_index": 0,
+            "duration": 5,
+            "audio": [
+              "13",
+              0
+            ]
+          }
+        },
+        "16": {
+          "class_type": "MiniMaxH3SafeAVSaveT8Advanced",
+          "inputs": {
+            "filename_prefix": "H13/AudioFirst",
+            "crf": 18,
+            "images": [
+              "14",
+              0
+            ],
+            "audio": [
+              "15",
+              0
+            ]
+          }
+        },
+        "17": {
+          "class_type": "MiniMaxH3AudioFirstProjectionEXPT8",
+          "inputs": {
+            "positive": [
+              "5",
+              0
+            ],
+            "video_latent": [
+              "5",
+              1
+            ]
+          }
+        },
+        "18": {
+          "class_type": "BasicGuider",
+          "inputs": {
+            "model": [
+              "7",
+              0
+            ],
+            "conditioning": [
+              "17",
+              0
+            ]
+          }
+        },
+        "19": {
+          "class_type": "RandomNoise",
+          "inputs": {
+            "noise_seed": 904513
+          }
+        },
+        "20": {
+          "class_type": "SamplerCustomAdvanced",
+          "inputs": {
+            "noise": [
+              "19",
+              0
+            ],
+            "guider": [
+              "18",
+              0
+            ],
+            "sampler": [
+              "10",
+              0
+            ],
+            "sigmas": [
+              "6",
+              0
+            ],
+            "latent_image": [
+              "17",
+              1
+            ]
+          }
+        },
+        "21": {
+          "class_type": "MiniMaxH3SourceAVPrepareT8",
+          "inputs": {
+            "video_mode": "regenerate",
+            "video_denoise_strength": 1,
+            "audio_mode": "lock",
+            "audio_denoise_strength": 0,
+            "audio_fit_policy": "strict",
+            "dtype_device_policy": "strict",
+            "video_latent": [
+              "5",
+              1
+            ],
+            "audio_latent": [
+              "20",
+              1
+            ]
+          }
+        },
+        "22": {
+          "class_type": "MiniMaxH3AudioFirstLockAuditEXPT8",
+          "inputs": {
+            "audio_source": [
+              "20",
+              1
+            ],
+            "locked_input": [
+              "21",
+              0
+            ],
+            "samples": [
+              "11",
+              1
+            ]
+          }
+        },
+        "23": {
+          "class_type": "VAEDecodeAudio",
+          "inputs": {
+            "samples": [
+              "20",
+              1
+            ],
+            "vae": [
+              "4",
+              0
+            ]
+          }
+        },
+        "24": {
+          "class_type": "TrimAudioDuration",
+          "inputs": {
+            "start_index": 0,
+            "duration": 5,
+            "audio": [
+              "23",
+              0
+            ]
+          }
+        },
+        "25": {
+          "class_type": "PreviewAudio",
+          "inputs": {
+            "audio": [
+              "24",
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "relative_path": "examples/workflows/88-h13-reviewed/H13_Hybrid.json",
+      "case": "A2",
+      "source_sha256": "da744e927bffb63b87d8d48a226977c98c8877ea2d86ed3f743043051bdbade7",
+      "template_sha256": "2970dab863e85b572dcb87bcb6a7d4c4e33fb9282a876d36aeb69ed036b41256",
+      "history_sha256": "d9289e7df7c81df3e2ecad8d57a4c3d2eb5f3ec68a8dada8a44632b40c12b8c7",
+      "accepted_media_sha256": [
+        "18769fcc475e6422162c78fc76e8f38524a9e6d491bda375c892bd7116ff2e7f"
+      ],
+      "links_sha256": "8948e30b72cd39c5e38b1a754b9b456bf3ba07409f7fbe840116bbb47785bf29",
+      "execution_nodes": 17,
+      "all_execution_parameters_and_edges_exact": true,
+      "execution_api": {
+        "1": {
+          "class_type": "UNETLoader",
+          "inputs": {
+            "unet_name": "wuli_h3_turbo_8step_v1_flbase_refadaln_b25-49_flashgen050_int8_convrot_hq.safetensors",
+            "weight_dtype": "default"
+          }
+        },
+        "2": {
+          "class_type": "CLIPLoader",
+          "inputs": {
+            "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+            "type": "minimax",
+            "device": "default"
+          }
+        },
+        "3": {
+          "class_type": "VAELoader",
+          "inputs": {
+            "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+          }
+        },
+        "4": {
+          "class_type": "VAELoader",
+          "inputs": {
+            "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+          }
+        },
+        "5": {
+          "class_type": "MiniMaxH3AudioConditioningT8",
+          "inputs": {
+            "prompt": "Use <Picture 1> as the same adult woman's appearance reference. integrated_multimodal_description: One continuous static medium close-up shot of a young adult Chinese woman sitting by a window in a quiet cafe. She has shoulder-length dark hair and wears a plain blue shirt. Soft natural daylight, realistic skin, stable face and hair, neutral background, no colorful flashing lights. At 1.0 seconds she looks directly at the camera and smiles gently. Between 1.0 and 3.5 seconds she says exactly once, clearly and naturally: <d>[Chinese]你好，今天天气不错。</d> After speaking she closes her lips and gives one small nod. The camera does not cut. overall_soundscape: A clear normal female conversational voice, faint quiet room ambience, no other voices, no repeated dialogue, no singing. non_diegetic_music: None.",
+            "width": 864,
+            "height": 480,
+            "length": 124,
+            "task_type": "Ref2VA",
+            "audio_mode": "native",
+            "audio_denoise_strength": 1,
+            "add_source_as_reference": false,
+            "prompt_primary_audio_ordinal": 0,
+            "strict_prompt_tags": true,
+            "ref_image_size": "match",
+            "reference_video_policy": "official_2_to_15s",
+            "allow_above_reference_area": true,
+            "clip": [
+              "2",
+              0
+            ],
+            "video_vae": [
+              "3",
+              0
+            ],
+            "audio_vae": [
+              "4",
+              0
+            ],
+            "ref_images.ref_image_0": [
+              "17",
+              0
+            ]
+          }
+        },
+        "6": {
+          "class_type": "BasicScheduler",
+          "inputs": {
+            "scheduler": "simple",
+            "steps": 8,
+            "denoise": 1,
+            "model": [
+              "7",
+              0
+            ]
+          }
+        },
+        "7": {
+          "class_type": "MiniMaxH3SigmaShift",
+          "inputs": {
+            "shift_video": 12,
+            "shift_audio": 3,
+            "model": [
+              "1",
+              0
+            ]
+          }
+        },
+        "8": {
+          "class_type": "BasicGuider",
+          "inputs": {
+            "model": [
+              "7",
+              0
+            ],
+            "conditioning": [
+              "5",
+              0
+            ]
+          }
+        },
+        "9": {
+          "class_type": "RandomNoise",
+          "inputs": {
+            "noise_seed": 904512
+          }
+        },
+        "10": {
+          "class_type": "KSamplerSelect",
+          "inputs": {
+            "sampler_name": "euler"
+          }
+        },
+        "11": {
+          "class_type": "SamplerCustomAdvanced",
+          "inputs": {
+            "noise": [
+              "9",
+              0
+            ],
+            "guider": [
+              "8",
+              0
+            ],
+            "sampler": [
+              "10",
+              0
+            ],
+            "sigmas": [
+              "6",
+              0
+            ],
+            "latent_image": [
+              "5",
+              1
+            ]
+          }
+        },
+        "12": {
+          "class_type": "VAEDecode",
+          "inputs": {
+            "samples": [
+              "11",
+              0
+            ],
+            "vae": [
+              "3",
+              0
+            ]
+          }
+        },
+        "13": {
+          "class_type": "VAEDecodeAudio",
+          "inputs": {
+            "samples": [
+              "11",
+              0
+            ],
+            "vae": [
+              "4",
+              0
+            ]
+          }
+        },
+        "14": {
+          "class_type": "ImageFromBatch",
+          "inputs": {
+            "batch_index": 0,
+            "length": 120,
+            "image": [
+              "12",
+              0
+            ]
+          }
+        },
+        "15": {
+          "class_type": "TrimAudioDuration",
+          "inputs": {
+            "start_index": 0,
+            "duration": 5,
+            "audio": [
+              "13",
+              0
+            ]
+          }
+        },
+        "16": {
+          "class_type": "MiniMaxH3SafeAVSaveT8Advanced",
+          "inputs": {
+            "filename_prefix": "H13/Hybrid",
+            "crf": 18,
+            "images": [
+              "14",
+              0
+            ],
+            "audio": [
+              "15",
+              0
+            ]
+          }
+        },
+        "17": {
+          "class_type": "LoadImage",
+          "inputs": {
+            "image": "H13_reference.png"
+          }
+        }
+      }
+    }
+  ],
+  "saved_templates": 2,
+  "human_passes": 2,
+  "new_GPU_runs_during_export": 0,
+  "old_workflow_changes": 0,
+  "runtime_source_sha256": {
+    "THIRD_PARTY_NOTICES/H13-SOURCES.md": "6a8607c0da89f4730fc7d9797180bea24b04099e5115dec3d8ce00951ae24c90",
+    "__init__.py": "0af79ef58f92e754f9ee830061b73897cd374abef4c06b3bdb586ddcebda391b",
+    "h3_t8/audio_first.py": "edbd899e515aa631d76a265424e4045d25480c6ac6586e66adf93a44727857aa",
+    "h3_t8/nodes_audio_first.py": "c8d6ba486a1766d09cddb70a09281ef7ff35c0dcc4d5875597edf2fb2db88cc7",
+    "h3_t8/wuli_native.py": "393210336347de79085d3972e1ec8986ffe235029d38adf5704b279528201c2c",
+    "pyproject.toml": "4cab5c9f1dd7c2c0a299ebb986ab637ee36db520cb5ef7409ee84f199658956e",
+    "tests/test_audio_first.py": "4fb26863f0ab479bc706e8fd833878829e491fe6ea6bb92b9dab82adf83b0516",
+    "tests/test_h13_wuli_identity.py": "ffd483e9d60b5ed387ad48f4a5ba1077e556ff5944955513057478712391c8d6",
+    "tools/prepare_h13_workflows.py": "a0c2477464ea74c983304df1d3930153daf60b760aef99eabb2ade57a62469ff",
+    "tools/prepare_h13_wuli_hybrid.py": "e1dfe2cf7f892abda431a82a8ad24c1dd32605bce1d35d5a882ca7fc0a98a29d",
+    "tools/save_h13_reviewed_workflows.py": "fd8266d5d0035585179a417c3e6979c9e30d5c57175bfcdf2232e4e5abd90376",
+    "tools/save_h11_reviewed_workflows.py": "a8727df60c490cbcdcee854861db39f4b9c0d95fe2a1edf87b56fbb65cca125a"
+  },
+  "published": false,
+  "prior_pyproject_sha256_before_1_100_publication": "68a4c5dfd503b86a237fd655adb3a5fdeec44e217367a78ee191592a3dfb1eb5",
+  "prior_H11_runtime_sha256_for_explicit_changes": {
+    "__init__.py": "eb909cf6985441fa5502a5f46309975502badfab73a46e2dadedf3c0d08d6455",
+    "h3_t8/wuli_native.py": "4e347d8404f77992ef186d60d2ec9f82e8f6b873120d38a339ecf037e06bfabd"
+  }
+}

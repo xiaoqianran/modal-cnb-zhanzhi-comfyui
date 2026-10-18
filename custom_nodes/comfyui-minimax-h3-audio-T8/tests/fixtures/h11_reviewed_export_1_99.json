@@ -1,0 +1,181 @@
+{
+  "review_id": "474d1311024ffa56ab50e404af7f7808f14ddc7e8e1d861b5766da35ef8a48eb",
+  "revision": 7,
+  "automatic_accept": false,
+  "records": [
+    {
+      "name": "H11_Spark_Dense",
+      "case": "A1",
+      "source_sha256": "b169f765e12655aac993d1e56e4f7c93b35d9a27cdc06b701a01c56b29cc82db",
+      "template_sha256": "8cf6c7962fd93a9da9cac1e62211c6d48936e82a6a4af572cf39cf25ff6b352d",
+      "resource_edits": {
+        "7": {
+          "runtime_config": ""
+        },
+        "18": {
+          "runtime_config": ""
+        }
+      },
+      "all_execution_parameters_and_edges_checked": true,
+      "relative_path": "examples/workflows/87-h11-reviewed/H11_Spark_Dense.json",
+      "links_sha256": "7fd6c53a4e7859245e9e10a104f1a61dc1dae86a1bf878379e9cfc04d108aed6",
+      "execution_nodes": 18,
+      "accepted_media_sha256": [
+        "20bd6f0923c0bc78263f2c6308bb757b0dc860211110f6c237ea58194a852ff1",
+        "17ee2533db06821d7111f08e46e10f045f6ccb7bcb7e391df7a855db659a1ec6"
+      ]
+    },
+    {
+      "name": "H11_Spark_Sparse",
+      "case": "A1",
+      "source_sha256": "b8e3d270b4c6b37727d3206b25fcd809754aa059364a818ea56940ccf8200b99",
+      "template_sha256": "609c37fbc48e8dc31fa8137a124b8085172893c28d111f86333d8c7863b05d9f",
+      "resource_edits": {
+        "7": {
+          "runtime_config": ""
+        },
+        "18": {
+          "runtime_config": ""
+        }
+      },
+      "all_execution_parameters_and_edges_checked": true,
+      "relative_path": "examples/workflows/87-h11-reviewed/H11_Spark_Sparse.json",
+      "links_sha256": "7fd6c53a4e7859245e9e10a104f1a61dc1dae86a1bf878379e9cfc04d108aed6",
+      "execution_nodes": 18,
+      "accepted_media_sha256": [
+        "20bd6f0923c0bc78263f2c6308bb757b0dc860211110f6c237ea58194a852ff1",
+        "17ee2533db06821d7111f08e46e10f045f6ccb7bcb7e391df7a855db659a1ec6"
+      ]
+    },
+    {
+      "name": "H11_Wuli8",
+      "case": "A2",
+      "source_sha256": "62ce613b780c8d90ad34009d95320d071a8fe0cbef74fee929b2d82ff9aa5e84",
+      "template_sha256": "4d05ded1c39a4ac725c22a19f91ad30dfc4e1508b0a37805545b74c5230bf9d3",
+      "resource_edits": {},
+      "all_execution_parameters_and_edges_checked": true,
+      "relative_path": "examples/workflows/87-h11-reviewed/H11_Wuli8.json",
+      "links_sha256": "7962dfcd3c9430fadf513cfbcda7b60c31ae794d8f6e2a8d736db26629ac2762",
+      "execution_nodes": 15,
+      "accepted_media_sha256": [
+        "c4b919fc9b1bae94180a83c98acacf99d8aa4b865e459dcd5e5ccfca221308a7"
+      ]
+    },
+    {
+      "name": "H11_Wuli4",
+      "case": "A3",
+      "source_sha256": "c591acb0954714d343e56879ba04e0671e6d4a4a6847d4d4c56b83b744c48d77",
+      "template_sha256": "aa522e018f3b09279144aa8d064cf6dde2ddfb46d7fb188bf66bbd75c6510e2a",
+      "resource_edits": {},
+      "all_execution_parameters_and_edges_checked": true,
+      "relative_path": "examples/workflows/87-h11-reviewed/H11_Wuli4.json",
+      "links_sha256": "7962dfcd3c9430fadf513cfbcda7b60c31ae794d8f6e2a8d736db26629ac2762",
+      "execution_nodes": 15,
+      "accepted_media_sha256": [
+        "2014102bae2c7cc7b4ed7db3c7cb3b19c6d41fa6d20c396aea829356e2c81e4c"
+      ]
+    },
+    {
+      "name": "H11_AudioOnly",
+      "case": "A4",
+      "source_sha256": "21e19d547e861193c736f7fa5338e3e5348ea13ab0e3d07bb1b9c1774468cde1",
+      "template_sha256": "6a3605c23e0ac2075d8ef0db539e8a1268ed7dd718d6d8a1302db5a3ccce3f7a",
+      "resource_edits": {},
+      "all_execution_parameters_and_edges_checked": true,
+      "relative_path": "examples/workflows/87-h11-reviewed/H11_AudioOnly.json",
+      "links_sha256": "b812117df75f66cd11662ef95128305e4dccdc181de7f90a69bb34e200db1c6b",
+      "execution_nodes": 23,
+      "accepted_media_sha256": [
+        "9f483a50441e03c3d2b95eee0dcde5187b6df6def3ab0797e9b16ee2749af2fa"
+      ]
+    },
+    {
+      "name": "H11_BridgeSidecar",
+      "case": "B1",
+      "source_sha256": "812e42e268035351d3b71ac0ef177db95ff3d9925de92145790f2cbbf5d84afc",
+      "template_sha256": "3e07737c8a23b036c322e55e01d39a0521f7f6936468b45a8c4f5628ac47471c",
+      "resource_edits": {
+        "1": {
+          "sidecar_path": ""
+        },
+        "2": {
+          "sidecar_path": ""
+        }
+      },
+      "all_execution_parameters_and_edges_checked": true,
+      "relative_path": "examples/workflows/87-h11-reviewed/H11_BridgeSidecar.json",
+      "links_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "execution_nodes": 2,
+      "accepted_media_sha256": []
+    },
+    {
+      "name": "H11_PhaseCard",
+      "case": "B2",
+      "source_sha256": "00ee7b8259527cd7fce53ecf009dcb0dd4e8d9a2332859adb856cd8cb3b0d4d2",
+      "template_sha256": "c6d41c575682c4f197cd2157ff522012f758921807f5536bcc5d7504a32749e9",
+      "resource_edits": {
+        "1": {
+          "manifest_path": "",
+          "manifest_sha256": ""
+        },
+        "3": {
+          "manifest_path": "",
+          "manifest_sha256": ""
+        }
+      },
+      "all_execution_parameters_and_edges_checked": true,
+      "relative_path": "examples/workflows/87-h11-reviewed/H11_PhaseCard.json",
+      "links_sha256": "ac404da31d6d888e4b2eb67c0b67e767f4e2825fe34d573519747f648dd02a71",
+      "execution_nodes": 4,
+      "accepted_media_sha256": []
+    },
+    {
+      "name": "H11_SceneTickets",
+      "case": "B3",
+      "source_sha256": "c06e7ddffbfbb76b44314b2d281f811ffae37cebdb05a74b3e92445772728e08",
+      "template_sha256": "8c6df3500ae132916eadb9c336ebea3acde3dbd911345899b07895825ff03fe3",
+      "resource_edits": {},
+      "all_execution_parameters_and_edges_checked": true,
+      "relative_path": "examples/workflows/87-h11-reviewed/H11_SceneTickets.json",
+      "links_sha256": "ebdac60d1490d5498e25ccd32bfd2c8067ad12c09baaf97b4fa10a4489e7b200",
+      "execution_nodes": 5,
+      "accepted_media_sha256": []
+    }
+  ],
+  "runtime_source_sha256": {
+    "__init__.py": "eb909cf6985441fa5502a5f46309975502badfab73a46e2dadedf3c0d08d6455",
+    "h3_t8/audio_reference_only.py": "68d71bb20e7785e9103bef3f7876c3a22c9db57835fb0e8f69de4c0969668206",
+    "h3_t8/bridge_sidecar.py": "17ee120d6a4e0ca033ce7f787623e4175ac697fd6c68eee4010613d5da5a5393",
+    "h3_t8/freevideo_int8/nodes.py": "07cc11339ff2e7f695ab34056938ff0a8d02a04538671ba8cd3e245a36c0faac",
+    "h3_t8/freevideo_int8/runtime.py": "f3d48f1d352998aee223b7f0e79001c1b9293adf4be20be4a396f93df108fcdc",
+    "h3_t8/freevideo_int8/worker.py": "e0035bc695df678de95ffcc885ce5fe3d429be90e6e32abc5574b77e3113ff18",
+    "h3_t8/freevideo_phase_live.py": "2d4b2c3a782e4309a46150b6c136e83cdfbf262d115326c487d9d2684b26b900",
+    "h3_t8/freevideo_phases.py": "a1e0b4f8cb1dd8e25dac26180ec057aea11f603dbba75ad2aae2ef6ff1dbf6cd",
+    "h3_t8/freevideo_quality/nodes.py": "c3dc22c0fd8c58d1c379a3cc998b273c3d4bfd7edeb8af3f56ebd5ce3566fc4f",
+    "h3_t8/freevideo_quality/runtime.py": "975c5511d8393ae86d4197c5240aede14d3a455039897efc279621c32b70e2b1",
+    "h3_t8/freevideo_quality/worker.py": "580b45625dd1b6a57bd3718c73fac341e5d00ace8aa101f9b3844a0c0d6c3f2b",
+    "h3_t8/model_recipe_cards.py": "5eaaf5cb078f260253819b423f970283be6b331749123f5ecf20b9a095d58d15",
+    "h3_t8/nodes_h11_audio_reference.py": "19a9509f53cdb1836932f8794bb337f8cff382d4e39a1a70a0ac9d0631c5c32e",
+    "h3_t8/nodes_h11_bridge.py": "f08273a306a75618160d8e6d96deca04c289f23ca0a25750e57ca1976d5b4ecb",
+    "h3_t8/nodes_h11_phases.py": "f0406befb1be4b73640b8642931b602d3d311ca8f0b8cdf8bcee285f43374ee5",
+    "h3_t8/nodes_h11_prompt_ticket.py": "6b86e69f3c55850a3ae23a86399f4970c65068fad57ebecc067282172cb3ece4",
+    "h3_t8/nodes_h11_spark.py": "92992900406b631a423bbf8234f4c0f178e657afc2d2e462b74f67fe3e163bcf",
+    "h3_t8/nodes_h11_wuli.py": "393d0f0e1e57a582c3f0ebb93df928766cba0995701c0cb1594ef76778b7ffc2",
+    "h3_t8/prompt_scene_ticket.py": "428df572ec9895182d385bff397f0a87a1ac62d99fb4eecf04eacadc82be6dd1",
+    "h3_t8/spark_runtime.py": "e26bfdd5bd52deda0b6408fbae4a669e1f7c512aaaf56817261ab9135f8669cd",
+    "h3_t8/wuli_native.py": "4e347d8404f77992ef186d60d2ec9f82e8f6b873120d38a339ecf037e06bfabd",
+    "tests/test_h11_audio_reference.py": "4469c468fe0e6c35cbfb0bf108464473f6b49b772852a5159599c2d40efd6384",
+    "tests/test_h11_bridge_sidecar.py": "2bc31f07c71034089ac2da06069085546b6de638383934c64410652c100ea414",
+    "tests/test_h11_freevideo_phases.py": "37c7dfca9efc50c2301de0cb58c299c2a5c5826f94d172af4003048598112687",
+    "tests/test_h11_phase_live.py": "c717dc40cbcd4d87b0bfbe1d1a0a324aaa58778ab2a4b246bcee5cd935da8a6f",
+    "tests/test_h11_prompt_ticket.py": "a6c1b11e48e294fbe3c450e7682a88c2b6ce20df703e607dc449e800f59bb414",
+    "tests/test_h11_spark.py": "ccd4c445de8345f54aa9dc8c7c391e9fe0fbcdd8db5b5334b077e0e1f7665ae8",
+    "tests/test_h11_wuli.py": "ae1aa928038b106bf7013d0394a43deedde87eeb4b49e5e2a2e1c90ff17cabfb",
+    "tests/test_h11_wuli_card.py": "4da5de4483be911e2e13175560d55fed868dac757765fdce3c97a307eec98cf7",
+    "tools/download_h11_wuli.py": "aee7d5a2896a33a55a7f3e717573106c7d7566fc28310174b2b95c23eb900f0e",
+    "tools/prepare_h11_spark_runtime.py": "49c142dafb2c520aaae39a849e2ce34cd5cc08907fffd52aa3d6cec2142ae1ac",
+    "web/freevideo_phase.js": "547dede2b764c352e2e8b44c3c6582ab5799981420b2810f46abae1f8e677f48"
+  },
+  "new_GPU_runs_during_export": 0,
+  "old_workflow_changes": 0
+}

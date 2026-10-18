@@ -37113,6 +37113,17 @@
             "title": "VNCCS - Visual Novel Character Creation Suite"
         },
         {
+            "author": "MIUProject",
+            "description": "OFFICIAL VNCCS utility nodes: Pose Studio, UniCanvas, and 3D Factory.",
+            "files": [
+                "https://github.com/AHEKOT/ComfyUI_VNCCS_Utils"
+            ],
+            "id": "vnccs-utils",
+            "install_type": "git-clone",
+            "reference": "https://github.com/AHEKOT/ComfyUI_VNCCS_Utils",
+            "title": "VNCCS Utils - Collection of utility nodes"
+        },
+        {
             "author": "wzken",
             "description": "This custom node for ComfyUI allows you to hide a video file within a PNG image using a file concatenation technique. The resulting image can be viewed as a normal picture, but a standard unzip tool can extract the hidden video from it.",
             "files": [
@@ -41309,6 +41320,17 @@
             "title": "ComfyUI-ForLoops"
         },
         {
+            "author": "jeankassio",
+            "description": "ComfyUI nodes for the official YuE2 Python pipeline: model loading, style/lyrics input, symbolic composition, semantic generation, acoustic synthesis, stereo decoding and score-conditioned covers. The engine is pinned to YuE2 v0.1.6",
+            "files": [
+                "https://github.com/jeankassio/ComfyUI_YuE2"
+            ],
+            "id": "ComfyUI_YuE2",
+            "install_type": "git-clone",
+            "reference": "https://github.com/jeankassio/ComfyUI_YuE2",
+            "title": "ComfyUI_YuE2"
+        },
+        {
             "author": "ameyukisora",
             "description": "An advanced Empty Latent selector with visual presets and foldable UI.",
             "files": [
@@ -42570,10 +42592,11 @@
         },
         {
             "author": "pixelpainter",
-            "description": "2 nodes for muting or bypassing a node by node ID. They are widget linkable and promotable to a Subgraph node as a switch to mute or bypass a node in it's own Subgraph, or any other Subgraph, or it can be used as a stand alone node anywhere",
+            "description": "Mute or bypass any node by its ID, with no wires. Includes a Single node (up to 20 targets), an A/B switch (up to 10 pairs), and a Stacker for global control of several Remote nodes, plus legacy Triple and AA/BB nodes. Pick targets from a node picker, work across subgraphs, and promote toggles and pickers to a subgraph node as front-panel switches. Compatible with the current ComfyUI frontend, including promoted widgets on 1.52+.",
             "files": [
                 "https://github.com/pixelpainter/comfyui-mute-bypass-by-ID"
             ],
+            "id": "comfyui-mute-bypass-by-id",
             "install_type": "git-clone",
             "reference": "https://github.com/pixelpainter/comfyui-mute-bypass-by-ID",
             "title": "mute-bypass by node ID"
@@ -54598,7 +54621,7 @@
         },
         {
             "author": "archerkattri",
-            "description": "Training-free TRELLIS image-to-3D acceleration: forecast the flow-matching velocity on skipped DiT steps (HiCache Hermite / HiCache++ DMD, via hicache-pp) across both the sparse-structure and SLaT stages. ~2x faster, near-lossless. Drop between the TRELLIS loader and sampler.",
+            "description": "Training-free TRELLIS image-to-3D acceleration: forecast the flow-matching velocity on skipped DiT steps (HiCache Hermite / HiCache++ DMD, via hicache-pp) across both the sparse-structure and SLaT stages. The README reports historical RTX 5090 results but does not establish current-commit GPU validation. Drop between the TRELLIS loader and sampler.",
             "files": [
                 "https://github.com/Archerkattri/ComfyUI-TRELLIS-HiCache"
             ],
@@ -54618,7 +54641,7 @@
         },
         {
             "author": "archerkattri",
-            "description": "Training-free TRELLIS.2 image-to-3D acceleration: forecast the flow-matching velocity on skipped DiT steps (HiCache Hermite / HiCache++ DMD, via hicache-pp) across the sparse-structure and shape-SLaT stages (texture optional). ~2x faster, near-lossless. Pairs with visualbruno/ComfyUI-Trellis2.",
+            "description": "Training-free TRELLIS.2 image-to-3D acceleration: forecast the flow-matching velocity on skipped DiT steps (HiCache Hermite / HiCache++ DMD, via hicache-pp) across the sparse-structure and shape-SLaT stages (texture optional). The README reports historical RTX 5090 results but does not establish current-commit GPU validation. Pairs with visualbruno/ComfyUI-Trellis2.",
             "files": [
                 "https://github.com/Archerkattri/ComfyUI-TRELLIS2-HiCache"
             ],
@@ -61410,6 +61433,28 @@
             "title": "ComfyUI-SayMaker"
         },
         {
+            "author": "hanshs474",
+            "description": "Seedance 2.5 text to video and image to video through the emaki API (Seedance 2.0, MiniMax H3, Veo 3.1 and Nano Banana 2 for first frames too). No local GPU; needs an emaki API key.",
+            "files": [
+                "https://github.com/hanshs474/ComfyUI-emaki"
+            ],
+            "id": "comfyui-emaki",
+            "install_type": "git-clone",
+            "reference": "https://github.com/hanshs474/ComfyUI-emaki",
+            "title": "ComfyUI-emaki"
+        },
+        {
+            "author": "hanshs474",
+            "description": "Generate and edit images through the Veida AI API. Works without an API key on the free tier; add a key to use your account's models (GPT Image 2.5, GPT Image 2, Nano Banana 2, Seedream 5.0).",
+            "files": [
+                "https://github.com/hanshs474/ComfyUI-Veida"
+            ],
+            "id": "comfyui-veida",
+            "install_type": "git-clone",
+            "reference": "https://github.com/hanshs474/ComfyUI-Veida",
+            "title": "ComfyUI-Veida"
+        },
+        {
             "author": "lostmywind",
             "description": "Check any workflow for the custom nodes and model files your install is missing. Adds a sidebar panel and a node that diff a workflow against the node types and model files you actually have, with HuggingFace/CivitAI search links for every missing model.",
             "files": [
@@ -62103,6 +62148,121 @@
             "title": "ComfyUI-Qwen-TTS-5x"
         },
         {
+            "author": "jesse890423",
+            "description": "Audio/video load and format-conversion nodes for ComfyUI. Reads and writes only inside the ComfyUI input/output directories; every path is resolved with realpath and confirmed with commonpath, so absolute paths, '..' traversal and outside symlinks are rejected. Extract the audio track from a video, trim long media by time range, export several formats in one run with parameters auto-adapted to the source, instant same-format passthrough with no re-encoding, a standalone video parameter report, and built-in compliance checks for mainstream Chinese music platforms. English UI by default; a Simplified Chinese translation is available from Interface -> Language.\n\nFiles are read from the ComfyUI input directory (drag and drop, or the upload button on the load nodes) and written to the output directory under a relative prefix. Report text follows the interface language by default and can be pinned per node.",
+            "files": [
+                "https://github.com/jesse890423/comfyui_media_toolbox"
+            ],
+            "id": "comfyui_media_toolbox",
+            "install_type": "git-clone",
+            "nodename_pattern": "^(LoadAudioAdvanced|SaveAudioPlatformExport|LoadVideoAdvanced|SaveVideoConverter|VideoReportNode)$",
+            "reference": "https://github.com/jesse890423/comfyui_media_toolbox",
+            "title": "comfyui_media_toolbox"
+        },
+        {
+            "author": "Tumbislav Nilski",
+            "description": "A librarian tool for your models, workflows, datasets and basically anything else you use.",
+            "files": [
+                "https://github.com/tumbislav/ComfyUI-ModelArchivist"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/tumbislav/ComfyUI-ModelArchivist",
+            "title": "ComfyUI-ModelArchivist"
+        },
+        {
+            "author": "xelionaj",
+            "description": "A small utility custom nodes.",
+            "files": [
+                "https://github.com/xelionaj/ComfyUI-XeLion"
+            ],
+            "id": "comfyui-xelion",
+            "install_type": "git-clone",
+            "reference": "https://github.com/xelionaj/ComfyUI-XeLion",
+            "title": "ComfyUI-XeLion"
+        },
+        {
+            "author": "Antigravity & LatentForge Team",
+            "description": "Permanent GPU VRAM Pinning & Lossless Latent Continuity Chaining for Multi-Shot DiT Pipelines on NVIDIA RTX 5090 / 4090 / Blackwell GPUs",
+            "files": [
+                "https://github.com/latentforge-dev/ComfyUI-ZeroCopy-Continuity"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/latentforge-dev/ComfyUI-ZeroCopy-Continuity",
+            "title": "ComfyUI-ZeroCopy-Continuity"
+        },
+        {
+            "author": "CopySight (original node by Filliptm)",
+            "description": "Check one image for IP similarity using CopySight. Returns an annotated image and JSON report. Requires an enabled CopySight key and service credits.",
+            "files": [
+                "https://github.com/copysight/ComfyUI-CopySight"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/copysight/ComfyUI-CopySight",
+            "title": "CopySight"
+        },
+        {
+            "author": "adachi0130",
+            "description": "Paint the inpaint mask directly on the node canvas instead of a modal mask editor, with no save/load round-trip per stroke. The connected inpaint node hosts the live painting tools and WebUI-style sampling controls, and supports whole-image or padded masked-area sampling with original-resolution compositing, Alt temporary erase, Ctrl+wheel brush size, hover image comparison and one-click adoption of a result as the next source image. All user-facing strings default to English and the node pack follows the ComfyUI language setting through the locales/ mechanism. MIT licensed; reuses ComfyUI's NumPy, Pillow and PyTorch.",
+            "files": [
+                "https://github.com/adachi0130/Adachi-Inpaint-Workbench"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/adachi0130/Adachi-Inpaint-Workbench",
+            "title": "Adachi-Inpaint-Workbench"
+        },
+        {
+            "author": "Iakov Savelev",
+            "description": "Fast and regularized Flow Matching and Diffusion samplers (Flow-WLS Savitzky-Golay multistep, CAB-2..6, and high-order DPM++ solvers) achieving stable few-step generation in 10 steps with zero artifacts.",
+            "files": [
+                "https://github.com/YakovSava/research-unipc-dpmpp"
+            ],
+            "id": "research-unipc-dpmpp",
+            "install_type": "git-clone",
+            "reference": "https://github.com/YakovSava/research-unipc-dpmpp",
+            "title": "Flow-WLS & DPM++ Extended Samplers"
+        },
+        {
+            "author": "zaum",
+            "description": "A ComfyUI frontend extension for hiding and rearranging left sidebar toolbar icons, with optional auto-hide.",
+            "files": [
+                "https://github.com/zaum/comfyui-sidebar-hider"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/zaum/comfyui-sidebar-hider",
+            "title": "ComfyUI Sidebar Hider"
+        },
+        {
+            "author": "BSAI",
+            "description": "ComfyUI nodes for fast H3 video (with synced audio) generation: 4-step FastVideo FastH3 + Native VSA (Video Sparse Attention). Text-to-Video / Image-to-Video / Multi-reference / 4K Upscale.",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-FastH3"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-FastH3",
+            "title": "BSAI-ComfyUI-FastH3"
+        },
+        {
+            "author": "Strix-3D",
+            "description": "NVIDIA DLSS 5 Neural Rendering and RTX Upscaling for ComfyUI.",
+            "files": [
+                "https://github.com/Strix-3D/ComfyUI-DLSS5-Enhancer-v15"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/Strix-3D/ComfyUI-DLSS5-Enhancer-v15",
+            "title": "ComfyUI-DLSS5-Enhancer-v15"
+        },
+        {
+            "author": "T8star",
+            "description": "Local FLUX 3 PUP prompt enhancement with Q4_K_M GGUF, reference images and layout support. Windows/NVIDIA; separate model and runtime downloads are required.",
+            "files": [
+                "https://github.com/T8mars/Comfyui-Flux3-PE-GGUF-T8"
+            ],
+            "id": "flux3-pe-gguf-t8",
+            "install_type": "git-clone",
+            "reference": "https://github.com/T8mars/Comfyui-Flux3-PE-GGUF-T8",
+            "title": "FLUX 3 PE GGUF (T8)"
+        },
+        {
             "author": "ntdviet",
             "description": "Nodes:LatentGarbageCollector. This ComfyUI custom node flushes the GPU cache and empty cuda interprocess memory. It's helpfull for low memory environment such as the free Google Colab, especially when the workflow VAE decode latents of the size above 1500x1500.",
             "files": [
@@ -62320,6 +62480,36 @@
             "install_type": "unzip",
             "reference": "https://civitai.com/models/143293/image2halftone-node-for-comfyui",
             "title": "Image2Halftone Node for ComfyUI"
+        },
+        {
+            "author": "xm6018924",
+            "description": "ComfyUI 0.37.x launcher-compatibility shim: runtime-disables the comfy_aimdo memory/compiler graph, equivalent to launching with --disable-comfy-compiler, preventing aimdo memory compile error crashes during the first sampling step.",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-AimDo-Fix"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-AimDo-Fix",
+            "title": "BSAI-ComfyUI-AimDo-Fix"
+        },
+        {
+            "author": "xm6018924",
+            "description": "Native ComfyUI support for the official MiniMax-H3 8-step PDD acceleration LoRAs.",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-MiniMax-H3-PDD-Acc"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-MiniMax-H3-PDD-Acc",
+            "title": "BSAI-ComfyUI-MiniMax-H3-PDD-Acc"
+        },
+        {
+            "author": "xm6018924",
+            "description": "Unifies removal of the PyTorch per-process VRAM memory fraction (set_per_process_memory_fraction) limits imposed by ComfyUI custom nodes.",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-VRAM-Unlock"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-VRAM-Unlock",
+            "title": "BSAI-ComfyUI-VRAM-Unlock"
         }
     ]
 }

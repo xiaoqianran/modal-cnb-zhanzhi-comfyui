@@ -1,0 +1,95 @@
+{
+  "schema": "t8.h09.reviewed_sampling_delta.v1",
+  "previous_baseline": "modular_new_sampling_baseline_v12.json",
+  "new_baseline": "modular_new_sampling_baseline_v13.json",
+  "only_three_additions": true,
+  "old_sites_and_reviewed_layout_tripwire_retained": true,
+  "documentation": "docs/RELEASE_1.98.1.md",
+  "scope": "Only the already executed and human-accepted INT8 Light LOW8/HIGH3 pair and its shared worker call; not blanket admission of future samplers or all profiles/tasks",
+  "public_workflow": "examples/workflows/86-h09-reviewed/A2_FreeVideo_INT8_8plus3.json",
+  "public_workflow_sha256": "0b02abe20030b6bc297350bc9a5c7c86534fd6c0cb6b00ba591b38288502dfd2",
+  "actual_native_prompt_id": "945da8f9-f885-4f4c-9987-32b3a9f0f1a5",
+  "actual_native_saved_sha256": "e6c463fb818bd5cf0b8e911b1ce257d8636ab9c85b1bfee863e36c973a126c89",
+  "actual_frontend_full_AV": {
+    "frames": 120,
+    "fps": 24,
+    "seconds": 5.0,
+    "width": 1024,
+    "height": 576
+  },
+  "actual_LOW_NFE": 8,
+  "actual_HIGH_NFE": 3,
+  "LOW_audio_preserved_exact": true,
+  "approved_A2_media_sha256": "48f1576ee06b4eaa0b3bc6cef81284ecfd011dcf59bab53c9409dddc0904bf6f",
+  "human_review_id": "e1db4df6b29e6fc63869158ed31c2493017e18ee61831dd61abb905870d28621",
+  "human_review_revision": 15,
+  "human_review_A2_status": "pass",
+  "human_feedback_sha256": "19505d20c2d690864661a7fb0a234b157b4b9603c206ca3dcd5569820b6b383a",
+  "independent_stage_nodes": [
+    "MiniMaxH3FreeVideoINT8SamplerEXPT8",
+    "MiniMaxH3FreeVideoINT8HIGH3EXPT8"
+  ],
+  "workflow_stage_ids": [
+    8,
+    13
+  ],
+  "external_effect_nodes": {
+    "low": {
+      "eav": 6,
+      "relay": 7
+    },
+    "high": {
+      "eav": 11,
+      "relay": 12
+    }
+  },
+  "actual_external_effect_scope": "Both stages separately wired, EAV report_only measurements and Relay apply_exp observed; not a nonzero EAV enhancement or paper-equivalence certificate",
+  "stage_storage_nodes": [
+    "MiniMaxH3FreeVideoINT8StageSaveEXPT8",
+    "MiniMaxH3FreeVideoINT8StageLoadEXPT8"
+  ],
+  "actual_LOW_and_HIGH_stage_content_cold_loading_verified": true,
+  "new_independent_cold_HIGH_GPU_run_claimed": false,
+  "strict_FP8_INT8_speed_comparison_claimed": false,
+  "runtime_file_sha256": {
+    "h3_t8/freevideo_int8/nodes.py": "07cc11339ff2e7f695ab34056938ff0a8d02a04538671ba8cd3e245a36c0faac",
+    "h3_t8/freevideo_int8/worker.py": "e0035bc695df678de95ffcc885ce5fe3d429be90e6e32abc5574b77e3113ff18"
+  },
+  "entries": [
+    {
+      "site": [
+        "h3_t8/freevideo_int8/nodes.py",
+        "MiniMaxH3FreeVideoINT8HIGH3EXPT8.execute",
+        "fv.sample",
+        "d5ec7a7fcd738e8ec9b053bda556d64bb51b6a98bea84a9a3a7abf6380a336cc"
+      ],
+      "node": "MiniMaxH3FreeVideoINT8HIGH3EXPT8",
+      "scope": "Independent HIGH3 consuming completed LOW, learned-upscaled latent and its own external controls"
+    },
+    {
+      "site": [
+        "h3_t8/freevideo_int8/nodes.py",
+        "MiniMaxH3FreeVideoINT8SamplerEXPT8.execute",
+        "fv.sample",
+        "827cdbdefdeb7db91d8f2689107315693a163346abcf1519d3ec6b9cab97437a"
+      ],
+      "node": "MiniMaxH3FreeVideoINT8SamplerEXPT8",
+      "scope": "Separately controlled LOW; actual accepted case Light8, not all-input quality qualification"
+    },
+    {
+      "site": [
+        "h3_t8/freevideo_int8/worker.py",
+        "main",
+        "engine.sample",
+        "1d8d6e8d5059022732244bdbdb73ef7aad12cde8571d84125e671685fa2c9866"
+      ],
+      "node": "content-bound prepared INT8 child worker",
+      "scope": "Shared worker used by the exact accepted LOW8/HIGH3 pair, not an independent unsplit canvas route"
+    }
+  ],
+  "prior_runtime_file_sha256_before_H11_observation": {
+    "h3_t8/freevideo_int8/nodes.py": "bbfcad64686af2ec3d66aeeb263a72f55c9a4a79d75b7a2bbefed903d87602ce",
+    "h3_t8/freevideo_int8/worker.py": "34916e4e163b1762ad03e10298b5fb44fe58063933b9546247d4385b651c6bda"
+  },
+  "H11_observation_only_update": "host phase/progress observation; exact sampling call AST, profiles, grids, request and producer checks retained; see test_h11_phase_live and test_h11_freevideo_phases"
+}

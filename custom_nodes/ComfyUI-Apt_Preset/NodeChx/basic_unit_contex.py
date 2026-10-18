@@ -10,6 +10,7 @@ import torch
 from PIL import Image
 from comfy.patcher_extension import WrappersMP
 from comfy_extras.nodes_audio import vae_decode_audio
+from comfy_extras.nodes_custom_sampler import BasicScheduler, CFGGuider, KSamplerSelect, RandomNoise, SamplerCustomAdvanced
 from comfy_extras.nodes_lt import LTXVConcatAVLatent, LTXVSeparateAVLatent
 from nodes import (
     CheckpointLoaderSimple, CLIPLoader, CLIPTextEncode, DualCLIPLoader,
@@ -17,7 +18,7 @@ from nodes import (
 )
 
 from ..main_unit import CLIP_TYPE, apply_lora_stack, load_upscale_model, new_context, pil2tensor, read_ratios, upscale_with_model
-from .main_nodes import _apt_cache_evict_tag, _apt_cache_get, _apt_cache_set
+from .main_nodes import _apt_cache_evict_tag, _apt_cache_get, _apt_cache_set, _apt_second_pass_positive
 from ..NodeBasic.C_AD import (
     _AD_H3_LATENT_TILE_PRESETS,
     _AD_H3_SAMPLE_LATENT_TILE_CHOICES,
@@ -408,6 +409,179 @@ class UC_ksampler:
         )
         output_context["images"] = output_image
         return (output_context, latent, output_image, output_audio)
+
+
+class UC_ksampler_custom:
+    ratio_sizes, ratio_dict = read_ratios()
+    custom_ratio = UC_ksampler.custom_ratio
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "context": ("RUN_CONTEXT",),
+                "seed": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xffffffffffffffff,
+                }),
+                "denoise": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01,
+                }),
+                "VAE_Decode": ("BOOLEAN", {"default": True, "tooltip": "关闭后不生成图像和音频，速度提升"}),
+                "tile_size": (
+                    list(_AD_H3_SAMPLE_LATENT_TILE_CHOICES),
+                    {"default": _UC_NO_LATENT_TILE, "tooltip": "图像 latent 分块采样；自定义 guider 不支持分块。"},
+                ),
+                "sample_parameters": ("BOOLEAN", {
+                    "default": False,
+                    "label_on": "自定义",
+                    "label_off": "继承context",
+                    "tooltip": "继承context时使用上游采样参数，自定义时使用下方参数",
+                }),
+                "steps": ("INT", {"default": 8, "min": 0, "max": 10000}),
+                "cfg": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0}),
+                "sampler_name": (["None"] + comfy.samplers.KSampler.SAMPLERS, {"default": "euler"}),
+                "scheduler": (["None"] + comfy.samplers.KSampler.SCHEDULERS, {"default": "simple"}),
+                "latent_size": ("BOOLEAN", {
+                    "default": False,
+                    "label_on": "自定义",
+                    "label_off": "继承context",
+                    "tooltip": "继承context时优先使用上游 latent 尺寸",
+                }),
+                "ratio_selected": ([cls.custom_ratio] + cls.ratio_sizes, {"default": cls.custom_ratio}),
+                "batch_size": ("INT", {"default": 1, "min": 1, "max": 300}),
+                "width": ("INT", {"default": 512, "min": 8, "max": 16384}),
+                "height": ("INT", {"default": 512, "min": 8, "max": 16384}),
+            },
+            "optional": {
+                "model": ("MODEL",),
+                "positive": ("CONDITIONING",),
+                "negative": ("CONDITIONING",),
+                "noise": ("NOISE",),
+                "guider": ("GUIDER",),
+                "sampler": ("SAMPLER",),
+                "sigmas": ("SIGMAS",),
+                "latent": ("LATENT",),
+                "image": ("IMAGE",),
+            },
+        }
+
+    RETURN_TYPES = ("RUN_CONTEXT", "LATENT", "LATENT", "IMAGE", "AUDIO")
+    RETURN_NAMES = ("context", "latent", "noise_latent", "image", "audio")
+    FUNCTION = "sample"
+    CATEGORY = "Apt_Preset/unit_context"
+    NAME = "UC_ksampler_custom"
+
+    def sample(self, context, seed, denoise, VAE_Decode, tile_size,
+               sample_parameters, steps, cfg, sampler_name, scheduler,
+               latent_size, ratio_selected, batch_size, width, height,
+               model=None, positive=None, negative=None, noise=None, guider=None,
+               sampler=None, sigmas=None, latent=None, image=None):
+        model = model if model is not None else context.get("model")
+        positive = positive if positive is not None else context.get("positive")
+        negative = negative if negative is not None else context.get("negative")
+        vae = context.get("vae")
+        audio_vae = context.get("audio_vae")
+        clip = context.get("clip")
+
+        if sample_parameters is False:
+            steps = context.get("steps")
+            cfg = context.get("cfg")
+            sampler_name = context.get("sampler")
+            scheduler = context.get("scheduler")
+
+        if steps is None or steps <= 0:
+            steps = 8
+        if cfg is None:
+            cfg = 1.0
+        if sampler_name in (None, "None"):
+            sampler_name = "euler"
+        if scheduler in (None, "None"):
+            scheduler = "simple"
+
+        if _uc_conditioning_is_empty(positive):
+            if clip is None:
+                raise ValueError("Cannot encode the default positive prompt without CLIP in context")
+            positive = CLIPTextEncode().encode(clip, "")[0]
+        if _uc_conditioning_is_empty(negative):
+            if clip is None:
+                raise ValueError("Cannot encode the default negative prompt 'blur' without CLIP in context")
+            negative = CLIPTextEncode().encode(clip, "blur")[0]
+
+        context_latent = context.get("latent")
+        if image is not None:
+            if vae is None:
+                raise ValueError("UC_ksampler_custom needs VAE in context to encode image")
+            latent = VAEEncode().encode(vae, image)[0]
+            source_samples = context_latent.get("samples") if isinstance(context_latent, dict) else None
+            if getattr(source_samples, "is_nested", False) and len(source_samples.unbind()) > 1:
+                _source_video, source_audio = LTXVSeparateAVLatent.execute(context_latent).result
+                latent = LTXVConcatAVLatent.execute(latent, source_audio).result[0]
+        elif latent is None and latent_size is False:
+            latent = context_latent
+
+        if latent is None:
+            if vae is None:
+                raise ValueError("UC_ksampler_custom needs VAE in context to create the fallback latent")
+            if latent_size is False:
+                ratio_selected = "None"
+                batch_size = 1
+                width = 512
+                height = 512
+            if ratio_selected not in ("None", "customer_WxH", self.custom_ratio):
+                width = self.ratio_dict[ratio_selected]["width"]
+                height = self.ratio_dict[ratio_selected]["height"]
+            width = max(int(width / 8) * 8, 64)
+            height = max(int(height / 8) * 8, 64)
+            black_tensor = pil2tensor(Image.new("RGB", (width, height), color=(0, 0, 0)))
+            latent = VAEEncode().encode(vae, black_tensor)[0]
+            latent["samples"] = comfy.utils.repeat_to_batch_size(latent["samples"], batch_size)
+
+        positive = _apt_second_pass_positive(positive, context_latent, latent)
+
+        sample_model = model
+        if tile_size != _UC_NO_LATENT_TILE:
+            if guider is not None:
+                raise ValueError("UC_ksampler_custom cannot combine tile_size with a custom guider")
+            samples = latent["samples"]
+            if not torch.is_tensor(samples) or samples.is_nested or samples.ndim != 4:
+                raise ValueError("UC_ksampler_custom: tile_size requires a 4D image latent; disable tiling for video/audio latents")
+            tile_count, overlap_pixels, bridge_seams = _uc_resolve_tile_preset(
+                tile_size, int(samples.shape[-1]) * 8, int(samples.shape[-2]) * 8
+            )
+            if tile_count > 1:
+                sample_model = _uc_tiled_model(model, tile_count, overlap_pixels, bridge_seams)
+
+        if sampler is None:
+            sampler = KSamplerSelect().get_sampler(sampler_name)[0]
+        if noise is None:
+            noise = RandomNoise().get_noise(seed)[0]
+        if guider is None:
+            guider = CFGGuider().get_guider(sample_model, positive, negative, cfg)[0]
+        if sigmas is None:
+            sigmas = BasicScheduler().get_sigmas(sample_model, scheduler, steps, denoise)[0]
+
+        noise_latent, latent = SamplerCustomAdvanced().sample(noise, guider, sampler, sigmas, latent)
+
+        output_image = None
+        output_audio = None
+        if VAE_Decode:
+            if vae is None:
+                raise ValueError("UC_ksampler_custom needs VAE in context when VAE_Decode is enabled")
+            output_image = VAEDecode().decode(vae, latent)[0]
+            if audio_vae is not None:
+                output_audio = vae_decode_audio(audio_vae, latent)
+
+        output_context = new_context(
+            context, model=model, positive=positive, negative=negative,
+            latent=latent, steps=steps, cfg=cfg, sampler=sampler_name,
+            scheduler=scheduler, images=output_image,
+        )
+        return (output_context, latent, noise_latent, output_image, output_audio)
 
 
 class UC_Ksampler_refine:

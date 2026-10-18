@@ -1,0 +1,20 @@
+{
+  "schema": "t8.h14.append-only-registration.v1",
+  "prior_runtime_source_sha256": {
+    "__init__.py": "0af79ef58f92e754f9ee830061b73897cd374abef4c06b3bdb586ddcebda391b",
+    "pyproject.toml": "4cab5c9f1dd7c2c0a299ebb986ab637ee36db520cb5ef7409ee84f199658956e"
+  },
+  "runtime_source_sha256": {
+    "__init__.py": "d64c7d0521ca7aabb03806040148982798866fa0bf89dfb95dcd9e3b329aefab",
+    "pyproject.toml": "28ba313ad3fafab7abebccd5e84905c2e352735d79ed5746a33183ebae5a8485"
+  },
+  "preserved_registered_prefix": 735,
+  "new_nodes": [
+    "MiniMaxH3TokenLoRAApplyEXPT8",
+    "MiniMaxH3TokenLoRAAuditEXPT8"
+  ],
+  "old_workflow_changes": 0,
+  "human_quality_accepted": false,
+  "reviewed_local_prior_pyproject_sha256": "77daa635081408318845279bf0fa8c5e02657cde065d94c07efbbcc0faf1d5ca",
+  "reviewed_local_pyproject_sha256": "3f32a20136c77a0dcc8102849af884d7d6478b1ce99ab54265c0e20850922e87"
+}

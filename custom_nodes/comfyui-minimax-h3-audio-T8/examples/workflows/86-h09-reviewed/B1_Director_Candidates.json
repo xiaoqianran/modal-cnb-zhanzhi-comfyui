@@ -1,0 +1,603 @@
+{
+  "id": "e650d8e5-092e-4d94-b1ad-05dab6354549",
+  "revision": 0,
+  "last_node_id": 39,
+  "last_link_id": 51,
+  "nodes": [
+    {
+      "id": 30,
+      "type": "MiniMaxH3DirectorProjectT8",
+      "pos": [
+        0,
+        1200
+      ],
+      "size": [
+        390,
+        236
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "project_json",
+          "name": "project_json",
+          "type": "STRING",
+          "widget": {
+            "name": "project_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "shot_id",
+          "name": "shot_id",
+          "type": "STRING",
+          "widget": {
+            "name": "shot_id"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "compiled_prompt",
+          "name": "compiled_prompt",
+          "type": "STRING",
+          "links": [
+            37
+          ]
+        },
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "length",
+          "name": "length",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "media_map_json",
+          "name": "media_map_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": [
+            38
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3DirectorProjectT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "{\"schema\": \"t8.minimax_h3.director_project\", \"version\": 2, \"id\": \"066da7e8-a6bb-479b-92e1-0dce0ec1b192\", \"title\": \"H09 · 三镜白杯交接 · 声明配方待审\", \"revision\": 0, \"current\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"assets\": [], \"doc\": {\"global\": \"\", \"sharedRefs\": [], \"sharedRatio\": true, \"ratio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"generation\": {\"unet\": \"auto\", \"clip\": \"auto\", \"video_vae\": \"auto\", \"audio_vae\": \"auto\", \"lora_mode\": \"auto\", \"loras\": [], \"resolution_mp\": \"auto\"}, \"sampling\": {\"mode\": \"single\"}, \"shots\": [{\"id\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"name\": \"白杯交接 1\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"A把同一个白杯放到桌上。A说：杯子给你。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"5b3d0eaf-878a-454a-972a-57aa18b3b7e0\", \"text\": \"A把同一个白杯放到桌上。A说：杯子给你。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"566a75b58161be9a4f7914ae7150a2df547e268128cf4bd83fd28e5775988035\", \"inputs_sha256\": \"e1533e538cc01d58bef856db4a2e8890d914e3e19beff09632267bf6268a2604\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"14cc3224584702f6e2c53c968bae3316f6c9947f7fe1684d23a9f97820d9bc4c\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"1ca9051994d9e6cef714cdb1ba401e21dcd752f0e31779ed855dab25e826cdeb\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"ff25ae1c-026f-482b-960c-1f0c25bab12b\", \"name\": \"白杯交接 2\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"ab0d18c4-eb67-4442-8af9-2ed89443cd75\", \"text\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"ec2aa2ecc99b14e18681ea4abd48dda1b6a4116909895e430d094e5bb3266fa8\", \"inputs_sha256\": \"dc8c2dcc0a800744113feb11fab5961cd3be866a4789454eded43557547d113d\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"292fa00b1e96d824604ad45001cb688669665d077830650db0373069023c5547\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"c3f0428d5c2394d5287e7bb8f0aebff8c7b522d9b3fc278edcfe8f28b1665d09\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"edde345a-81f1-46a3-8c99-33dc101c3529\", \"name\": \"白杯交接 3\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B拿着同一个白杯点头，不再说话。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"60c372dd-6b19-4f48-bcb1-e52f06b8de91\", \"text\": \"B拿着同一个白杯点头，不再说话。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"640fa7110c208a5813e18c6370bdb868432fcfaf7dfae41a9d4211cdc88971b0\", \"inputs_sha256\": \"58522aa95d8caa91f29f834bc8ceddfb08128c72d72807674a69e6da5d98bde1\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"f9b9300145b807bd080160b52fe65e97898806081ccda10092130e0fb5734191\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"3e0dbe30a04b542f36a51f6f61610018a1e85096c5fa2948af3f3c4c49322b00\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}], \"skillLibrary\": [{\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}]}}",
+        "8d5707d2-15d7-49ae-8c71-2af505757eb4",
+        null
+      ],
+      "widgets_values_named": {
+        "project_json": "{\"schema\": \"t8.minimax_h3.director_project\", \"version\": 2, \"id\": \"066da7e8-a6bb-479b-92e1-0dce0ec1b192\", \"title\": \"H09 · 三镜白杯交接 · 声明配方待审\", \"revision\": 0, \"current\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"assets\": [], \"doc\": {\"global\": \"\", \"sharedRefs\": [], \"sharedRatio\": true, \"ratio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"generation\": {\"unet\": \"auto\", \"clip\": \"auto\", \"video_vae\": \"auto\", \"audio_vae\": \"auto\", \"lora_mode\": \"auto\", \"loras\": [], \"resolution_mp\": \"auto\"}, \"sampling\": {\"mode\": \"single\"}, \"shots\": [{\"id\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"name\": \"白杯交接 1\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"A把同一个白杯放到桌上。A说：杯子给你。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"5b3d0eaf-878a-454a-972a-57aa18b3b7e0\", \"text\": \"A把同一个白杯放到桌上。A说：杯子给你。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"566a75b58161be9a4f7914ae7150a2df547e268128cf4bd83fd28e5775988035\", \"inputs_sha256\": \"e1533e538cc01d58bef856db4a2e8890d914e3e19beff09632267bf6268a2604\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"14cc3224584702f6e2c53c968bae3316f6c9947f7fe1684d23a9f97820d9bc4c\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"1ca9051994d9e6cef714cdb1ba401e21dcd752f0e31779ed855dab25e826cdeb\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"ff25ae1c-026f-482b-960c-1f0c25bab12b\", \"name\": \"白杯交接 2\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"ab0d18c4-eb67-4442-8af9-2ed89443cd75\", \"text\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"ec2aa2ecc99b14e18681ea4abd48dda1b6a4116909895e430d094e5bb3266fa8\", \"inputs_sha256\": \"dc8c2dcc0a800744113feb11fab5961cd3be866a4789454eded43557547d113d\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"292fa00b1e96d824604ad45001cb688669665d077830650db0373069023c5547\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"c3f0428d5c2394d5287e7bb8f0aebff8c7b522d9b3fc278edcfe8f28b1665d09\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"edde345a-81f1-46a3-8c99-33dc101c3529\", \"name\": \"白杯交接 3\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B拿着同一个白杯点头，不再说话。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"60c372dd-6b19-4f48-bcb1-e52f06b8de91\", \"text\": \"B拿着同一个白杯点头，不再说话。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"640fa7110c208a5813e18c6370bdb868432fcfaf7dfae41a9d4211cdc88971b0\", \"inputs_sha256\": \"58522aa95d8caa91f29f834bc8ceddfb08128c72d72807674a69e6da5d98bde1\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"f9b9300145b807bd080160b52fe65e97898806081ccda10092130e0fb5734191\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"3e0dbe30a04b542f36a51f6f61610018a1e85096c5fa2948af3f3c4c49322b00\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}], \"skillLibrary\": [{\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}]}}",
+        "shot_id": "8d5707d2-15d7-49ae-8c71-2af505757eb4",
+        "打开曜石导演台": null
+      }
+    },
+    {
+      "id": 31,
+      "type": "PreviewAny",
+      "pos": [
+        440,
+        300
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 37
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 32,
+      "type": "PreviewAny",
+      "pos": [
+        440,
+        600
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 38
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 33,
+      "type": "MiniMaxH3DirectorProjectT8",
+      "pos": [
+        0,
+        1500
+      ],
+      "size": [
+        390,
+        236
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "project_json",
+          "name": "project_json",
+          "type": "STRING",
+          "widget": {
+            "name": "project_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "shot_id",
+          "name": "shot_id",
+          "type": "STRING",
+          "widget": {
+            "name": "shot_id"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "compiled_prompt",
+          "name": "compiled_prompt",
+          "type": "STRING",
+          "links": [
+            39
+          ]
+        },
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "length",
+          "name": "length",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "media_map_json",
+          "name": "media_map_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": [
+            40
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3DirectorProjectT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "{\"schema\": \"t8.minimax_h3.director_project\", \"version\": 2, \"id\": \"066da7e8-a6bb-479b-92e1-0dce0ec1b192\", \"title\": \"H09 · 三镜白杯交接 · 声明配方待审\", \"revision\": 0, \"current\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"assets\": [], \"doc\": {\"global\": \"\", \"sharedRefs\": [], \"sharedRatio\": true, \"ratio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"generation\": {\"unet\": \"auto\", \"clip\": \"auto\", \"video_vae\": \"auto\", \"audio_vae\": \"auto\", \"lora_mode\": \"auto\", \"loras\": [], \"resolution_mp\": \"auto\"}, \"sampling\": {\"mode\": \"single\"}, \"shots\": [{\"id\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"name\": \"白杯交接 1\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"A把同一个白杯放到桌上。A说：杯子给你。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"5b3d0eaf-878a-454a-972a-57aa18b3b7e0\", \"text\": \"A把同一个白杯放到桌上。A说：杯子给你。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"566a75b58161be9a4f7914ae7150a2df547e268128cf4bd83fd28e5775988035\", \"inputs_sha256\": \"e1533e538cc01d58bef856db4a2e8890d914e3e19beff09632267bf6268a2604\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"14cc3224584702f6e2c53c968bae3316f6c9947f7fe1684d23a9f97820d9bc4c\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"1ca9051994d9e6cef714cdb1ba401e21dcd752f0e31779ed855dab25e826cdeb\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"ff25ae1c-026f-482b-960c-1f0c25bab12b\", \"name\": \"白杯交接 2\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"ab0d18c4-eb67-4442-8af9-2ed89443cd75\", \"text\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"ec2aa2ecc99b14e18681ea4abd48dda1b6a4116909895e430d094e5bb3266fa8\", \"inputs_sha256\": \"dc8c2dcc0a800744113feb11fab5961cd3be866a4789454eded43557547d113d\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"292fa00b1e96d824604ad45001cb688669665d077830650db0373069023c5547\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"c3f0428d5c2394d5287e7bb8f0aebff8c7b522d9b3fc278edcfe8f28b1665d09\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"edde345a-81f1-46a3-8c99-33dc101c3529\", \"name\": \"白杯交接 3\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B拿着同一个白杯点头，不再说话。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"60c372dd-6b19-4f48-bcb1-e52f06b8de91\", \"text\": \"B拿着同一个白杯点头，不再说话。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"640fa7110c208a5813e18c6370bdb868432fcfaf7dfae41a9d4211cdc88971b0\", \"inputs_sha256\": \"58522aa95d8caa91f29f834bc8ceddfb08128c72d72807674a69e6da5d98bde1\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"f9b9300145b807bd080160b52fe65e97898806081ccda10092130e0fb5734191\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"3e0dbe30a04b542f36a51f6f61610018a1e85096c5fa2948af3f3c4c49322b00\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}], \"skillLibrary\": [{\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}]}}",
+        "ff25ae1c-026f-482b-960c-1f0c25bab12b",
+        null
+      ],
+      "widgets_values_named": {
+        "project_json": "{\"schema\": \"t8.minimax_h3.director_project\", \"version\": 2, \"id\": \"066da7e8-a6bb-479b-92e1-0dce0ec1b192\", \"title\": \"H09 · 三镜白杯交接 · 声明配方待审\", \"revision\": 0, \"current\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"assets\": [], \"doc\": {\"global\": \"\", \"sharedRefs\": [], \"sharedRatio\": true, \"ratio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"generation\": {\"unet\": \"auto\", \"clip\": \"auto\", \"video_vae\": \"auto\", \"audio_vae\": \"auto\", \"lora_mode\": \"auto\", \"loras\": [], \"resolution_mp\": \"auto\"}, \"sampling\": {\"mode\": \"single\"}, \"shots\": [{\"id\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"name\": \"白杯交接 1\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"A把同一个白杯放到桌上。A说：杯子给你。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"5b3d0eaf-878a-454a-972a-57aa18b3b7e0\", \"text\": \"A把同一个白杯放到桌上。A说：杯子给你。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"566a75b58161be9a4f7914ae7150a2df547e268128cf4bd83fd28e5775988035\", \"inputs_sha256\": \"e1533e538cc01d58bef856db4a2e8890d914e3e19beff09632267bf6268a2604\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"14cc3224584702f6e2c53c968bae3316f6c9947f7fe1684d23a9f97820d9bc4c\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"1ca9051994d9e6cef714cdb1ba401e21dcd752f0e31779ed855dab25e826cdeb\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"ff25ae1c-026f-482b-960c-1f0c25bab12b\", \"name\": \"白杯交接 2\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"ab0d18c4-eb67-4442-8af9-2ed89443cd75\", \"text\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"ec2aa2ecc99b14e18681ea4abd48dda1b6a4116909895e430d094e5bb3266fa8\", \"inputs_sha256\": \"dc8c2dcc0a800744113feb11fab5961cd3be866a4789454eded43557547d113d\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"292fa00b1e96d824604ad45001cb688669665d077830650db0373069023c5547\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"c3f0428d5c2394d5287e7bb8f0aebff8c7b522d9b3fc278edcfe8f28b1665d09\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"edde345a-81f1-46a3-8c99-33dc101c3529\", \"name\": \"白杯交接 3\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B拿着同一个白杯点头，不再说话。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"60c372dd-6b19-4f48-bcb1-e52f06b8de91\", \"text\": \"B拿着同一个白杯点头，不再说话。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"640fa7110c208a5813e18c6370bdb868432fcfaf7dfae41a9d4211cdc88971b0\", \"inputs_sha256\": \"58522aa95d8caa91f29f834bc8ceddfb08128c72d72807674a69e6da5d98bde1\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"f9b9300145b807bd080160b52fe65e97898806081ccda10092130e0fb5734191\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"3e0dbe30a04b542f36a51f6f61610018a1e85096c5fa2948af3f3c4c49322b00\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}], \"skillLibrary\": [{\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}]}}",
+        "shot_id": "ff25ae1c-026f-482b-960c-1f0c25bab12b",
+        "打开曜石导演台": null
+      }
+    },
+    {
+      "id": 34,
+      "type": "PreviewAny",
+      "pos": [
+        440,
+        900
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 39
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 35,
+      "type": "PreviewAny",
+      "pos": [
+        440,
+        1200
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 40
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 36,
+      "type": "MiniMaxH3DirectorProjectT8",
+      "pos": [
+        0,
+        1800
+      ],
+      "size": [
+        390,
+        236
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "project_json",
+          "name": "project_json",
+          "type": "STRING",
+          "widget": {
+            "name": "project_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "shot_id",
+          "name": "shot_id",
+          "type": "STRING",
+          "widget": {
+            "name": "shot_id"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "compiled_prompt",
+          "name": "compiled_prompt",
+          "type": "STRING",
+          "links": [
+            41
+          ]
+        },
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "length",
+          "name": "length",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "media_map_json",
+          "name": "media_map_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": [
+            42
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3DirectorProjectT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "{\"schema\": \"t8.minimax_h3.director_project\", \"version\": 2, \"id\": \"066da7e8-a6bb-479b-92e1-0dce0ec1b192\", \"title\": \"H09 · 三镜白杯交接 · 声明配方待审\", \"revision\": 0, \"current\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"assets\": [], \"doc\": {\"global\": \"\", \"sharedRefs\": [], \"sharedRatio\": true, \"ratio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"generation\": {\"unet\": \"auto\", \"clip\": \"auto\", \"video_vae\": \"auto\", \"audio_vae\": \"auto\", \"lora_mode\": \"auto\", \"loras\": [], \"resolution_mp\": \"auto\"}, \"sampling\": {\"mode\": \"single\"}, \"shots\": [{\"id\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"name\": \"白杯交接 1\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"A把同一个白杯放到桌上。A说：杯子给你。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"5b3d0eaf-878a-454a-972a-57aa18b3b7e0\", \"text\": \"A把同一个白杯放到桌上。A说：杯子给你。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"566a75b58161be9a4f7914ae7150a2df547e268128cf4bd83fd28e5775988035\", \"inputs_sha256\": \"e1533e538cc01d58bef856db4a2e8890d914e3e19beff09632267bf6268a2604\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"14cc3224584702f6e2c53c968bae3316f6c9947f7fe1684d23a9f97820d9bc4c\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"1ca9051994d9e6cef714cdb1ba401e21dcd752f0e31779ed855dab25e826cdeb\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"ff25ae1c-026f-482b-960c-1f0c25bab12b\", \"name\": \"白杯交接 2\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"ab0d18c4-eb67-4442-8af9-2ed89443cd75\", \"text\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"ec2aa2ecc99b14e18681ea4abd48dda1b6a4116909895e430d094e5bb3266fa8\", \"inputs_sha256\": \"dc8c2dcc0a800744113feb11fab5961cd3be866a4789454eded43557547d113d\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"292fa00b1e96d824604ad45001cb688669665d077830650db0373069023c5547\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"c3f0428d5c2394d5287e7bb8f0aebff8c7b522d9b3fc278edcfe8f28b1665d09\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"edde345a-81f1-46a3-8c99-33dc101c3529\", \"name\": \"白杯交接 3\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B拿着同一个白杯点头，不再说话。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"60c372dd-6b19-4f48-bcb1-e52f06b8de91\", \"text\": \"B拿着同一个白杯点头，不再说话。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"640fa7110c208a5813e18c6370bdb868432fcfaf7dfae41a9d4211cdc88971b0\", \"inputs_sha256\": \"58522aa95d8caa91f29f834bc8ceddfb08128c72d72807674a69e6da5d98bde1\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"f9b9300145b807bd080160b52fe65e97898806081ccda10092130e0fb5734191\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"3e0dbe30a04b542f36a51f6f61610018a1e85096c5fa2948af3f3c4c49322b00\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}], \"skillLibrary\": [{\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}]}}",
+        "edde345a-81f1-46a3-8c99-33dc101c3529",
+        null
+      ],
+      "widgets_values_named": {
+        "project_json": "{\"schema\": \"t8.minimax_h3.director_project\", \"version\": 2, \"id\": \"066da7e8-a6bb-479b-92e1-0dce0ec1b192\", \"title\": \"H09 · 三镜白杯交接 · 声明配方待审\", \"revision\": 0, \"current\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"assets\": [], \"doc\": {\"global\": \"\", \"sharedRefs\": [], \"sharedRatio\": true, \"ratio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"generation\": {\"unet\": \"auto\", \"clip\": \"auto\", \"video_vae\": \"auto\", \"audio_vae\": \"auto\", \"lora_mode\": \"auto\", \"loras\": [], \"resolution_mp\": \"auto\"}, \"sampling\": {\"mode\": \"single\"}, \"shots\": [{\"id\": \"8d5707d2-15d7-49ae-8c71-2af505757eb4\", \"name\": \"白杯交接 1\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"A把同一个白杯放到桌上。A说：杯子给你。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"5b3d0eaf-878a-454a-972a-57aa18b3b7e0\", \"text\": \"A把同一个白杯放到桌上。A说：杯子给你。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"A\\\",\\\"text\\\":\\\"杯子给你。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"A\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"566a75b58161be9a4f7914ae7150a2df547e268128cf4bd83fd28e5775988035\", \"inputs_sha256\": \"e1533e538cc01d58bef856db4a2e8890d914e3e19beff09632267bf6268a2604\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"79188e7d-97d7-4fe0-a710-c6983fee2f3c\", \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"14cc3224584702f6e2c53c968bae3316f6c9947f7fe1684d23a9f97820d9bc4c\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"1ca9051994d9e6cef714cdb1ba401e21dcd752f0e31779ed855dab25e826cdeb\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"ff25ae1c-026f-482b-960c-1f0c25bab12b\", \"name\": \"白杯交接 2\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"ab0d18c4-eb67-4442-8af9-2ed89443cd75\", \"text\": \"B从桌上拿起同一个白杯。B说：好，谢谢。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[\\\"cup\\\"],\\\"dialogue\\\":[{\\\"role_id\\\":\\\"B\\\",\\\"text\\\":\\\"好，谢谢。\\\"}],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"scene\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"ec2aa2ecc99b14e18681ea4abd48dda1b6a4116909895e430d094e5bb3266fa8\", \"inputs_sha256\": \"dc8c2dcc0a800744113feb11fab5961cd3be866a4789454eded43557547d113d\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"9c3114ef-2a4e-45dc-a04d-b7961e6771b3\", \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"292fa00b1e96d824604ad45001cb688669665d077830650db0373069023c5547\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"c3f0428d5c2394d5287e7bb8f0aebff8c7b522d9b3fc278edcfe8f28b1665d09\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}, {\"id\": \"edde345a-81f1-46a3-8c99-33dc101c3529\", \"name\": \"白杯交接 3\", \"mode\": \"text\", \"samplingInherit\": true, \"sound\": \"native\", \"writingMode\": \"simple\", \"simplePrompt\": \"B拿着同一个白杯点头，不再说话。\", \"prompt\": \"\", \"events\": [], \"refs\": [], \"tray\": [], \"first\": null, \"last\": null, \"audio\": null, \"start\": 0, \"end\": 0, \"duration\": 5, \"manualDuration\": 5, \"autoDuration\": false, \"ratio\": \"16:9\", \"ownRatio\": \"16:9\", \"d3\": {\"semantic_bridge\": {\"enabled\": false}, \"prompt_relay\": {\"enabled\": false}, \"fast_h3_v2\": {\"enabled\": false}, \"memory\": {\"low_vram\": false, \"chunk_ffn\": false}}, \"d3Inherit\": true, \"rev\": 3, \"skillBindings\": [{\"id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"snapshot\": {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}, \"enabled\": true, \"parameters\": {\"ledger\": \"{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\"}}], \"promptCandidate\": {\"schema\": \"t8.director.prompt_candidate.v1\", \"id\": \"60c372dd-6b19-4f48-bcb1-e52f06b8de91\", \"text\": \"B拿着同一个白杯点头，不再说话。\\n\\n[用户制作声明，不是已确认画面事实]\\n{\\\"changes\\\":[],\\\"dialogue\\\":[],\\\"end_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}},\\\"props\\\":[{\\\"description\\\":\\\"同一个白色杯子\\\",\\\"prop_id\\\":\\\"cup\\\"}],\\\"roles\\\":[{\\\"asset_ids\\\":[],\\\"description\\\":\\\"A，蓝色上衣\\\",\\\"role_id\\\":\\\"A\\\"},{\\\"asset_ids\\\":[],\\\"description\\\":\\\"B，红色上衣\\\",\\\"role_id\\\":\\\"B\\\"}],\\\"start_state\\\":{\\\"cup\\\":{\\\"holder\\\":\\\"B\\\",\\\"state\\\":\\\"同一个白色杯子，完整\\\"}}}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"text_sha256\": \"640fa7110c208a5813e18c6370bdb868432fcfaf7dfae41a9d4211cdc88971b0\", \"inputs_sha256\": \"58522aa95d8caa91f29f834bc8ceddfb08128c72d72807674a69e6da5d98bde1\", \"active\": false, \"options\": {\"facts\": false, \"intent\": true}, \"receipt\": {\"binding_order\": [{\"binding_id\": \"b23f6284-85db-4a85-9029-dcfb174cf3f2\", \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}], \"claim_ids\": [], \"facts_revision\": null, \"intent_revision\": null, \"input_component_sha256\": {\"schema\": \"e1bb76d91af590a8ef48458ccaea4345f6d3a3fe8b17ad6c267ef0aa23d25be1\", \"global\": \"12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126\", \"draft\": \"f9b9300145b807bd080160b52fe65e97898806081ccda10092130e0fb5734191\", \"references\": \"450c2028c57de45552e50f03adc869939e1218b2e43e2d456844b53e04f36d70\", \"assets\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\", \"evidence\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"intent\": \"74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b\", \"dependencies\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\", \"bindings\": \"3e0dbe30a04b542f36a51f6f61610018a1e85096c5fa2948af3f3c4c49322b00\", \"options\": \"451e65f0a55c55dd1ebd3a6dbd0ed3da958fb03fb8fe1872bbfee7c8ec43a8b6\"}}}}], \"skillLibrary\": [{\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"dcdd7d80-f52c-4853-ad60-3c60e61fb8dd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d95f9dac0d0cd3dbe93bc26909f2f9d08c3dbf564b465b26f4796ebcbb481743\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"eae49c2e-5afc-49d8-a61c-1448201701cd\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"d52795675a675ac2e4765068c3e6715c65ca223da86334d9cabede1f625740eb\"}, {\"schema\": \"t8.director.prompt_skill.v1\", \"id\": \"3493a03c-d6c2-47ac-b284-c0099db4dc4d\", \"version\": 1, \"name\": \"H09 · 稳定角色与道具交接\", \"text_snapshot\": \"[用户制作声明，不是已确认画面事实]\\n${ledger}\\n保留原稿和字面对白；仅本镜执行允许变化。未观察状态不补造，画面因果与实际持物仍待人审。\", \"parameter_schema\": {\"ledger\": {\"type\": \"string\", \"max_length\": 4096}}, \"content_sha256\": \"7cad7d652fdadc1ca475648e9e40503498a3f895b998559a74ed96c644d3ecc1\"}]}}",
+        "shot_id": "edde345a-81f1-46a3-8c99-33dc101c3529",
+        "打开曜石导演台": null
+      }
+    },
+    {
+      "id": 37,
+      "type": "PreviewAny",
+      "pos": [
+        440,
+        1500
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 41
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 38,
+      "type": "PreviewAny",
+      "pos": [
+        440,
+        1800
+      ],
+      "size": [
+        390,
+        122
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "源",
+          "name": "source",
+          "type": "*",
+          "link": 42
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "字符串",
+          "name": "STRING",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "title": "Preview as Text",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 39,
+      "type": "Note",
+      "title": "已审来源；先配置自己的资源",
+      "pos": [
+        0,
+        -720
+      ],
+      "size": [
+        900,
+        380
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "properties": {},
+      "widgets_values": [
+        "这是三镜原稿／待审候选展示，不生成视频。三个候选active=false，仍编译原稿；您显式采用后才改变输出。不要把人审流程通过说成持物／风格生成认证。\n仅来源案例于2026-10-11人审r15通过。资源路径适配未重新采样；原有步数、种子、尺寸、sigma、音轨与外置EAV/Relay接线保持。请先看README；不要直接误跑。人物移除不保证像素锁定，EAV仅report_only，未知组合无新质量或提速资格。旧图保留，尚未发布。"
+      ]
+    }
+  ],
+  "links": [
+    [
+      37,
+      30,
+      0,
+      31,
+      0,
+      "*"
+    ],
+    [
+      38,
+      30,
+      5,
+      32,
+      0,
+      "*"
+    ],
+    [
+      39,
+      33,
+      0,
+      34,
+      0,
+      "*"
+    ],
+    [
+      40,
+      33,
+      5,
+      35,
+      0,
+      "*"
+    ],
+    [
+      41,
+      36,
+      0,
+      37,
+      0,
+      "*"
+    ],
+    [
+      42,
+      36,
+      5,
+      38,
+      0,
+      "*"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        120,
+        120
+      ]
+    },
+    "workflow_title": "H09 · Director · reviewed source",
+    "h09_reviewed_source": {
+      "case": "B1",
+      "revision": 15,
+      "parent_native_sha256": "40de9349f509052eff4801dfad18450bd4db838ed41c4a4fb02fb985cb3a2451",
+      "accepted_media_sha256": [],
+      "resource_adaptations_reexecuted": false,
+      "subset_only": true,
+      "existing_prefix_required": false,
+      "automatic_adoption": false,
+      "scope": "specific_human_accepted_media_or_candidate_flow_NOT_all_models_or_tasks"
+    }
+  },
+  "version": 0.4
+}

@@ -37,10 +37,24 @@ def test_actual_html_module_selection_preserves_both_native_core_entries():
     result = subprocess.run([shutil.which("node"), "--input-type=module", "-e", script],
         capture_output=True, text=True, encoding="utf8", timeout=30)
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == ["/extensions/minimax-h3-audio-T8/director/"] * 2 + ["./"]
+    assert json.loads(result.stdout) == ["./ui-modules/"] * 2 + ["./"]
     for filename in ("creation_library.mjs", "workbench.mjs", "modal_ui.mjs"):
         assert "import(directorModules + '" + filename + "')" in html
         assert (ROOT / "web/director" / filename).is_file()
+
+
+def test_actual_service_base_keeps_core_entries_and_supports_renamed_static_folder():
+    module = (ROOT / "web/director/session.mjs").as_uri()
+    paths = ["/minimax_h3_t8/director/session.mjs", "/api/minimax_h3_t8/director/session.mjs",
+             "/extensions/minimax-h3-audio-T8/director/session.mjs",
+             "/extensions/comfyui-minimax-h3-audio-T8/director/session.mjs"]
+    script = ("import {directorServiceBase} from " + json.dumps(module) + ";const paths="
+              + json.dumps(paths) + ";console.log(JSON.stringify(paths.map(p=>directorServiceBase('http://127.0.0.1:8992'+p).href)));" )
+    result = subprocess.run([shutil.which("node"), "--input-type=module", "-e", script],
+        capture_output=True, text=True, encoding="utf8", timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == ["http://127.0.0.1:8992/minimax_h3_t8/director/"] + [
+        "http://127.0.0.1:8992/api/minimax_h3_t8/director/"] * 3
 
 
 @pytest.mark.parametrize("index", [0, 1])

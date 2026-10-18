@@ -1248,7 +1248,7 @@ class flow_stage_index_switch:
             return False
         if idx < 0:
             return False
-        stage_number = idx + 1
+        stage_number = max(1, idx)
         if index_mode == "multi_index":
             return stage_number in cls._parse_multi_index(multi_index)
         if index_mode == "1N":
@@ -1575,6 +1575,7 @@ _STAGE_BRIDGE_TYPES = ["auto", "latent", "image", "mask", "video", "audio", "ten
 _STAGE_INFO_TYPE = "FLOW_STAGE_INFO"
 _STAGE_ACTIVE_RUN_IDS = {}
 _STAGE_BEGIN_NODE_IDS = {}
+_STAGE_WATCHED_PROMPTS = set()
 
 
 def _stage_safe_name(value):
@@ -2143,24 +2144,30 @@ def _stage_remove_queued_initial_tasks(server, begin_node_id):
         logging.info("flow_stage_begin: removed %s duplicate initial task(s)", removed)
 
 
-def _stage_enqueue_next_prompt(server, begin_node_id, run_id, next_stage, advance_seeds=False):
+def _stage_current_prompt_item(server):
     current_prompt_id = getattr(server, "last_prompt_id", None)
-    current_item = None
     with server.prompt_queue.mutex:
         for item in server.prompt_queue.currently_running.values():
             if item[1] == current_prompt_id:
-                current_item = copy.deepcopy(item)
-                break
+                return copy.deepcopy(item)
+    return None
+
+
+def _stage_enqueue_next_prompt(server, begin_node_id, run_id, next_stage, advance_seeds=False, current_item=None):
     if current_item is None:
-        raise RuntimeError("flow_stage_end: cannot queue the next stage because the current server prompt is unavailable")
+        current_item = _stage_current_prompt_item(server)
+    else:
+        current_item = copy.deepcopy(current_item)
+    if current_item is None:
+        raise RuntimeError("flow_stage_begin: cannot queue the next stage because the current server prompt is unavailable")
 
     prompt = current_item[2]
     begin_node = prompt.get(str(begin_node_id))
     if not isinstance(begin_node, Mapping) or begin_node.get("class_type") != "flow_stage_begin":
-        raise RuntimeError("flow_stage_end: cannot find the matching flow_stage_begin in the current prompt")
+        raise RuntimeError("flow_stage_begin: cannot find itself in the current prompt")
     inputs = begin_node.get("inputs")
     if not isinstance(inputs, dict):
-        raise RuntimeError("flow_stage_end: flow_stage_begin inputs are unavailable")
+        raise RuntimeError("flow_stage_begin: inputs are unavailable")
     inputs["run_id"] = str(run_id)
     inputs["stage_index"] = int(next_stage)
     for prompt_node in prompt.values():
@@ -2169,8 +2176,10 @@ def _stage_enqueue_next_prompt(server, begin_node_id, run_id, next_stage, advanc
         switch_inputs = prompt_node.get("inputs")
         if not isinstance(switch_inputs, dict) or isinstance(switch_inputs.get("stage_index"), (list, tuple)):
             continue
-        if prompt_node.get("class_type") in {"flow_stage_index_switch", "AD_MinMax_Ref2"}:
-            switch_inputs["stage_index"] = int(next_stage) - 1
+        if prompt_node.get("class_type") in {
+            "flow_stage_index_switch", "AD_MinMax_Ref2", "AD_MinMax_FL2", "sum_QwenImage2",
+        }:
+            switch_inputs["stage_index"] = int(next_stage)
 
     next_prompt_id = str(uuid.uuid4())
     extra_data = current_item[3]
@@ -2186,12 +2195,72 @@ def _stage_enqueue_next_prompt(server, begin_node_id, run_id, next_stage, advanc
             number, next_prompt_id, prompt, extra_data, outputs_to_execute, sensitive,
         ))
         logging.info(
-            "flow_stage_end: queued stage %s on the server as prompt %s",
+            "flow_stage_begin: queued stage %s on the server as prompt %s",
             next_stage, next_prompt_id,
         )
 
     server.loop.call_soon_threadsafe(enqueue)
     return next_prompt_id
+
+
+def _stage_watch_prompt_completion(server, begin_node_id, run_id, stage_index, total):
+    current_item = _stage_current_prompt_item(server)
+    if current_item is None:
+        raise RuntimeError("flow_stage_begin: cannot watch the current server prompt")
+    prompt_id = current_item[1]
+    if prompt_id in _STAGE_WATCHED_PROMPTS:
+        return
+    _STAGE_WATCHED_PROMPTS.add(prompt_id)
+
+    async def wait_for_completion():
+        try:
+            while True:
+                await asyncio.sleep(0.05)
+                with server.prompt_queue.mutex:
+                    history = copy.deepcopy(server.prompt_queue.history.get(prompt_id))
+                if history is None:
+                    continue
+
+                status = history.get("status") or {}
+                if status.get("status_str") != "success" or not status.get("completed", False):
+                    logging.warning(
+                        "flow_stage_begin: stage %s/%s failed; automatic stage progression stopped",
+                        stage_index + 1,
+                        total,
+                    )
+                    return
+
+                state = _stage_load_state(_stage_run_dir(run_id))
+                if state is None or int(state.get("completed_stage", -1)) != stage_index:
+                    logging.warning(
+                        "flow_stage_begin: stage %s/%s did not reach flow_stage_end; automatic stage progression stopped",
+                        stage_index + 1,
+                        total,
+                    )
+                    return
+
+                if stage_index + 1 < total:
+                    next_stage = stage_index + 2
+                    _stage_enqueue_next_prompt(
+                        server,
+                        begin_node_id,
+                        run_id,
+                        next_stage,
+                        advance_seeds=True,
+                        current_item=current_item,
+                    )
+                    _stage_feedback(begin_node_id, "stage_index", next_stage)
+                else:
+                    _stage_feedback(begin_node_id, "stage_index", 0)
+                    _STAGE_BEGIN_NODE_IDS.pop(run_id, None)
+                    _STAGE_ACTIVE_RUN_IDS.pop(str(begin_node_id), None)
+                return
+        except Exception:
+            logging.exception("flow_stage_begin: failed to advance after stage %s/%s", stage_index + 1, total)
+        finally:
+            _STAGE_WATCHED_PROMPTS.discard(prompt_id)
+
+    asyncio.run_coroutine_threadsafe(wait_for_completion(), server.loop)
 
 
 def _stage_load_checkpoint(run_dir, stage_index, channel):
@@ -2354,7 +2423,7 @@ class flow_stage_begin:
             data_1 = initial_data_1
             data_2 = initial_data_2
             data_3 = initial_data_3
-            if not new_run:
+            if state is None or not new_run:
                 state = {
                     "version": _STAGE_BRIDGE_VERSION,
                     "run_id": effective_run_id,
@@ -2470,7 +2539,14 @@ class flow_stage_begin:
             "checkpoint_saved_data2": checkpoint_data_2 is not None,
             "checkpoint_saved_data3": checkpoint_data_3 is not None,
         }
-        return stage_info, stage_index
+        _stage_watch_prompt_completion(
+            PromptServer.instance,
+            node_key,
+            effective_run_id,
+            stage_index,
+            total,
+        )
+        return stage_info, stage_index + 1
 
 
 def _stage_validate_info(stage_info):
@@ -2505,11 +2581,13 @@ class flow_stage_unpack:
         _STAGE_INFO_TYPE,                          # stage_info 过桥：原样返回输入，方便后续节点直接拿 stage_info
         any_type, any_type, any_type, "INT", "BOOLEAN", "BOOLEAN",
         _STAGE_INFO_TYPE, _STAGE_INFO_TYPE, _STAGE_INFO_TYPE, _STAGE_INFO_TYPE,
+        "STRING", "INT",
     )
     RETURN_NAMES = (
         "stage_info",
-        "data_1", "data_2", "data_3", "total", "is_first", "is_last",
+        "data1", "data2", "data3", "total", "is_first", "is_last",
         "stage_info_mix", "stage_info_data1", "stage_info_data2", "stage_info_data3",
+        "run_id", "stage_index",
     )
     FUNCTION = "unpack"
     CATEGORY = "Apt_Preset/flow"
@@ -2519,7 +2597,7 @@ class flow_stage_unpack:
         return True
 
     def unpack(self, stage_info):
-        _, stage_index, total = _stage_validate_info(stage_info)
+        run_id, stage_index, total = _stage_validate_info(stage_info)
         stage_data_1 = stage_info.get("stage_data_1", stage_info.get("stage_data"))
         stage_data_2 = stage_info.get("stage_data_2")
         stage_data_3 = stage_info.get("stage_data_3")
@@ -2556,6 +2634,8 @@ class flow_stage_unpack:
             stage_info_data1,
             stage_info_data2,
             stage_info_data3,
+            run_id,
+            stage_index + 1,
         )
 
 
@@ -2708,6 +2788,35 @@ def _stage_list_collect(run_dir, total, channel="data1"):
     return items
 
 
+def _stage_upstream_switch_state(workflow_prompt, link, stage_index, visited=None):
+    if not isinstance(link, (list, tuple)) or len(link) != 2 or not isinstance(workflow_prompt, Mapping):
+        return None
+    node_id = str(link[0])
+    if visited is None:
+        visited = set()
+    if node_id in visited:
+        return None
+    visited.add(node_id)
+    node = workflow_prompt.get(node_id)
+    if not isinstance(node, Mapping):
+        return None
+    inputs = node.get("inputs")
+    if node.get("class_type") == "flow_stage_index_switch" and isinstance(inputs, Mapping):
+        return flow_stage_index_switch._matches(
+            stage_index + 1,
+            inputs.get("index_mode", "multi_index"),
+            inputs.get("multi_index", ""),
+        )
+    if not isinstance(inputs, Mapping):
+        return None
+    states = []
+    for value in inputs.values():
+        state = _stage_upstream_switch_state(workflow_prompt, value, stage_index, visited.copy())
+        if state is not None:
+            states.append(state)
+    return all(states) if states else None
+
+
 class flow_stage_end:
     @classmethod
     def INPUT_TYPES(cls):
@@ -2739,20 +2848,28 @@ class flow_stage_end:
         return float("nan")
 
     def check_lazy_status(self, stage_info, **kwargs):
-        if "data_1" in kwargs and kwargs["data_1"] is None:
-            return ["data_1"]
-        if "data_2" in kwargs and kwargs["data_2"] is None:
-            if "data_1" in kwargs:
-                _stage_save_checkpoint_data(stage_info, kwargs["data_1"], "data1")
-            return ["data_2"]
-        if "data_2" in kwargs and kwargs["data_2"] is not None:
-            _stage_save_checkpoint_data(stage_info, kwargs["data_2"], "data2")
-        if "data_3" in kwargs and kwargs["data_3"] is None:
-            return ["data_3"]
-        if "data_3" in kwargs and kwargs["data_3"] is not None:
-            _stage_save_checkpoint_data(stage_info, kwargs["data_3"], "data3")
-        if "blank" in kwargs and kwargs["blank"] is None:
-            return ["blank"]
+        _, stage_index, _ = _stage_validate_info(stage_info)
+        workflow_prompt = kwargs.get("workflow_prompt")
+        node_id = str(kwargs.get("unique_id"))
+        prompt_node = workflow_prompt.get(node_id) if isinstance(workflow_prompt, Mapping) else None
+        prompt_inputs = prompt_node.get("inputs") if isinstance(prompt_node, Mapping) else None
+        names = [name for name in ("data_1", "data_2", "data_3", "blank") if name in kwargs]
+
+        switch_states = {}
+        if isinstance(prompt_inputs, Mapping):
+            for name in names:
+                switch_states[name] = _stage_upstream_switch_state(
+                    workflow_prompt, prompt_inputs.get(name), stage_index
+                )
+        if any(state is not None for state in switch_states.values()):
+            names = [name for name in names if switch_states.get(name) is True]
+
+        for name in names:
+            value = kwargs[name]
+            if value is None:
+                return [name]
+            if name.startswith("data_"):
+                _stage_save_checkpoint_data(stage_info, value, name.replace("_", ""))
         return []
 
     def commit(self, data_1=None, data_2=None, data_3=None, blank=None, stage_info=None, unload_models=False, free_memory=True,
@@ -2855,11 +2972,6 @@ class flow_stage_end:
             if os.path.isfile(checkpoint_path):
                 os.remove(checkpoint_path)
 
-        begin_node_id = _STAGE_BEGIN_NODE_IDS.get(run_id)
-        _stage_feedback(begin_node_id, "stage_index", 0 if complete else stage_index + 2)
-        if complete:
-            _STAGE_BEGIN_NODE_IDS.pop(run_id, None)
-
         PromptServer.instance.prompt_queue.set_flag("unload_models", bool(unload_models))
         should_free_memory = free_memory and (stage_index + 1) % free_memory_interval == 0
         PromptServer.instance.prompt_queue.set_flag("free_memory", should_free_memory)
@@ -2890,28 +3002,11 @@ class flow_stage_end:
             if connected_outputs is None or 2 in connected_outputs:
                 list_data3 = _stage_list_collect(run_dir, total, "data3")
 
-        next_prompt_id = None
-        if not complete:
-            if begin_node_id is None:
-                raise RuntimeError("flow_stage_end: cannot queue the next stage because flow_stage_begin is unavailable")
-            server = PromptServer.instance
-            next_prompt_id = _stage_enqueue_next_prompt(
-                server,
-                begin_node_id,
-                run_id,
-                stage_index + 2,
-                advance_seeds=True,
-            )
-            next_state["queued_prompt_id"] = next_prompt_id
-            _stage_write_json(_stage_state_path(run_dir), next_state)
-
         if filename is None and filename_2 is None and filename_3 is None:
             message = f"stage {stage_index + 1}/{total} completed (control only)"
         else:
             saved = ", ".join(name for name in (filename, filename_2, filename_3) if name is not None)
             message = f"stage {stage_index + 1}/{total} saved: {saved}"
-        if next_prompt_id is not None:
-            message += f"; next stage queued on server ({next_prompt_id})"
         return {"ui": {"text": [message]}, "result": (list_data1, list_data2, list_data3)}
 
 

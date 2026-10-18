@@ -2,7 +2,7 @@
 
 用于 ComfyUI 的 MiniMax H3 视频与声音节点：参考图／音频、双采与长视频、人物口型、运镜编辑，以及可选高清后处理。
 
-简体中文 | [English](README_EN.md) · 当前版本：**1.95.0** · [更新日志](CHANGELOG.md)
+简体中文 | [English](README_EN.md) · 当前版本：**1.101.0** · [更新日志](CHANGELOG.md)
 
 ## 安装
 
@@ -23,10 +23,15 @@ Windows 更新提示 `Filename too long`？见[短路径与恢复说明](docs/WI
 
 |你想做什么|入口|
 |---|---|
+|同条件先音后画／Wuli普通Hybrid（EXP）|[H13两份已审工作流](examples/workflows/88-h13-reviewed/README.md) · [接线与边界](docs/H13_AUDIO_FIRST_HYBRID.md)|
+|Spark／Wuli原生4与8步、仅音频参考／耗时卡／桥参数侧车（EXP）|[H11八份已审工作流](examples/workflows/87-h11-reviewed/README.md) · [接线与边界](docs/H11_NATIVE_EXTENSIONS.md)|
+|Veda R2VA、FreeVideo INT8、人物移除与原声／参考提案（EXP）|[H09九张已审来源图](examples/workflows/86-h09-reviewed/README.md) · [接线与限制](docs/RELEASE_1.98.0.md)|
+|给现有视频生成拟音／H07已审配方（EXP）|[七张工作流](examples/workflows/85-h07-reviewed/README.md) · [拟音用法](docs/H07_FOLEY_USAGE.md)|
 |第一次跑 H3／首帧图生视频|[基础生成](examples/workflows/01-basic-generation)|
 |音频参考、人物说话／唱歌|[音频控制](examples/workflows/02-audio-control) · [原生音色／情绪与 Avatar](examples/workflows/36-avatar-voice/README.md)|
 |双模型 4+4、分段长视频|[长视频](examples/workflows/04-long-video)|
 |独立一采／二采、外置 EAV／Relay|[分离采样](docs/MODULAR_SAMPLING_EXP.md) · [Veda 8 步](examples/workflows/63-veda-t2va/README.md)|
+|参考图框选人物与目标（EXP）|[视觉标记工作流](examples/workflows/84-visual-marker/README.md) · [接线与限制](docs/VISUAL_MARKER_EXP.md)|
 |FreeVideo FP8：8+2／真正4+4（EXP）|[六张分离工作流](examples/workflows/72-freevideo-split/README.md) · [独立环境](docs/FREEVIDEO_EXP.md)|
 |Kijai 九原件、Acc8 Full／Pruned 分离双采|[18张工作流](examples/workflows/71-kijai-experimental-split/README.md) · [模型配对](docs/KIJAI_EXPERIMENTAL_LORAS_EXP.md)|
 |外片续拍、可见脸 MASK、无脸旁路及曲线双采|[RADAR 新工作流与限制](docs/RELEASE_1.89.0.md)|

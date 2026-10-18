@@ -1,0 +1,351 @@
+{
+  "id": "db6fdc28-0650-4f13-85fe-78b8775c8f5c",
+  "revision": 0,
+  "last_node_id": 5,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MiniMaxH3FreeVideoQualityStageLoadEXPT8",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        390,
+        168
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "manifest_path",
+          "name": "manifest_path",
+          "type": "STRING",
+          "widget": {
+            "name": "manifest_path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "manifest_sha256",
+          "name": "manifest_sha256",
+          "type": "STRING",
+          "widget": {
+            "name": "manifest_sha256"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "av_latent",
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "localized_name": "completed_stage",
+          "name": "completed_stage",
+          "type": "H3_T8_FREEVIDEO_QUALITY_STAGE",
+          "links": [
+            1
+          ]
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3FreeVideoQualityStageLoadEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "manifest_path": "",
+        "manifest_sha256": ""
+      }
+    },
+    {
+      "id": 2,
+      "type": "MiniMaxH3FreeVideoPhaseCardEXPT8",
+      "pos": [
+        440,
+        0
+      ],
+      "size": [
+        390,
+        194
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "completed_quality_stage",
+          "name": "completed_quality_stage",
+          "shape": 7,
+          "type": "H3_T8_FREEVIDEO_QUALITY_STAGE",
+          "link": 1
+        },
+        {
+          "localized_name": "completed_int8_stage",
+          "name": "completed_int8_stage",
+          "shape": 7,
+          "type": "H3_T8_FREEVIDEO_INT8_STAGE",
+          "link": null
+        },
+        {
+          "localized_name": "decode_report_json",
+          "name": "decode_report_json",
+          "type": "STRING",
+          "widget": {
+            "name": "decode_report_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "mux_report_json",
+          "name": "mux_report_json",
+          "type": "STRING",
+          "widget": {
+            "name": "mux_report_json"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3FreeVideoPhaseCardEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "{}",
+        "{}"
+      ],
+      "widgets_values_named": {
+        "decode_report_json": "{}",
+        "mux_report_json": "{}"
+      }
+    },
+    {
+      "id": 3,
+      "type": "MiniMaxH3FreeVideoINT8StageLoadEXPT8",
+      "pos": [
+        0,
+        300
+      ],
+      "size": [
+        390,
+        168
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "manifest_path",
+          "name": "manifest_path",
+          "type": "STRING",
+          "widget": {
+            "name": "manifest_path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "manifest_sha256",
+          "name": "manifest_sha256",
+          "type": "STRING",
+          "widget": {
+            "name": "manifest_sha256"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "av_latent",
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "localized_name": "completed_stage",
+          "name": "completed_stage",
+          "type": "H3_T8_FREEVIDEO_INT8_STAGE",
+          "links": [
+            2
+          ]
+        },
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3FreeVideoINT8StageLoadEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "manifest_path": "",
+        "manifest_sha256": ""
+      }
+    },
+    {
+      "id": 4,
+      "type": "MiniMaxH3FreeVideoPhaseCardEXPT8",
+      "pos": [
+        440,
+        300
+      ],
+      "size": [
+        390,
+        194
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "completed_quality_stage",
+          "name": "completed_quality_stage",
+          "shape": 7,
+          "type": "H3_T8_FREEVIDEO_QUALITY_STAGE",
+          "link": null
+        },
+        {
+          "localized_name": "completed_int8_stage",
+          "name": "completed_int8_stage",
+          "shape": 7,
+          "type": "H3_T8_FREEVIDEO_INT8_STAGE",
+          "link": 2
+        },
+        {
+          "localized_name": "decode_report_json",
+          "name": "decode_report_json",
+          "type": "STRING",
+          "widget": {
+            "name": "decode_report_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "mux_report_json",
+          "name": "mux_report_json",
+          "type": "STRING",
+          "widget": {
+            "name": "mux_report_json"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "report_json",
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3FreeVideoPhaseCardEXPT8",
+        "cnr_id": "minimax-h3-audio-t8"
+      },
+      "widgets_values": [
+        "{}",
+        "{}"
+      ],
+      "widgets_values_named": {
+        "decode_report_json": "{}",
+        "mux_report_json": "{}"
+      }
+    },
+    {
+      "id": 5,
+      "type": "MarkdownNote",
+      "pos": [
+        0,
+        -250
+      ],
+      "size": [
+        900,
+        200
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "# H11 · 人工审核通过的来源示例\n\n两StageLoad分别填自己的完整FP8/INT8 Stage manifest与对应完整SHA；文件不分发，不能用MP4代替Stage。本图只读旧已完成回执，不加载DiT/VAE或重新采样。缺phase/compile/VAE/mux显示不可用，不是0；不是本次耗时或速度对比。\n\n2026-10-12实际人审r7通过。仅本例媒体/接口范围，不保证所有模型、双采阶段、长窗或硬件；资源路径适配没有重新采样。原种子、尺寸、步数、时钟、音轨与全部边保持；旧工作流不迁移。详见本目录README。"
+      ],
+      "widgets_values_named": {
+        "text": "# H11 · 人工审核通过的来源示例\n\n两StageLoad分别填自己的完整FP8/INT8 Stage manifest与对应完整SHA；文件不分发，不能用MP4代替Stage。本图只读旧已完成回执，不加载DiT/VAE或重新采样。缺phase/compile/VAE/mux显示不可用，不是0；不是本次耗时或速度对比。\n\n2026-10-12实际人审r7通过。仅本例媒体/接口范围，不保证所有模型、双采阶段、长窗或硬件；资源路径适配没有重新采样。原种子、尺寸、步数、时钟、音轨与全部边保持；旧工作流不迁移。详见本目录README。"
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      1,
+      2,
+      0,
+      "H3_T8_FREEVIDEO_QUALITY_STAGE"
+    ],
+    [
+      2,
+      3,
+      1,
+      4,
+      1,
+      "H3_T8_FREEVIDEO_INT8_STAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        120,
+        120
+      ]
+    },
+    "workflow_title": "H11_PhaseCard · reviewed source",
+    "h11_reviewed_source": {
+      "review_id": "474d1311024ffa56ab50e404af7f7808f14ddc7e8e1d861b5766da35ef8a48eb",
+      "revision": 7,
+      "case": "B2",
+      "original_saved_sha256": "00ee7b8259527cd7fce53ecf009dcb0dd4e8d9a2332859adb856cd8cb3b0d4d2",
+      "accepted_media_sha256": [],
+      "resource_adaptations_reexecuted": false,
+      "automatic_adoption": false,
+      "scope": "specific_accepted_media_or_interface_NOT_all_models_or_stages"
+    }
+  },
+  "version": 0.4
+}

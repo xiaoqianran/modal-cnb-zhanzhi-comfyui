@@ -1049,18 +1049,21 @@ class ModelPreviewOverrideKJ(io.ComfyNode):
                 ),
             ],
             outputs=[io.Model.Output(tooltip="Model with preview override attached.")],
-            hidden=[io.Hidden.unique_id],
+            hidden=[io.Hidden.unique_id, io.Hidden.dynprompt],
             is_experimental=True,
         )
 
     @classmethod
     def execute(cls, model, max_resolution, jpeg_quality, suppress_default_preview, preview_frames, preview_fps, vae=None, tiny_vae="none", audio_vae=None) -> io.NodeOutput:
+        # loop/expansion copies run under generated ids; the widget listens on the display id
+        dynprompt = cls.hidden.dynprompt
+        node_id = dynprompt.get_display_node_id(cls.hidden.unique_id) if dynprompt is not None else cls.hidden.unique_id
         m = model.clone()
         m.add_wrapper_with_key(
             comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
             "kj_preview_override",
             _PreviewOverrideWrapper(
-                max_resolution, cls.hidden.unique_id, jpeg_quality, suppress_default_preview,
+                max_resolution, node_id, jpeg_quality, suppress_default_preview,
                 preview_frames, preview_fps, vae, tiny_vae, audio_vae,
             ),
         )

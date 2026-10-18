@@ -1,5 +1,10 @@
 // Persistent D1 services; UI drafts are separate from saved server revisions.
 import { radarCandidateInputState } from './radar_state.mjs';
+export function directorServiceBase(moduleURL) {
+    const local = new URL('.', moduleURL);
+    return /^\/(?:api\/)?minimax_h3_t8\/director\/$/.test(local.pathname)
+        ? local : new URL('/api/minimax_h3_t8/director/', moduleURL);
+}
 export function directorUUID() {
     if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
     // getRandomValues is available on ordinary LAN HTTP, unlike randomUUID.
@@ -125,7 +130,7 @@ export function makeDirectorServices(ctx) {
         new MutationObserver(normalizeLabel).observe(generationButton, { childList: true, characterData: true, subtree: true });
         normalizeLabel();
     }
-    const base = new URL(".", import.meta.url);
+    const base = directorServiceBase(import.meta.url);
     const id = directorUUID;
     const onlineNote = "D2a–D2c：文字、首帧、首尾、参考素材、原音驱动和参考音色均按正式 Core 配方编译；GPU画质仍需逐项验收。";
     let tab = storageRead('sessionStorage', 't8director.tab') || id();

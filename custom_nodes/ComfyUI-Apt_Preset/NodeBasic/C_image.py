@@ -755,7 +755,7 @@ class Image_Pair_Merge:
     RETURN_TYPES = ("IMAGE", "MASK", "BOX2", "IMAGE", "MASK", )
     RETURN_NAMES = ("composite_image", "composite_mask", "box2", "new_img2", "new_mask2", )
     FUNCTION = "composite2"
-    CATEGORY = "Apt_Preset/image"
+    CATEGORY = "Apt_Preset/image/ImgLayer"
 
     DESCRIPTION = """
     - 输入参数：
@@ -953,7 +953,7 @@ class Pair_Merge:
     RETURN_TYPES = ("IMAGE", "MASK", "BOX2", "IMAGE", "MASK")
     RETURN_NAMES = ("composite_image", "composite_mask", "box2", "new_img2", "new_mask2")
     FUNCTION = "composite"
-    CATEGORY = "Apt_Preset/image"
+    CATEGORY = "Apt_Preset/image/ImgLayer"
 
     def composite(self, layout_mode, bg_mode, size_mode, target_size, divider_thickness, image1=None, image2=None, mask1=None, mask2=None):
         # 映射resize_mode到OpenCV的插值方法

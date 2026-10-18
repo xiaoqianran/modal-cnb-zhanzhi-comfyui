@@ -15,6 +15,10 @@ import random
 import base64
 import urllib.parse
 import html
+import comfy.utils
+from comfy_extras.nodes_textgen import (
+    TextGenerateLTX2Prompt,
+)
 
 
 try:
@@ -1691,6 +1695,67 @@ class text_StrMatrix:
 
 
 
+
+
+class text_clip_Generate:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "clip": ("CLIP",),
+                "prompt": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": True}),
+            },
+            "optional": {
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "image5": ("IMAGE",),
+                "video": ("IMAGE", {"tooltip": "Video frames as image batch."}),
+                "audio": ("AUDIO",),
+                "system_prompt": ("STRING", {"forceInput": True}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("generated_text",)
+    FUNCTION = "generate"
+    CATEGORY = "Apt_Preset/prompt"
+
+    @staticmethod
+    def _image_batch(*images):
+        images = [image for image in images if image is not None]
+        if not images:
+            return None
+
+        height, width = images[0].shape[1:3]
+        batch = []
+        for image in images:
+            image = image[:1, :, :, :3]
+            if image.shape[1:3] != (height, width):
+                image = comfy.utils.common_upscale(
+                    image.movedim(-1, 1), width, height, "lanczos", "disabled"
+                ).movedim(1, -1)
+            batch.append(image)
+        return torch.cat(batch, dim=0)
+
+    def generate(self, clip, prompt, image1=None, image2=None, image3=None, image4=None, image5=None,
+                 video=None, audio=None, system_prompt=""):
+        image = self._image_batch(image1, image2, image3, image4, image5)
+        output = TextGenerateLTX2Prompt.execute(
+            clip,
+            prompt,
+            4096,
+            {"sampling_mode": "off"},
+            image=image,
+            thinking=False,
+            use_default_template=True,
+            video=video,
+            audio=audio,
+            mtp="auto",
+            system_prompt=system_prompt,
+        )
+        return (output.args[0] or prompt,)
 
 
 class text_MinimaxH3:

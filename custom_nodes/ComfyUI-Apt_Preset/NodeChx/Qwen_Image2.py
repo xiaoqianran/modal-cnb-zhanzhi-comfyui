@@ -10,10 +10,12 @@ import comfy.model_management
 
 from ..office_unit import *
 from ..main_unit import *
+from ..NodeBasic.C_promp import text_clip_Generate
 #endregion-----------------------------import----------------------------
 
 
 _QWEN2_MAX_MEDIA = 16
+_QWEN2_ENHANCE_INSTRUCTION = "Add detailed descriptions"
 # 标签格式：@<image1> / <image1> / @<img2> / <图片3> 均可，统一解析为 image 序号
 _QWEN2_TAG_RE = re.compile(
     r"@?<\s*(?:image|img|picture|pic|图片|图像)\s*(\d+)\s*>",
@@ -64,7 +66,7 @@ def _qwen2_select_stage_prompt(stage_prompts, prompt, stage_index):
     if not texts:
         return str(prompt or "")
 
-    idx = max(0, min(len(texts) - 1, int(stage_index or 0)))
+    idx = max(0, min(len(texts) - 1, int(stage_index or 0) - 1))
     return texts[idx]
 
 
@@ -75,7 +77,7 @@ class sum_QwenImage2:
         optional = {
             "context": ("RUN_CONTEXT",),
             "model": ("MODEL", {"lazy": True}),
-            "stage_index": ("INT", {"forceInput": True, "default": 0,
+            "stage_index": ("INT", {"forceInput": True, "default": 1,
                                      "min": 0, "max": 1024, "step": 1,
                                      "tooltip": "不传或 0 时取第 1 段。"}),
             "latent_image": ("IMAGE", {
@@ -109,6 +111,12 @@ class sum_QwenImage2:
                 "tooltip": "输出图的高",
             }),
         }
+        optional["prompt_enhance"] = ("BOOLEAN", {
+            "default": False,
+            "label_on": "开启",
+            "label_off": "关闭",
+            "tooltip": "开启后，自动添加 Add detailed descriptions，再结合当前提示词和最多 5 张参考图生成增强文本。",
+        })
         for index in range(1, _QWEN2_MAX_MEDIA + 1):
             optional[f"media_{index}"] = ("IMAGE", {"lazy": True})
         return {
@@ -124,7 +132,7 @@ class sum_QwenImage2:
     DESCRIPTION = (
     )
 
-    def check_lazy_status(self, prompt="", stage_index=0, stage_prompts="[]", **kwargs):
+    def check_lazy_status(self, prompt="", stage_index=1, stage_prompts="[]", **kwargs):
         required = []
         if kwargs.get("model") is None and "model" in kwargs:
             required.append("model")
@@ -156,9 +164,9 @@ class sum_QwenImage2:
                 image = image[..., :3]
         return image.clamp(0.0, 1.0)
 
-    def encode(self, context=None, model=None, stage_index=0, latent_image=None, media=None,
+    def encode(self, context=None, model=None, stage_index=1, latent_image=None, media=None,
                prompt="", stage_prompts="[]", negative_prompt="blur", ref_size_mode=False,
-               resolution=1024, width=1024, height=1024, **kwargs):
+               resolution=1024, width=1024, height=1024, prompt_enhance=False, **kwargs):
         clip = context.get("clip", None) if context else None
         vae = context.get("vae", None) if context else None
         if clip is None:
@@ -230,6 +238,21 @@ class sum_QwenImage2:
         else:
             latent_w = max(32, int(width) if width else 1024)
             latent_h = max(32, int(height) if height else 1024)
+
+        if prompt_enhance:
+            enhance_images = images_vl[:5] + [None] * max(0, 5 - len(images_vl))
+            enhance_prompt = "\n\n".join((active_prompt.rstrip(), _QWEN2_ENHANCE_INSTRUCTION)).strip("\n")
+            enhanced_prompt = text_clip_Generate().generate(
+                clip=clip,
+                prompt=enhance_prompt,
+                image1=enhance_images[0],
+                image2=enhance_images[1],
+                image3=enhance_images[2],
+                image4=enhance_images[3],
+                image5=enhance_images[4],
+            )[0]
+            if enhanced_prompt:
+                active_prompt = "\n".join((active_prompt.rstrip(), enhanced_prompt.lstrip())).strip("\n")
 
         model_prompt = _qwen2_normalize_tags(active_prompt, refs)
         keep_vision = len(ref_latents) == 0

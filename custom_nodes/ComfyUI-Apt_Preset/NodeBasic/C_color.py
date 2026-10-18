@@ -16,6 +16,7 @@ import copy
 import ast
 import torch.nn.functional as F
 from typing import Tuple
+from comfy_extras.nodes_post_processing import ColorTransfer
 from .C_image import Mask_transform_sum
 
 
@@ -1129,6 +1130,98 @@ class color_match_adv:
         return rst
 
 
+class color_transferColor:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "ref_img": ("IMAGE",),
+                "target_image": ("IMAGE",),
+                "method": (["reinhard_lab", "mkl_lab", "histogram"],),
+                "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
+            },
+            "optional": {
+                "ref_mask": ("MASK",),
+                "target_mask": ("MASK",),
+            },
+        }
+
+    CATEGORY = "Apt_Preset/image/color_adjust"
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "transfer_color"
+
+    @staticmethod
+    def _prepare_mask(mask, batch_size, height, width, device, dtype):
+        if mask is None:
+            return torch.ones((batch_size, height, width), device=device, dtype=dtype)
+
+        if mask.dim() == 2:
+            mask = mask.unsqueeze(0)
+        elif mask.dim() == 4:
+            mask = mask[..., 0]
+        mask = mask.to(device=device, dtype=dtype)
+        if mask.shape[1:] != (height, width):
+            mask = F.interpolate(mask.unsqueeze(1), size=(height, width), mode="bilinear", align_corners=False).squeeze(1)
+        if mask.shape[0] == 1 and batch_size > 1:
+            mask = mask.expand(batch_size, -1, -1)
+        elif mask.shape[0] != batch_size:
+            indices = torch.arange(batch_size, device=device).clamp_max(mask.shape[0] - 1)
+            mask = mask[indices]
+        return mask.clamp(0.0, 1.0)
+
+    def transfer_color(self, ref_img, target_image, method, strength, ref_mask=None, target_mask=None):
+        if strength == 0:
+            return (target_image,)
+
+        target_rgb = target_image[..., :3]
+        batch_size, height, width, _ = target_rgb.shape
+        apply_mask = self._prepare_mask(
+            target_mask, batch_size, height, width, target_rgb.device, target_rgb.dtype
+        )
+
+        if target_image.shape[-1] >= 4:
+            target_valid = target_image[..., 3] > 1e-6
+        else:
+            target_valid = torch.ones_like(apply_mask, dtype=torch.bool)
+        target_valid &= apply_mask > 0
+
+        ref_rgb = ref_img[..., :3]
+        ref_selection = self._prepare_mask(
+            ref_mask, ref_rgb.shape[0], ref_rgb.shape[1], ref_rgb.shape[2], ref_rgb.device, ref_rgb.dtype
+        )
+        if ref_img.shape[-1] >= 4:
+            ref_valid = ref_img[..., 3] > 1e-6
+        else:
+            ref_valid = torch.ones(ref_rgb.shape[:-1], device=ref_rgb.device, dtype=torch.bool)
+        ref_valid &= ref_selection > 0
+
+        target_pixels = target_rgb.reshape(-1, 3)[target_valid.reshape(-1)]
+        ref_pixels = ref_rgb.reshape(-1, 3)[ref_valid.reshape(-1)]
+        if target_pixels.shape[0] == 0 or ref_pixels.shape[0] == 0:
+            return (target_image,)
+
+        transferred = ColorTransfer.execute(
+            target_pixels.reshape(1, 1, -1, 3),
+            ref_pixels.reshape(1, 1, -1, 3),
+            method,
+            {"source_stats": "uniform"},
+            strength,
+        ).args[0].reshape(-1, 3).to(device=target_rgb.device, dtype=target_rgb.dtype)
+
+        result_rgb = target_rgb.clone()
+        result_flat = result_rgb.reshape(-1, 3)
+        valid_flat = target_valid.reshape(-1)
+        weights = apply_mask.reshape(-1, 1)[valid_flat]
+        result_flat[valid_flat] = torch.lerp(target_pixels, transferred, weights)
+
+        if target_image.shape[-1] >= 4:
+            result = torch.cat((result_rgb, target_image[..., 3:4]), dim=-1)
+        else:
+            result = result_rgb
+        return (result,)
+
+
 
 
 #endregion-----------------------color_transfer----------------
@@ -1965,7 +2058,7 @@ class Image_smooth_blur:
     CATEGORY = "Apt_Preset/image"
 
     FUNCTION = "apply_smooth_blur"
-    def apply_smooth_blur(self, image, mask, smoothness, invert_mask=False, mask_expansion=0, mask_color="image", brightness=1.0, bg_color="Alpha"):
+    def apply_smooth_blur(self, image, mask, smoothness, invert_mask=False, mask_expansion=0, mask_color="image", brightness=0.0, bg_color="Alpha"):
         batch_size = image.shape[0]
         result_images = []
         smoothed_masks = []
@@ -2020,50 +2113,34 @@ class Image_smooth_blur:
                     current_image = current_image.repeat(1, 1, 3)
                     unblurred_tensor = unblurred_tensor.repeat(1, 1, 3)
             
-            mask_expanded = mask_tensor.unsqueeze(-1).repeat(1, 1, 3)
-            
-            # -------------------------- 新增：亮度调节逻辑 --------------------------
-            # 仅当mask_color为"image"时，对遮罩区域进行灰度化+亮度调节
-            adjusted_gray_image = current_image.clone()
-            if mask_color == "image":
-                # 1. Tensor转PIL图像（适配亮度调节接口）
-                current_image_pil = Image.fromarray((255. * current_image).cpu().numpy().astype(np.uint8))
-                # 2. 转为灰度图（消除色彩，保留亮度通道）
-                gray_image_pil = current_image_pil.convert('L').convert('RGB')
-                # 3. 根据brightness参数调节灰度亮度（0.0纯黑，10.0纯白）
-                brightness_enhancer = ImageEnhance.Brightness(gray_image_pil)
-                adjusted_gray_pil = brightness_enhancer.enhance(brightness)
-                # 4. PIL转回Tensor（匹配原数据格式）
-                adjusted_gray_np = np.array(adjusted_gray_pil).astype(np.float32) / 255.0
-                adjusted_gray_image = torch.from_numpy(adjusted_gray_np)
-            # ----------------------------------------------------------------------
+            mask_weight = mask_tensor.to(device=current_image.device, dtype=current_image.dtype).unsqueeze(-1)
 
-            # 处理mask_color填充逻辑（将原current_image替换为调节后的adjusted_gray_image）
             if mask_color == "image":
-                mask_fill = adjusted_gray_image  # 使用亮度调节后的灰度图填充遮罩
+                mask_fill = torch.clamp(current_image + brightness, 0.0, 1.0)
             elif mask_color == "Alpha":
-                mask_fill = torch.zeros_like(current_image)  # 透明区域用黑色填充
-            else:
                 mask_fill = torch.zeros_like(current_image)
-                r, g, b = color_map[mask_color]
-                mask_fill[:, :, 0] = r / 255.0
-                mask_fill[:, :, 1] = g / 255.0
-                mask_fill[:, :, 2] = b / 255.0
-            
-            result_tensor = mask_fill * mask_expanded + unblurred_tensor * (1 - mask_expanded)
-            
-            # 处理bg_color背景逻辑（保持原始逻辑不变）
+            else:
+                mask_fill = torch.tensor(color_map[mask_color], device=current_image.device, dtype=current_image.dtype) / 255.0
+                mask_fill = mask_fill.view(1, 1, 3).expand_as(current_image)
+
             if bg_color == "image":
-                bg_tensor = unblurred_tensor  # 使用原图作为背景
-            elif bg_color != "Alpha":
-                bg_tensor = torch.zeros_like(current_image)
-                if bg_color in color_map:
-                    r, g, b = color_map[bg_color]
-                    bg_tensor[:, :, 0] = r / 255.0
-                    bg_tensor[:, :, 1] = g / 255.0
-                    bg_tensor[:, :, 2] = b / 255.0
-                
-                result_tensor = result_tensor * mask_expanded + bg_tensor * (1 - mask_expanded)
+                bg_fill = unblurred_tensor
+            elif bg_color == "Alpha":
+                bg_fill = torch.zeros_like(current_image)
+            else:
+                bg_fill = torch.tensor(color_map[bg_color], device=current_image.device, dtype=current_image.dtype) / 255.0
+                bg_fill = bg_fill.view(1, 1, 3).expand_as(current_image)
+
+            mask_alpha = torch.zeros_like(mask_weight) if mask_color == "Alpha" else torch.ones_like(mask_weight)
+            bg_alpha = torch.zeros_like(mask_weight) if bg_color == "Alpha" else torch.ones_like(mask_weight)
+            result_alpha = mask_alpha * mask_weight + bg_alpha * (1.0 - mask_weight)
+            premultiplied = mask_fill * mask_alpha * mask_weight + bg_fill * bg_alpha * (1.0 - mask_weight)
+            result_rgb = torch.where(result_alpha > 0, premultiplied / result_alpha.clamp_min(1e-6), 0.0)
+
+            if mask_color == "Alpha" or bg_color == "Alpha":
+                result_tensor = torch.cat((result_rgb, result_alpha), dim=-1)
+            else:
+                result_tensor = result_rgb
             
             result_images.append(result_tensor.unsqueeze(0))
             smoothed_masks.append(smoothed_mask.unsqueeze(0))

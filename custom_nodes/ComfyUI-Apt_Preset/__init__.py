@@ -30,6 +30,7 @@ from .NodeBasic.C_latent import *
 from .NodeBasic.C_viewIO import *
 from .NodeBasic.C_viewReferenceSize import view_Reference_Size
 from .NodeBasic.View_video_compare import View_image_compare, View_video_compare
+from .NodeBasic.View_video_combine import View_video_combine
 from .NodeBasic.C_AD import *
 from .NodeBasic.AD_scail2_control import AD_scail2_generate, AD_scail2_generate_refine
 from .NodeBasic.C_image import *
@@ -78,6 +79,7 @@ NODE_CLASS_MAPPINGS= {
 
 "UC_load_model": UC_load_model,
 "UC_ksampler": UC_ksampler,
+"UC_ksampler_custom": UC_ksampler_custom,
 "UC_Ksampler_refine": UC_Ksampler_refine,
 "UC_create_context": UC_create_context, 
 "UC_ContextCache": UC_ContextCache,   
@@ -258,6 +260,7 @@ NODE_CLASS_MAPPINGS= {
 
 "AD_MinMax_Ref2": AD_MinMax_Ref2,
 "AD_MinMax_Ref2_sample": AD_MinMax_Ref2_sample,
+"AD_MinMax_FL2": AD_MinMax_FL2,
 "AD_Media_editor": AD_Media_editor,
 "AD_scail2_generate": AD_scail2_generate,
 "AD_scail2_generate_refine": AD_scail2_generate_refine,
@@ -315,6 +318,7 @@ NODE_CLASS_MAPPINGS= {
 "view_mask": view_mask,
 "view_mulView": view_mulView,
 "View_video_compare": View_video_compare,
+"View_video_combine": View_video_combine,
 "View_image_compare": View_image_compare,
 "view_node_Script": view_node_Script, 
 "view_Reference_Size": view_Reference_Size,
@@ -343,6 +347,8 @@ NODE_CLASS_MAPPINGS= {
 "IO_LoadTextBatch": IO_LoadTextBatch,
 "IO_LoadVideoBatch": IO_LoadVideoBatch,
 "IO_LoadAudioBatch": IO_LoadAudioBatch,
+
+"IO_load_mage": IO_load_mage,
 
 #"IO_ShotCreate": IO_ShotCreate,
 #"IO_LoadShotBatch": IO_LoadShotBatch,
@@ -430,6 +436,7 @@ NODE_CLASS_MAPPINGS= {
 "Image_smooth_blur": Image_smooth_blur,    
 "Image_Resize_sum": Image_Resize_sum,    
 "Image_Resize_sum_restore":Image_Resize_sum_restore,     
+
 "Image_Pair_Merge": Image_Pair_Merge,  
 "Image_Pair_crop": Image_Pair_crop, 
 
@@ -476,6 +483,7 @@ NODE_CLASS_MAPPINGS= {
 "color_adjust_HSL": color_adjust_HSL,
 "color_adjust_HDR": color_adjust_HDR,
 "color_match_adv":color_match_adv,
+"color_transferColor": color_transferColor,
 
 "color_ImageCurve": color_ImageCurve,
 "color_select": color_select,  
@@ -605,6 +613,7 @@ NODE_CLASS_MAPPINGS= {
 "text_saveText": text_saveText,
 "text_StrMatrix":text_StrMatrix,
 
+"text_clip_Generate":text_clip_Generate,
 "text_MinimaxH3":text_MinimaxH3,
 "text_interPrompt":text_interPrompt,
 
@@ -749,8 +758,9 @@ NODE_CLASS_MAPPINGS= {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "basicIn_media": "basicIn_media",
 
-    "AD_MinMax_Ref2_generate": "AD_MinMax_Ref2_generate弃用",
-    "AD_MinMax_FL2_generate": "AD_MinMax_FL2_generate弃用",
+    "AD_MinMax_Ref2_generate": "AD_MinMax_Ref2_generate_废弃",
+    "AD_MinMax_FL2_generate": "AD_MinMax_FL2_generate_废弃",
+    "AD_MinMax_Ref2_generate_refine": "AD_MinMax_Ref2_generate_refine_废弃",
 
 }
 

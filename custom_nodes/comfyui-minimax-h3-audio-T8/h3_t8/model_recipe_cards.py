@@ -80,7 +80,7 @@ def recipe_from_header(header, metadata):
     clock = {key: metadata[key][:4096] for key in
              ("hyperflow_sigmas", "sigma_schedule", "video_sigmas", "audio_sigmas", "shift_video", "shift_audio")
              if isinstance(metadata.get(key), str)}
-    return {"schema": SCHEMA, "scope": "header_only_not_execution",
+    result = {"schema": SCHEMA, "scope": "header_only_not_execution",
         "task": _evidence(task or None, "metadata_declaration" if task else "unknown"),
         "structure": _evidence("pruned_basis_present" if pruned else "unknown",
                                "tensor_namespace" if pruned else "not_inferred_from_absence"),
@@ -104,6 +104,44 @@ def recipe_from_header(header, metadata):
         "automatic_changes": False, "load_allowed_by_card": None,
         "warnings": ["训练alpha／rank不等于运行strength；Bridge alpha是另一套参数。",
                      "Header不证明任务、完整算法、画质或未知补丁兼容；原加载器继续负责实际加载。"]}
+    wuli = _wuli_native_card(header, metadata)
+    if wuli is not None:
+        result["wuli_native_recipe"] = wuli
+    return result
+
+
+def _wuli_native_card(header, metadata):
+    """Explicit source/format and actual descriptors; never infer from filename."""
+    native8 = (metadata.get("fixed_num_steps") == "8"
+               and str(metadata.get("source", "")).startswith("Wuli-art/MiniMax-H3-Turbo "))
+    native4 = metadata.get("format") == "wuli_minimax_h3_turbo_v1_comfyui"
+    if not native8 and not native4:
+        return None
+    def shape(name):
+        return header.get(name, {}).get("shape")
+    if native8:
+        role, missing = "native8_complete_checkpoint", []
+        if shape("adaln_t_table") != [1025, 25]:
+            missing.append("25-column AdaLN shared basis")
+        if shape("final_layer.video_out.weight") != [96, 5376] or shape("final_layer.audio_out.weight") != [32, 5376]:
+            missing.append("native single AV heads")
+    elif any(key.endswith(".set_weight") for key in header):
+        role, missing = "native4_absolute_head_set", []
+        if (shape("diffusion_model.final_layer.video_out.set_weight") != [384, 5376]
+                or shape("diffusion_model.final_layer.audio_out.set_weight") != [128, 5376]):
+            missing.append("four-row-block AV head bank")
+    elif any(key.endswith(".reshape_weight") for key in header):
+        role, missing = "native4_zero_head_widen", []
+    else:
+        role, missing = "native4_trunk_only_NOT_complete", []
+    return {"source": "explicit_metadata_and_header_shapes_NOT_entire_weight_SHA",
+            "role": role, "descriptor_mismatches": missing,
+            "author_NFE": 8 if native8 else 4, "author_video_shift": 12. if native8 else 6.,
+            "author_audio_shift": 3., "author_scheduler": "simple", "author_sampler": "euler", "author_CFG": 1.,
+            "required_native4_order": None if native8 else ["full FL2VA base", "trunk", "widen", "absolute head set"],
+            "head_files_are_arbitrary_strength_loras": False, "Core_head_clock": "actual sigma + full sample_sigmas",
+            "partial_HIGH_or_resume_qualified": False, "automatic_model_selection": False,
+            "runtime_or_quality_proven_by_header": False}
 
 
 def _checked_settings(value):

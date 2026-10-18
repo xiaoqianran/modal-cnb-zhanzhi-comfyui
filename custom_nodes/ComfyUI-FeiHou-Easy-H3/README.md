@@ -17,6 +17,7 @@
 - 默认 24 FPS、10 秒；参考图尺寸可选短边 480、544、640、736、768、832、928、1024、1088；
 - 高级选项提供“强制卸载（含采样后缓存回收）”和可选“完整低显存分块（实验）”：前者在采样器结束、VAE 解码前回收未使用的缓存，后者对 H3 的 QKV、注意力、MLP/SwiGLU 和输出头执行完整分块；启用后不要再串联 `ModelAttentionBackend / comfy kitchen attention`；
 - 提示词优化支持智谱、xFlow-API 聚合、Ollama、阿里云、DeepSeek 和自定义 OpenAI/Gemini/Ollama 兼容 API；
+- 提示词优化也支持本地 GGUF、完整 Transformers 模型目录，以及带内置架构识别的裸 `.safetensors`；标准版内置 Qwen3 0.6B、1.7B、4B、8B、14B、32B 和 Mistral 7B Instruct v0.3 配置，改文件名不影响识别；
 - 内置提示词方案之外，还可创建、编辑和选择自定义方案。
 
 ## 节点
@@ -28,7 +29,8 @@
 - `ComfyUI-FeiHou-Easy-H3`：主生成节点及内嵌媒体面板；
 - `FeiHou Easy H3 Model Adapter`：接入外部标准 ComfyUI 模型加载链；
 - `FeiHou Easy H3 Output`：拆出 Conditioning、Latent、视频 VAE、音频 VAE、FPS 和最终提示词；
-- `FeiHou Easy H3 提示词预览`：显示 H3 Context 携带的最终扩写 / 反推提示词。
+- `FeiHou Easy H3 提示词预览`：显示 H3 Context 携带的最终扩写 / 反推提示词；
+- `FeiHou Easy H3 接续合并`：保留接续尾部、裁去重叠画面和音频，将 `tail_latent` 交给[肥猴工具箱 Video Combine V2](https://github.com/FX-FeiHou/ComfyUI-FeiHou-Toolbox)保存。最后一段完成后由 V2 合并完整视频；接线和控制说明见[制作包文档](docs/production-packs.md#接续与合并)。
 
 节点分类为 `FeiHou Easy H3`，类名使用独立的 `FeiHouEasyH3*` 前缀，可与原版 `ComfyUI-MiniMaxH3-Easy` 同时安装，不会发生节点 ID 或提示词优化路由冲突。
 

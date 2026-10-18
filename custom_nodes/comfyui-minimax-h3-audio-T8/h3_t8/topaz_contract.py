@@ -17,6 +17,16 @@ REGULAR_PARAMETERS = frozenset({'preblur', 'noise', 'details', 'halo', 'blur',
     'compression', 'prenoise', 'grain', 'gsize', 'blend', 'estimate', 'kcolor'})
 DELIVERY_OUTPUT_PROFILES = frozenset({'delivery_h264', 'delivery_hevc_main10'})
 REGULAR_OUTPUT_PROFILES = DELIVERY_OUTPUT_PROFILES | {'lossless_master'}
+INPUT_VIDEO_DECODERS = ('h264', 'hevc', 'h264_cuvid', 'hevc_cuvid')
+
+
+def decoder_options(decoder):
+    """Input-only decoder flags, never an output encoder or arbitrary option."""
+    if decoder is None:
+        return []
+    if decoder not in INPUT_VIDEO_DECODERS:
+        raise ValueError('Unsupported Topaz input decoder')
+    return ['-codec:v', decoder]
 
 
 @dataclass(frozen=True)
@@ -154,7 +164,7 @@ def native_dimension_evidence(stderr, expected_frames):
 
 
 def regular_command(runtime, source, destination, model_id, width, height, *, size_mode='scale',
-                    output_profile='delivery_h264', audio_mode='copy', **settings):
+                    output_profile='delivery_h264', audio_mode='copy', decoder=None, **settings):
     source, destination = Path(source).resolve(strict=True), Path(destination).resolve()
     suffix = destination.suffix.lower()
     if output_profile not in REGULAR_OUTPUT_PROFILES:
@@ -199,7 +209,7 @@ def regular_command(runtime, source, destination, model_id, width, height, *, si
     # No -r, frame interpolation or silent FPS rounding. MP4-incompatible
     # audio is automatically encoded to AAC; compatible audio remains copied.
     return [str(runtime.executable('ffmpeg.exe')), '-hide_banner', '-nostdin', '-n',
-        '-protocol_whitelist', 'file,pipe', '-copyts', '-start_at_zero', '-i', str(source),
+        '-protocol_whitelist', 'file,pipe', '-copyts', '-start_at_zero', *decoder_options(decoder), '-i', str(source),
         '-map', '0:v:0', '-map', '0:a?', '-vf', filter_text, '-fps_mode', 'passthrough',
         '-enc_time_base:v', 'demux',
         *encoder, '-threads', '2', *audio_encoder,
@@ -229,7 +239,7 @@ def interpolation_filter(runtime, model_id, output_fps, *, device=0, vram=.8, in
 
 
 def interpolation_command(runtime, source, destination, model_id, output_fps, *,
-                          output_profile='delivery_h264', audio_mode='copy', **settings):
+                          output_profile='delivery_h264', audio_mode='copy', decoder=None, **settings):
     source, destination = Path(source).resolve(strict=True), Path(destination).resolve()
     if output_profile not in DELIVERY_OUTPUT_PROFILES:
         raise ValueError('Unknown Topaz interpolation output profile')
@@ -252,7 +262,7 @@ def interpolation_command(runtime, source, destination, model_id, output_fps, *,
     audio_encoder = (['-c:a', 'copy'] if audio_mode == 'copy'
         else ['-c:a', 'aac', '-b:a', '192k'])
     return [str(runtime.executable('ffmpeg.exe')), '-hide_banner', '-nostdin', '-n',
-        '-protocol_whitelist', 'file,pipe', '-copyts', '-start_at_zero', '-i', str(source),
+        '-protocol_whitelist', 'file,pipe', '-copyts', '-start_at_zero', *decoder_options(decoder), '-i', str(source),
         '-map', '0:v:0', '-map', '0:a?', '-vf', filter_text, '-fps_mode', 'passthrough',
         '-enc_time_base:v', 'filter', *encoder,
         *(['-movflags', '+faststart'] if destination.suffix.lower() == '.mp4' else []),

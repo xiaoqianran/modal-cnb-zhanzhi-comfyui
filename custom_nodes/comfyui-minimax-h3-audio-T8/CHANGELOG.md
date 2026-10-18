@@ -2,7 +2,82 @@
 
 [首页](README.md) · [English](README_EN.md)
 
-## 当前版本：1.95.0
+## 当前版本：1.101.0
+
+### H14 已审 LoRA 生成行作用域（EXP）
+
+- 新增独立 MODEL 行作用域与采样后实际调用审计两个节点，保留原735个接口、默认值和旧工作流，总注册737。
+- plain LoRA 可显式选择生成音频／视频行的直接残差；完整目标预检、原生融合保留、异常清理和用户 owner 委托分开报告。
+- 两段真实画布5秒、864×480原生音画人工审核通过，保存普通 LoRA／generated_audio 两张短名来源图，不改参数或重采。
+- 只接受指定两片，不保证另一模态最终不变、声纹隔离、全部 LoRA 兼容或提速；大型fc2和generated_video成片未继承此次资格。
+- [1.101.0说明](docs/RELEASE_1.101.0.md) · [用法](docs/H14_TOKEN_SCOPE.md) · [已审工作流](examples/workflows/89-h14-reviewed/README.md)。
+
+## 1.100.0
+
+### H13 已审AudioFirst与普通Hybrid（EXP）
+
+- 追加同条件Tiny投影／实际成片锁音审计两个独立节点，复用原Source AV strict锁音；不另造采样器。
+- 支持ComfyUI原生普通Wuli Hybrid八步模型，独立完整SHA准备工具，不需转换或额外FlashGen LoRA。
+- 修复Wuli跨调用旧stat缓存可能误认权重内容的问题；每次完整SHA核对，保留真实错误。
+- 两项真实画布5秒／0.4MP成片人工审核通过，保存两份短名来源图；旧733接口、默认、顺序和旧工作流保持。
+- [1.100.0说明](docs/RELEASE_1.100.0.md) · [已审工作流](examples/workflows/88-h13-reviewed/README.md)。
+
+## 1.99.0
+
+### H11 已审原生增量（EXP）
+
+- Spark独立补丁／预检／Audit；Wuli原生8步及4步三文件Compose，不自动换模型。
+- Audio-only参考／条件，DRIVE与FINAL分开；EAV／Relay仍可外置。
+- FreeVideo实时只读阶段提示与耗时卡；Bridge SHA绑定侧车；镜头提案票据。
+- 七项人工审核通过，八份短名工作流保存；旧720接口／默认值及旧工作流保留。
+- [1.99.0说明](docs/RELEASE_1.99.0.md) · [工作流](examples/workflows/87-h11-reviewed/README.md)。
+
+## 1.98.2
+
+### Topaz 解码与多显卡监控修复
+
+- 显式选择软件／CUVID解码，避免部分官方构建默认QSV崩溃；放大／插帧所有读取步骤一致。
+- 完整帧格式识别Main10，保留严格CFR、音频和发布审计；不自动转码、改时序或下载。
+- Topaz独立监控所选NVIDIA序号，去除误用的DLSS单卡门禁；DLSS和旧720节点接口／工作流不改。
+- [1.98.2说明](docs/RELEASE_1.98.2.md)。
+
+## 1.98.1
+
+### 发布准入记录修复
+
+- 补齐已审核FreeVideo INT8三个精确采样调用；旧128项及未知调用拦截保持。
+- 新增一个无依赖CPU回归；不改节点、参数或工作流，不重跑视频。
+- [1.98.1说明](docs/RELEASE_1.98.1.md)。
+
+## 1.98.0
+
+### H09／Veda R2VA 已审配方（EXP）
+
+- 七项具体人审通过，保存9张短名来源图；旧697接口、默认和顺序保持，追加23节点至720。
+- 独立Veda R2VA、prepared FreeVideo INT8四档与Light8+3、Person Remover分离窗口、原声PCM规划、显式参考Join、可选FreeToken提案及导演台候选复用。
+- 旧T2VA／FP8／8+2／4+4、分离双采、外置EAV／Relay和旧工作流不替换；默认不采用提案。
+- 人物图需四份匹配原生前缀；文本／路由接受不是生成质量、多人声纹或提速证明。Frozen Cache仍条件研究未实现。
+- [1.98.0说明](docs/RELEASE_1.98.0.md) · [9张工作流](examples/workflows/86-h09-reviewed/README.md)。
+
+## 1.97.0
+
+### H07 已审配方与独立诊断（EXP）
+
+- 保存七张正确原生工作流：新参考音频时钟、清唱、有限背景plate合成、姿态、同Stage X2、动作拟音、专用PDD7+1。
+- 追加可选FreeVideo音频t=1加载器、三个只读诊断和交付sidecar；旧692接口／默认／顺序保持，共697节点。
+- 复用已通过样片，不新增GPU或重跑旧CPU矩阵；背景效果限制与未获授权模型／高清接缝余账明确保留。
+- [1.97.0说明](docs/RELEASE_1.97.0.md) · [七项工作流](examples/workflows/85-h07-reviewed/README.md) · [拟音用法](docs/H07_FOLEY_USAGE.md)。
+
+## 1.96.0
+
+### VM01 视觉标记空间引导（EXP）
+
+- 新增四个独立标记入口及可视框选编辑器，支持自动矩形、手绘图、真实Picture绑定和外置Prompt Relay；不依赖新增权重。
+- 显式整框／clean-VAE与marked-Qwen分流，EAV和Bridge保持外置；旧688接口／默认／注册顺序及旧工作流保留。
+- 三条真实画布5秒4+4原生音画获人审接受，保存三张生成模板和独立编辑器。色框残留仍说明，不保证去框或硬空间锁。
+- 发布检查不重采或重复旧功能测试。详见[1.96.0说明](docs/RELEASE_1.96.0.md)和[工作流入口](examples/workflows/84-visual-marker/README.md)。
+
+## 1.95.0
 
 ### H05 已审工作流与独立节点
 

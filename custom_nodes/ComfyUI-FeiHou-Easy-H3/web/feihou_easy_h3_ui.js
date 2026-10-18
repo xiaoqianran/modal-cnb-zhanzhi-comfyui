@@ -7,6 +7,9 @@ const NODE_CLASS = "FeiHouEasyH3";
 // Split edition: media gallery node + setup node (all other behaviour shared).
 const MEDIA_CLASS = "FeiHouEasyH3Media";
 const CORE_CLASS = "FeiHouEasyH3Setup";
+// Setup has no widgets beyond the main node's; continuation lives in the
+// separate FeiHou Easy H3 Continuous node.
+const CONTINUOUS_SETUP_WIDGET_NAMES = [];
 const CORE_MEDIA_INPUT = "h3_media";
 const CORE_TITLE = "FeiHou Easy H3 Setup";
 const MEDIA_TITLE = "FeiHou Easy H3 Media";
@@ -27,6 +30,8 @@ const PROMPT_OPTIMIZER_SETTINGS_DEFAULTS = Object.freeze({
     custom_schemes: [],
     schemes: [],
     read_media: false,
+    local: { model: "", mmproj: "", device: "auto", max_tokens: 4096, context_length: 32768 },
+    local_catalog: { models: [], projectors: [], missing_transformers: [], gguf_available: false },
 });
 let promptOptimizerSettingsCache = { ...PROMPT_OPTIMIZER_SETTINGS_DEFAULTS };
 let promptOptimizerSettingsLoaded = false;
@@ -3862,7 +3867,7 @@ function normalizePromptOptimizerSettings(value) {
     const source = value && typeof value === "object" ? value : {};
     const providers = Array.isArray(source.providers) ? source.providers.map((item, index) => {
         const provider = item && typeof item === "object" ? item : {};
-        const apiFormat = ["openai", "gemini", "ollama"].includes(String(provider.api_format || "").toLowerCase())
+        const apiFormat = ["openai", "gemini", "ollama", "local"].includes(String(provider.api_format || "").toLowerCase())
             ? String(provider.api_format).toLowerCase()
             : "openai";
         return {
@@ -3892,6 +3897,15 @@ function normalizePromptOptimizerSettings(value) {
         editable: asBoolean(item?.editable, false),
     })).filter((item) => item.id) : [];
     const activeProvider = String(source.active_provider || providers[0]?.id || "zhipu");
+    const localSource = source.local && typeof source.local === "object" ? source.local : {};
+    const local = {
+        model: String(localSource.model || "").trim(),
+        mmproj: String(localSource.mmproj || "").trim(),
+        device: ["auto", "cpu", "cuda"].includes(String(localSource.device || "")) ? String(localSource.device) : "auto",
+        max_tokens: Number.isFinite(Number(localSource.max_tokens)) ? Math.max(1, Math.min(16384, Number(localSource.max_tokens))) : 4096,
+        context_length: Number.isFinite(Number(localSource.context_length)) ? Math.max(2048, Math.min(131072, Number(localSource.context_length))) : 32768,
+    };
+    const localCatalog = source.local_catalog && typeof source.local_catalog === "object" ? source.local_catalog : {};
     return {
         active_provider: providers.some((item) => item.id === activeProvider) ? activeProvider : providers[0]?.id || "zhipu",
         providers,
@@ -3905,6 +3919,13 @@ function normalizePromptOptimizerSettings(value) {
             : [],
         schemes,
         read_media: asBoolean(source.read_media, false),
+        local,
+        local_catalog: {
+            models: Array.isArray(localCatalog.models) ? localCatalog.models : [],
+            projectors: Array.isArray(localCatalog.projectors) ? localCatalog.projectors : [],
+            missing_transformers: Array.isArray(localCatalog.missing_transformers) ? localCatalog.missing_transformers.map(String) : [],
+            gguf_available: asBoolean(localCatalog.gguf_available, false),
+        },
     };
 }
 
@@ -3965,6 +3986,7 @@ function promptOptimizerState(node) {
     return {
         ...promptOptimizerSettingsCache,
         ...provider,
+        local: promptOptimizerSettingsCache.local,
         requested_service: requestedService,
         requested_provider: requestedProvider,
         requested_model: requestedModel,
@@ -4042,8 +4064,12 @@ function syncPromptOptimizerButton(node) {
         && asBoolean(getWidgetValue(node, "prompt_optimizer_enabled", false))
         && Boolean(state.requested_provider && state.requested_model);
     const model = state.requested_model;
-    const keyReady = state.api_format === "ollama" || state.api_key_exists || Boolean(String(state.api_key || "").trim());
-    const configured = enabled && Boolean(String(state.api_url || "").trim() && String(model || "").trim() && keyReady);
+    const local = state.api_format === "local";
+    const keyReady = local || state.api_format === "ollama" || state.api_key_exists || Boolean(String(state.api_key || "").trim());
+    const localModelReady = local && promptOptimizerSettingsCache.local_catalog.models.some((item) => String(item?.id || "") === String(model || ""));
+    const configured = enabled && (local
+        ? Boolean(String(model || "").trim() && localModelReady)
+        : Boolean(String(state.api_url || "").trim() && String(model || "").trim() && keyReady));
     const external = promptInputIsConnected(node);
     const pending = Boolean(node.__h3OptimizerPending);
     const locked = external || pending;
@@ -4146,8 +4172,10 @@ async function optimizePromptFromEditor(node) {
     }
     const resources = promptOptimizerResources(node);
     const model = state.requested_model;
-    const keyReady = state.api_format === "ollama" || state.api_key_exists || Boolean(String(state.api_key || "").trim());
-    if (!String(state.api_url || "").trim() || !String(model || "").trim() || !keyReady) {
+    const local = state.api_format === "local";
+    const keyReady = local || state.api_format === "ollama" || state.api_key_exists || Boolean(String(state.api_key || "").trim());
+    const localModelReady = local && promptOptimizerSettingsCache.local_catalog.models.some((item) => String(item?.id || "") === String(model || ""));
+    if (local ? !String(model || "").trim() || !localModelReady : !String(state.api_url || "").trim() || !String(model || "").trim() || !keyReady) {
         notifyPromptOptimizer(TEXT.optimizerMissing);
         return;
     }
@@ -5035,9 +5063,13 @@ function productionFallbackValues(node) {
 export function applyProductionShotPreview(node, shot) {
     if (!isTarget(node) || !shot?.media || !shot?.params) return;
     node.properties ||= {};
-    // A Core node's media live on its Media node; the backend applies the
-    // pack media at execution, so the preview never overwrites that gallery.
-    if (!isCoreNode(node)) node.properties[EMBEDDED_MEDIA_PROP] = shot.media.map((item) => ({ ...item }));
+    // Show the shot's media where this node keeps its gallery: its own for the
+    // main node, the connected Media node for Setup (as the main node did).
+    const mediaStore = mediaStoreNode(node);
+    if (mediaStore) {
+        mediaStore.properties ||= {};
+        mediaStore.properties[EMBEDDED_MEDIA_PROP] = shot.media.map((item) => ({ ...item }));
+    }
     const params = { ...productionFallbackValues(node), ...shot.params };
     delete params.resolution;
     delete params.width;
@@ -5054,6 +5086,12 @@ export function applyProductionShotPreview(node, shot) {
     setPromptFromOptimizedText(node, shot.prompt);
     syncModeWidgets(node, { adjustHeight: false });
     renderEmbeddedMediaGallery(node);
+    if (mediaStore && mediaStore !== node) {
+        ensureEmbeddedMedia(mediaStore);
+        renderEmbeddedMediaGallery(mediaStore);
+        refreshVueNodeWidgets(mediaStore);
+        mediaStore.setDirtyCanvas?.(true, true);
+    }
     renderEditorFromNode(node, true);
     refreshVueNodeWidgets(node);
     node.setDirtyCanvas?.(true, true);
@@ -5355,7 +5393,24 @@ function repairConfiguredWidgetValues(node, info) {
         prompt_optimizer_scene_guide: canonicalPromptGuide(values[15] ?? defaults.prompt_optimizer_scene_guide),
     };
     for (const name of names) setConfiguredWidgetValue(node, name, normalized[name]);
-    info.widgets_values = names.map((name) => normalized[name]);
+    if (isCoreNode(node)) {
+        // The optional plan socket is not a widget. Continuous controls are
+        // appended only for Setup, preserving the main-node legacy array.
+        const named = info?.widgets_values_named && typeof info.widgets_values_named === "object"
+            ? info.widgets_values_named : {};
+        CONTINUOUS_SETUP_WIDGET_NAMES.forEach((name, index) => {
+            const rawValue = Object.prototype.hasOwnProperty.call(named, name)
+                ? named[name]
+                : values[names.length + index];
+            if (rawValue !== undefined) setConfiguredWidgetValue(node, name, rawValue);
+        });
+        info.widgets_values = [
+            ...names.map((name) => normalized[name]),
+            ...CONTINUOUS_SETUP_WIDGET_NAMES.map((name) => getWidget(node, name)?.value ?? null),
+        ];
+    } else {
+        info.widgets_values = names.map((name) => normalized[name]);
+    }
 }
 
 function embeddedMediaCell(node, mediaType, ordinal) {
@@ -6116,6 +6171,7 @@ function installNode(nodeType, nodeData) {
                 "force_offload", "low_vram_streamed_attention",
                 "reference_text_only",
             ];
+            if (isCoreNode(this)) names.push(...CONTINUOUS_SETUP_WIDGET_NAMES);
             info.widgets_values = names.map((name) => getWidget(this, name)?.value ?? null);
             info.widgets_values_named = Object.fromEntries(names.map((name, i) => [name, info.widgets_values[i]]));
         }

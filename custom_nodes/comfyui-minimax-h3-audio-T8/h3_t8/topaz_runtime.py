@@ -408,7 +408,8 @@ def run_regular(runtime, source, job, *, model_id, width, height, scale,
     geometry by the owned worker before enhancement. No parent video decode.
     """
     from .dlss_fi_backend.process import run_isolated, IsolatedTaskError
-    from .dlss_fi_backend.resources import SerialProbeLease, NvmlResourceReader, ResourceGuard
+    from .dlss_fi_backend.resources import SerialProbeLease, ResourceGuard
+    from .topaz_resources import TopazResourceReader
     if scale not in (1, 2, 4) or type(scale) is not int or type(device) is not int or not 0 <= device <= 15:
         raise ValueError('Regular Topaz route requires fixed1x/2x/4x and a GPU index in0..15')
     if (width is None) != (height is None):
@@ -445,7 +446,7 @@ def run_regular(runtime, source, job, *, model_id, width, height, scale,
     task_progress = TaskProgress(job, progress, 'enhancement')
     task_progress.emit(0)
     try:
-        with SerialProbeLease(lease_path), NvmlResourceReader() as reader:
+        with SerialProbeLease(lease_path), TopazResourceReader(device) as reader:
             guard = ResourceGuard()
             with (job / 'resources.jsonl').open('x', encoding='utf8') as log:
                 record_topaz_startup_sample(reader, guard, log)
@@ -495,7 +496,8 @@ def run_interpolation(runtime, source, job, *, model_id, multiplier, lease_path,
                       output_profile='delivery_h264', interrupt=None, progress=None):
     """Run official tvai_fi in an owned process; preserve duration and audio."""
     from .dlss_fi_backend.process import run_isolated, IsolatedTaskError
-    from .dlss_fi_backend.resources import SerialProbeLease, NvmlResourceReader, ResourceGuard
+    from .dlss_fi_backend.resources import SerialProbeLease, ResourceGuard
+    from .topaz_resources import TopazResourceReader
     if type(multiplier) is not int or multiplier not in (2, 4):
         raise ValueError('Topaz interpolation multiplier must be2 or4')
     if output_profile not in DELIVERY_OUTPUT_PROFILES:
@@ -523,7 +525,7 @@ def run_interpolation(runtime, source, job, *, model_id, multiplier, lease_path,
     task_progress = TaskProgress(job, progress, 'interpolation', multiplier)
     task_progress.emit(0)
     try:
-        with SerialProbeLease(lease_path), NvmlResourceReader() as reader:
+        with SerialProbeLease(lease_path), TopazResourceReader(device) as reader:
             guard = ResourceGuard()
             with (job / 'resources.jsonl').open('x', encoding='utf8') as log:
                 record_topaz_startup_sample(reader, guard, log)

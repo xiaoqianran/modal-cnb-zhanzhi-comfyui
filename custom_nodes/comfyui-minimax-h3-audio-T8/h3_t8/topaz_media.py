@@ -1,8 +1,15 @@
 """CPU media contracts for official Topaz; no FFmpeg execution at import."""
 from fractions import Fraction
 import hashlib
+import json
 from pathlib import Path
+import re
 import subprocess
+
+if __package__:
+    from .topaz_contract import decoder_options
+else:  # The isolated worker loads its sibling modules, not ComfyUI.
+    from topaz_contract import decoder_options
 
 
 DELIVERY_MP4_AUDIO_CODECS = frozenset({'aac', 'mp3', 'ac3', 'eac3', 'alac'})
@@ -50,12 +57,58 @@ def file_identity(path):
     return {'path': str(path), 'bytes': after.st_size, 'sha256': digest.hexdigest()}
 
 
-def probe_command(runtime, source, *, frames=False, packets=False):
+def video_decoder(runtime, source, environment, job, prefix):
+    """Resolve H.264/HEVC without ever opening an implicit QSV decoder.
+
+    Only call inside the owned worker. Prefer a listed software decoder (older
+    official builds); otherwise use CUVID. Only explicit codec-ID mismatches
+    permit the ordinary decoder path for other codecs. Crashes, unavailable
+    hardware, corrupt files, and timeouts are errors, not retry/fallback signals.
+    """
+    source = Path(source).resolve(strict=True)
+    job = Path(job).resolve(strict=True)
+    if prefix not in ('source', 'output'):
+        raise ValueError('Invalid Topaz decoder log prefix')
+
+    def attempt(args, name):
+        stdout, stderr = job / (name + '.stdout'), job / (name + '.stderr')
+        with stdout.open('xb') as out, stderr.open('xb') as err:
+            result = subprocess.run(args, cwd=runtime.install, env=environment,
+                stdin=subprocess.DEVNULL, stdout=out, stderr=err, shell=False,
+                timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        if stdout.stat().st_size > 1024**2 or stderr.stat().st_size > 1024**2:
+            raise RuntimeError('Topaz decoder discovery exceeded its bounded log size')
+        return result.returncode, stdout.read_text(encoding='utf8'), stderr.read_text(encoding='utf8', errors='replace')
+
+    executable = str(runtime.executable('ffprobe.exe'))
+    code, inventory, _ = attempt([executable, '-hide_banner', '-decoders'], prefix + '_decoder_inventory')
+    if code:
+        raise RuntimeError(f'Official Topaz decoder inventory failed with exit code {code}')
+    names = set(re.findall(r'^\s*V[.A-Z]{5}\s+(\w+)\s', inventory, re.MULTILINE))
+    candidates = [codec if codec in names else codec + '_cuvid' for codec in ('h264', 'hevc')]
+    if any(decoder not in names for decoder in candidates):
+        raise RuntimeError('Official Topaz needs a software or CUVID decoder for both H.264 and HEVC; no implicit QSV fallback was attempted')
+    for decoder in candidates:
+        command = [executable, '-v', 'error', '-protocol_whitelist', 'file,pipe',
+            *decoder_options(decoder), '-select_streams', 'v:0', '-show_entries',
+            'stream=codec_name', '-of', 'json', str(source)]
+        code, output, error = attempt(command, prefix + '_decoder_' + decoder)
+        if code == 0:
+            streams = json.loads(output).get('streams', [])
+            if len(streams) != 1 or streams[0].get('codec_name') != decoder.split('_')[0]:
+                raise RuntimeError('Topaz decoder discovery returned an inconsistent video codec')
+            return decoder
+        if code != 1 or 'Codec type or id mismatches' not in error:
+            raise RuntimeError(f'Official Topaz explicit {decoder} probe failed with exit code {code}; see decoder task logs. No implicit decoder fallback was attempted')
+    return None
+
+
+def probe_command(runtime, source, *, frames=False, packets=False, decoder=None):
     source = Path(source).resolve(strict=True)
     if not source.is_file() or source.suffix.lower() not in ('.mp4', '.mkv', '.mov', '.webm', '.avi'):
         raise ValueError('Use an existing local video container, not a URL/playlist')
     args = [str(runtime.executable('ffprobe.exe')), '-v', 'error', '-protocol_whitelist', 'file,pipe',
-        '-of', 'json', '-show_streams', '-show_format']
+        *decoder_options(decoder), '-of', 'json', '-show_streams', '-show_format']
     if frames:
         args += ['-select_streams', 'v:0', '-show_frames', '-show_entries',
             'frame=best_effort_timestamp,width,height,pix_fmt,interlaced_frame']
@@ -80,6 +133,14 @@ def analyze_video(probe, *, allowed_bit_depths=(8,)):
         raise ValueError('Qualified bit-depth policy is invalid')
     allowed_bit_depths = frozenset(allowed_bit_depths)
     pixel_format = stream.get('pix_fmt')
+    frames = probe.get('frames', [])
+    decoded_formats = {frame.get('pix_fmt') for frame in frames}
+    if len(decoded_formats) > 1:
+        raise ValueError('Variable or incomplete decoded pixel formats are not supported')
+    if decoded_formats and None not in decoded_formats:
+        # CUVID may advertise provisional nv12 even when every decoded frame
+        # is p010le. Trust the complete frame evidence, not that placeholder.
+        pixel_format = decoded_formats.pop()
     raw_bits = stream.get('bits_per_raw_sample')
     bit_depth = next((depth for depth, formats in QUALIFIED_SDR_PIXEL_FORMATS.items()
                       if pixel_format in formats), None)
@@ -276,7 +337,7 @@ def compare_transcoded_audio(source, result, common_shift, source_pcm, output_pc
         'source_pcm': source_pcm, 'output_pcm': output_pcm}
 
 
-def decoded_pcm_digests(runtime, path, probe, environment, stderr_path):
+def decoded_pcm_digests(runtime, path, probe, environment, stderr_path, *, decoder=None):
     """Stream decoded float32 PCM without retaining a full audio track in RAM.
 
     Called only inside the owned, deadline/resource-guarded worker. Any decoder
@@ -292,7 +353,7 @@ def decoded_pcm_digests(runtime, path, probe, environment, stderr_path):
                 raise ValueError('Invalid PCM source stream index')
             command = [str(runtime.executable('ffmpeg.exe')), '-v', 'error', '-xerror',
                 '-err_detect', 'explode', '-nostdin', '-protocol_whitelist', 'file,pipe',
-                '-i', str(path), '-map', f'0:{index}', '-c:a', 'pcm_f32le',
+                *decoder_options(decoder), '-i', str(path), '-map', f'0:{index}', '-c:a', 'pcm_f32le',
                 '-threads', '2', '-f', 'f32le', 'pipe:1']
             process = subprocess.Popen(command, cwd=runtime.install, env=environment,
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=error_log,

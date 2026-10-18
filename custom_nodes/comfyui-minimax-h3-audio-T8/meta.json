@@ -1,17 +1,352 @@
 {
+  "h14_token_scope_local": {
+    "status": "human_reviewed_explicit_two_AV_and_saved_source_examples",
+    "published": true,
+    "human_quality_accepted": true,
+    "human_feedback_revision": 2,
+    "human_review_id": "9721e9121a0786a7aeabf698e93b2fa5cc5a363c6d95eff676b188bc5510a203",
+    "human_feedback_sha256": "9f26cae2b591e31b41ba5a071c3f66fdfd1555f7c3dcf16eddcfd60bd2f71e67",
+    "accepted_cases": {
+      "A1": "pass",
+      "A2": "pass"
+    },
+    "saved_workflows": [
+      "examples/workflows/89-h14-reviewed/H14_Ordinary.json",
+      "examples/workflows/89-h14-reviewed/H14_AudioScope.json"
+    ],
+    "documentation": "docs/H14_TOKEN_SCOPE.md",
+    "new_nodes": [
+      "MiniMaxH3TokenLoRAApplyEXPT8",
+      "MiniMaxH3TokenLoRAAuditEXPT8"
+    ],
+    "preserved_registered_prefix": 735,
+    "old_workflows_and_defaults_unchanged": true,
+    "scope_default": "generated_audio",
+    "non_target_direct_residual_excluded": true,
+    "other_modality_final_unchanged_claimed": false,
+    "global_Core_ops_replaced": false,
+    "fc2_fusion_disabled": false,
+    "runtime_owner_delegation_preserved": true,
+    "new_actual_CPU_contracts": 8,
+    "existing_complete_adapter_blocks": 50,
+    "existing_complete_adapter_targets": 100,
+    "target_band_default_changed": false,
+    "paused_removed_projects_restored": false,
+    "actual_UI_roundtrips": 2,
+    "actual_UI_complete_AV_clips": 2,
+    "actual_video_dimensions": [
+      864,
+      480
+    ],
+    "actual_delivered_frames": 120,
+    "actual_duration_seconds": 5.0,
+    "actual_audio_scoped_block_calls": 400,
+    "actual_audio_target_count": 100,
+    "actual_audio_calls_each_target": 8,
+    "actual_audio_delegated_calls": 0,
+    "actual_audio_remaining_hooks": 0,
+    "generated_video_GPU_quality_qualified": false,
+    "fc2_large_model_GPU_asset_qualified": false,
+    "fair_speedup_qualified": false,
+    "github_release_version": "1.101.0"
+  },
+  "h13_audio_first_hybrid_local": {
+    "status": "human_reviewed_explicit_media_and_saved_source_examples",
+    "published": true,
+    "human_quality_accepted": true,
+    "human_review_id": "c21678fded3be91ec0e4a2195b29439e8d93f49ef02ced4fa208fa24a02243d2",
+    "human_feedback_revision": 2,
+    "saved_workflows": [
+      "examples/workflows/88-h13-reviewed/H13_AudioFirst.json",
+      "examples/workflows/88-h13-reviewed/H13_Hybrid.json"
+    ],
+    "fair_speedup_qualified": false,
+    "documentation": "docs/H13_AUDIO_FIRST_HYBRID.md",
+    "old_registered_schemas": 733,
+    "new_nodes": [
+      "MiniMaxH3AudioFirstProjectionEXPT8",
+      "MiniMaxH3AudioFirstLockAuditEXPT8"
+    ],
+    "old_workflows_defaults_unchanged": true,
+    "CLIP_reencoding": false,
+    "new_sampler_or_source_lock_algorithm": false,
+    "wuli_hybrid_revision": "9df5eccfa095adcdbffba5ba8cbe4c0c66d15a7e",
+    "wuli_hybrid_sha256": "a852255134e20112d63a23848be122bd0076e37b9ddac09e436d9d61abbba42b",
+    "model_requires_conversion": false,
+    "actual_UI_complete_clips": 2,
+    "actual_video_dimensions": [
+      864,
+      480
+    ],
+    "actual_duration_seconds": 5,
+    "actual_native_to_delivered_frames": [
+      124,
+      120
+    ],
+    "audio_first_actual_locked_latent_max_abs_difference": 0,
+    "audio_first_actual_final_AAC_to_Tiny_FLAC_correlation": 0.9981013592451377,
+    "single_first_frame_actual_VAE_encode_only_verified": true,
+    "single_first_frame_full_video_quality_qualified": false,
+    "spark_main_runtime_upgraded": false,
+    "removed_or_paused_projects_restored": false,
+    "github_release_version": "1.100.0",
+    "human_feedback_sha256": "c53014a3c00cb179f82a997a9a0e1069212cb4e80172b6d899b43c183f9eb3c1",
+    "accepted_cases": {
+      "A1": "pass",
+      "A2": "pass"
+    }
+  },
+  "h11_native_extensions_local": {
+    "status": "human_reviewed_explicit_media_and_interface_examples",
+    "published": true,
+    "human_quality_accepted": true,
+    "documentation": "docs/H11_NATIVE_EXTENSIONS.md",
+    "scope_documentation": "docs/H11_RESOURCES_AND_SCOPE.md",
+    "old_workflows_defaults_unchanged": true,
+    "old_registered_schemas": 720,
+    "new_nodes": [
+      "MiniMaxH3SparkPreflightEXPT8",
+      "MiniMaxH3SparkApplyEXPT8",
+      "MiniMaxH3SparkAuditEXPT8",
+      "MiniMaxH3Wuli8RecipeEXPT8",
+      "MiniMaxH3Wuli4ComposeEXPT8",
+      "MiniMaxH3WuliAuditEXPT8",
+      "MiniMaxH3SemanticBridgeSidecarPresetEXPT8",
+      "MiniMaxH3AudioOnlyReferenceEXPT8",
+      "MiniMaxH3AudioOnlyConditioningEXPT8",
+      "MiniMaxH3FreeVideoPhaseCardEXPT8",
+      "MiniMaxH3ScenePromptTicketEXPT8",
+      "MiniMaxH3ScenePromptRewriteEXPT8",
+      "MiniMaxH3ScenePromptAdoptEXPT8"
+    ],
+    "spark_local_ABI": "cp312_torch2.10_cu130_SM89_comfy-kitchen0.2.37+spark.h3.sm89.cu130.1",
+    "spark_actual_sparse_calls": 343,
+    "spark_explicit_dense_delegate_calls": 57,
+    "fair_speedup_qualified": false,
+    "wuli_native_completed_calls": {
+      "8step": 8,
+      "4step": 4
+    },
+    "wuli_4_file_order": [
+      "trunk",
+      "heads_widen",
+      "heads_set"
+    ],
+    "wuli_8_shape_is_whole_weight_SHA_proof": false,
+    "wuli_partial_HIGH_quality_qualified": false,
+    "audio_only_actual_clip": "complete_5s_40step_Ref2VA_saved_UI_and_Core_asset_job_bound_original_log",
+    "audio_only_runtime_history_recovered": false,
+    "paired_and_standalone_two_speakers_qualified": false,
+    "freevideo_phase_worker": "bounded_host_observations_original_numeric_AST_and_source_pins_unchanged_no_new_worker_GPU_run",
+    "freevideo_legacy_phase_cards_actual_UI": true,
+    "freevideo_live_phase_status": "bounded_execution_client_specific_observer_actual_Stage_card_UI_CPU_loading_transport_NO_new_GPU",
+    "freevideo_live_phase_changes_NFE_or_saved_widgets": false,
+    "bridge_sidecar_actual_UI": "existing_Wushu_developer_fixture_NOT_new_Trainer_training_quality",
+    "scene_tickets_actual_UI": "same_original_request_two_distinct_scenes_NO_new_provider_call",
+    "scene_late_adoption_CPU_contract": true,
+    "complete_clips": 5,
+    "native_frames": 124,
+    "delivered_frames": 120,
+    "video_dimensions": [
+      864,
+      480
+    ],
+    "fps": 24,
+    "duration_seconds": 5.0,
+    "human_review_id": "474d1311024ffa56ab50e404af7f7808f14ddc7e8e1d861b5766da35ef8a48eb",
+    "human_review_items": 7,
+    "automatic_accept": false,
+    "quantfunc_nunchaku_restored": false,
+    "paused_sol_strata_changed": false,
+    "github_release_version": "1.99.0",
+    "human_feedback_revision": 7,
+    "human_feedback_sha256": "72c378c103f87b880a6b1c7440f1b01de6c5bf8a57b7c19abdfb56833d78b472",
+    "accepted_cases": {
+      "A1": "pass",
+      "A2": "pass",
+      "A3": "pass",
+      "A4": "pass",
+      "B1": "pass",
+      "B2": "pass",
+      "B3": "pass"
+    },
+    "saved_workflows": [
+      "examples/workflows/87-h11-reviewed/H11_Spark_Dense.json",
+      "examples/workflows/87-h11-reviewed/H11_Spark_Sparse.json",
+      "examples/workflows/87-h11-reviewed/H11_Wuli8.json",
+      "examples/workflows/87-h11-reviewed/H11_Wuli4.json",
+      "examples/workflows/87-h11-reviewed/H11_AudioOnly.json",
+      "examples/workflows/87-h11-reviewed/H11_BridgeSidecar.json",
+      "examples/workflows/87-h11-reviewed/H11_PhaseCard.json",
+      "examples/workflows/87-h11-reviewed/H11_SceneTickets.json"
+    ],
+    "resource_adaptations_reexecuted": false,
+    "specific_examples_not_all_models_or_stages": true,
+    "unique_CPU_cases": 32,
+    "prior_failed_attempts_retained": true
+  },
+  "h07_background_local": {
+    "status": "native0p4MP_existing_plate_correction_human_accepted_with_quality_limits_LanPaint_failure_retained",
+    "documentation": "docs/H07_BACKGROUND_EXP.md",
+    "reviewed_template": "examples/workflows/85-h07-reviewed/A3_Background_Plate.json",
+    "native_0p4MP_plate_human_accepted": true,
+    "native_0p4MP_plate_is_LanPaint_geometry_fix": false,
+    "costume_or_subject_lighting_qualified": false,
+    "targeted_human_review_revision": 10,
+    "targeted_human_note": "虽然效果还是不佳，不改了就这样， 看来是原本模型问题",
+    "old_workflows_and_defaults_retained": true
+  },
+  "h07_pose_assets_local": {
+    "status": "fixed_8wide_pose_and_visible_action_half_size_foley_human_accepted",
+    "documentation": "docs/H07_POSE_ASSETS_EXP.md",
+    "pose_human_accepted": true,
+    "pose_reviewed_template": "examples/workflows/85-h07-reviewed/A4_Hybrid_Pose.json",
+    "half_size_foley_recheck_human_accepted": true,
+    "half_size_foley_reviewed_template": "examples/workflows/85-h07-reviewed/A6_Foley_Half.json",
+    "half_size_foley_usage": "docs/H07_FOLEY_USAGE.md",
+    "half_size_foley_targeted_human_review_revision": 10,
+    "half_size_foley_quality_or_sixfold_speedup_qualified": false,
+    "old_workflows_and_defaults_retained": true
+  },
+  "h07_optional_x2_local": {
+    "status": "same_completed_HIGH_X2_and_corrected_PDD7plus1_human_accepted_old_Turbo_failure_retained",
+    "documentation": "docs/H07_X2_DECODE_EXP.md",
+    "human_accepted": true,
+    "reviewed_template": "examples/workflows/85-h07-reviewed/A5_SameStage_X2.json",
+    "independent_7plus1_correction_human_accepted": true,
+    "independent_7plus1_correction_reviewed_template": "examples/workflows/85-h07-reviewed/A7_PDD_7plus1.json",
+    "independent_7plus1_correction_human_review_revision": 10,
+    "HD_seam_or_7plus1_qualified": false,
+    "independent_7plus1_flash_root_cause_or_fix_proven": false,
+    "old_workflows_and_defaults_retained": true
+  },
+  "h07_song_master_local": {
+    "status": "single_real_CC0_song_native_5s_human_accepted",
+    "documentation": "docs/H07_SONG_MASTER_EXP.md",
+    "reviewed_template": "examples/workflows/85-h07-reviewed/A2_Song_4plus4.json",
+    "human_accepted": true,
+    "final_audio": "same_complete_CC0_human_acappella_recording_not_generated_voice",
+    "old_workflows_and_defaults_retained": true
+  },
+  "h07_reference_cost_local": {
+    "status": "single_CPU_Qwen_and_CPU_GPU_reference_cost_parity_pass",
+    "documentation": "docs/H07_REFERENCE_COSTS.md",
+    "new_cache_layer": false,
+    "whole_video_speedup_qualified": false,
+    "old_workflows_and_defaults_retained": true
+  },
+  "h07_delivery_local": {
+    "status": "new_contracts_and_saved_reopened_native_CPU_sidecar_pass",
+    "documentation": "docs/H07_DELIVERY_EXP.md",
+    "new_node": "MiniMaxH3TakeSidecarEXPT8",
+    "default_writes_files": false,
+    "automatic_upload": false,
+    "public_copy": "allowlisted_sidecar_not_MP4_metadata_scrubbing",
+    "old_workflows_and_defaults_retained": true
+  },
+  "h07_freevideo_audio_local": {
+    "status": "single_native_Ref2VA_AV_5s_8plus3_human_accepted",
+    "documentation": "docs/FREEVIDEO_AUDIO_CLOCK_EXP.md",
+    "reviewed_template": "examples/workflows/85-h07-reviewed/A1_AudioClock_8plus3.json",
+    "new_loader": "MiniMaxH3FreeVideoAudioClockLoaderEXPT8",
+    "reference_audio_t": 1,
+    "old_default_reference_audio_t": 0,
+    "body_weights_reused": true,
+    "human_accepted": true,
+    "source_commit": "566251c88707322e4674ba1c6f587834e07a91b6",
+    "table_revision": "b3a8dd8d4cf215b3a90bcc20b4362318f5f4f158",
+    "old_workflows_and_defaults_retained": true
+  },
+  "h07_readonly_diagnostics": {
+    "status": "new_contracts_and_saved_reopened_readonly_native_CPU_pass",
+    "documentation": "docs/H07_DIAGNOSTICS_EXP.md",
+    "scope": [
+      "N02_reference_execution_report",
+      "N03_continue_restore_card",
+      "N04_declared_prop_continuity"
+    ],
+    "automatic_queue": false,
+    "automatic_prompt_replacement": false,
+    "MP4_native_stage_recovery": false,
+    "old_workflows_and_defaults_retained": true
+  },
+  "vm01_visual_marker_exp": {
+    "status": "implemented_three_native_cases_human_accepted",
+    "source_repository": "RK-BoilingPoint/H3-Visual-Marker-Control",
+    "source_commit": "0f0274f5f07c0e8dda0bb8cd0286256587f4e959",
+    "documentation": "docs/VISUAL_MARKER_EXP.md",
+    "new_nodes": [
+      "MiniMaxH3VisualMarkerPrepareEXPT8",
+      "MiniMaxH3VisualMarkerPromptEXPT8",
+      "MiniMaxH3VisualMarkerConditioningEXPT8",
+      "MiniMaxH3VisualMarkerRelayConditioningEXPT8"
+    ],
+    "old_688_full_schema_prefix_exact": true,
+    "node_count": 692,
+    "old_workflows_and_defaults_retained": true,
+    "editor_actual_browser_validation_pending": false,
+    "editor_actual_drag_apply_save_close_reopen_and_CPU_run_verified": true,
+    "new_weights_required": false,
+    "SOLRICKS_required": false,
+    "raw_reference_binding_only": true,
+    "clean_vae_marked_qwen_explicit_experiment": true,
+    "relay_static_legend_derived_plan_events_preserved": true,
+    "hard_spatial_lock_or_marker_removal_guaranteed": false,
+    "native_GPU_or_quality_qualified": true,
+    "native_canvas_full_generation_completed": true,
+    "native_trial_count": 3,
+    "native_trial_duration_seconds": 5,
+    "native_LOW_HIGH_stage_load_and_consumed_binding_verified": true,
+    "split_actual_Qwen_tokens_match_marked_and_VAE_latent_matches_clean": true,
+    "review_browser_all_three_clips_played_to_end": true,
+    "marked_and_split_marker_residue_observed": true,
+    "human_quality_qualified": true,
+    "human_review_case_ids": [
+      "A1",
+      "A2",
+      "A3"
+    ],
+    "human_review_revision": 3,
+    "human_review_date": "2026-10-08",
+    "human_qualification_scope": "Only the three exact accepted 5-second clips; marker residue retained, not guaranteed removal, hard spatial lock, multiwindow efficacy or arbitrary input quality.",
+    "accepted_public_workflow_templates_pending": false,
+    "workflow_directory": "examples/workflows/84-visual-marker",
+    "saved_generation_templates": 3,
+    "saved_CPU_only_editor_template": true,
+    "release_version": "1.96.0"
+  },
   "h05_release_1_95": {
     "status": "eleven_scoped_cases_human_accepted",
     "version": "1.95.0",
     "documentation": "docs/RELEASE_1.95.0.md",
     "workflow_directory": "examples/workflows/83-h05-reviewed",
-    "accepted_cases": ["A1", "A2", "B1", "B2", "B3", "B4", "B5", "B6", "B7", "C1", "C2"],
+    "accepted_cases": [
+      "A1",
+      "A2",
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5",
+      "B6",
+      "B7",
+      "C1",
+      "C2"
+    ],
     "review_date": "2026-10-08",
     "old_671_schema_prefix_exact": true,
     "legacy_workflows_and_defaults_retained": true,
     "native_originals_preserved_locally_public_assets_are_placeholders": true,
     "B3_tau": 1.5,
-    "B3_video_progress": [0.1, 0.9],
-    "B3_measured_gain_min_mean_max": [1.0, 1.0, 1.0],
+    "B3_video_progress": [
+      0.1,
+      0.9
+    ],
+    "B3_measured_gain_min_mean_max": [
+      1.0,
+      1.0,
+      1.0
+    ],
     "nonzero_EAV_enhancement_approved": false,
     "all_H05_conditional_research_complete": false,
     "registry_activation_claimed": false
@@ -681,7 +1016,7 @@
     ]
   },
   "name": "minimax-h3-audio-T8",
-  "version": "1.95.0",
+  "version": "1.101.0",
   "release_1_79_0": {
     "scope": "Dual-MODEL4+learned-upscale+4, KJ/Sol integration, official regular Topaz upscaling, R1 reliability, VDN upstream override coexistence",
     "qualification": "Reviewed two-segment8s prefix-lock sample accepted; old workflow defaults preserved.177 targetedCPU and62 VDN/Core checks passed; no GPU rerun for override gate removal.",
@@ -990,5 +1325,238 @@
       "MiniMaxH3FreeVideoQualityEAVEXPT8",
       "MiniMaxH3FreeVideoQualityPromptRelayEXPT8"
     ]
+  },
+  "veda_r2va_exp_local": {
+    "status": "native_Dense_Sparse_5s_canvas_case_human_accepted_not_speed_certification",
+    "reviewed_templates": [
+      "examples/workflows/86-h09-reviewed/A1_Veda_Dense.json",
+      "examples/workflows/86-h09-reviewed/A1_Veda_Sparse.json"
+    ],
+    "resource_adaptations_reexecuted": false,
+    "nodes": [
+      "MiniMaxH3VedaR2VABundleEXPT8",
+      "MiniMaxH3VedaR2VAApplyEXPT8",
+      "MiniMaxH3VedaR2VAAuditEXPT8"
+    ],
+    "model_directory": "models/veda_r2va",
+    "upstream_commit": "8d7ac153ac215d636eaf1b5910b0536c3de9e6ed",
+    "predictor_revision": "1598b407905b7c0af85aa0c13acdfa6f01ff2982",
+    "predictor_sha256": "23edace948693772be33d5cc945d302d2b037a29bd44bd57071bfbdd8b02517d",
+    "predictor_bytes": 275415752,
+    "trained_budgets": {
+      "reference_key_tiles": 32,
+      "generated_key_tiles": 32
+    },
+    "execution": "official_R2VA_predictor_selection_with_T8_PyTorch_Flex_NOT_upstream_INT8",
+    "identity_scope": "R2VA_execution_local_content_NOT_portable_Stage_NOT_legacy_T2VA",
+    "old_nodes_workflows_and_defaults_unchanged": true,
+    "native_sampler_runs": 2,
+    "native_dimensions": [
+      864,
+      480
+    ],
+    "native_delivered_frames": 120,
+    "actual_dense_delegated_calls": 400,
+    "actual_sparse_calls": 400,
+    "actual_unverified_sparse_calls": 0,
+    "actual_sparse_delegate_calls": 0,
+    "human_quality_accepted": true,
+    "human_review_case": "A1",
+    "human_review_revision": 15,
+    "human_acceptance_receipt": "artifacts/development/h09-20261010/human-review-b23-v1/audit.json",
+    "speed_verified": false,
+    "published": true,
+    "documentation": "docs/VEDA_R2VA_EXP.md",
+    "github_release_version": "1.98.0"
+  },
+  "h09_person_removal_exp_local": {
+    "status": "actual_UI_corrected_external_mask_full120_case_human_accepted_old_failures_retained",
+    "reviewed_template": "examples/workflows/86-h09-reviewed/A4_Person_Prefix_Resume.json",
+    "reviewed_template_requires_existing_native_prefix": true,
+    "resource_adaptations_reexecuted": false,
+    "nodes": [
+      "MiniMaxH3PersonMaskEXPT8",
+      "MiniMaxH3PersonPlanEXPT8",
+      "MiniMaxH3PersonWindowEXPT8",
+      "MiniMaxH3PersonConditioningEXPT8",
+      "MiniMaxH3PersonAppendEXPT8"
+    ],
+    "model": "akatz-ai/MiniMax-H3-Person-Remover-LoRA",
+    "model_revision": "bbc23bf8d6ef833aef43afc0ae740b7cf937d763",
+    "model_sha256": "b01dc9fe888c2f4e455a8eb3b4878dfd4038ee0e2320a7b186c7935e65c93ba5",
+    "model_bytes": 155110584,
+    "window_frames": 22,
+    "history_frames": 18,
+    "steps_per_window": 12,
+    "global_core_patched": false,
+    "old_nodes_workflows_defaults_unchanged": true,
+    "native_sampler_runs": 19,
+    "native_sampler_runs_unit": "completed non-cached SamplerCustomAdvanced windows, not DiT calls",
+    "completed_canvas_jobs": 6,
+    "completed_full_five_second_media": 4,
+    "completed_native_prefix_single_window_rerolls": 1,
+    "rerolled_W2_agent_observed_clear": true,
+    "rerolled_full_suffix_verified": true,
+    "rerolled_full_suffix_scope": "actual full120 AV integrity and case-specific human acceptance, not universal removal or pixel lock",
+    "full120_agent_observed_clear_candidate": true,
+    "retained_failed_full_five_second_media": 3,
+    "human_quality_accepted": true,
+    "human_review_case": "A4",
+    "human_review_revision": 15,
+    "human_acceptance_receipt": "artifacts/development/h09-20261010/human-review-b23-v1/audit.json",
+    "published": true,
+    "documentation": "docs/H09_PERSON_REMOVAL_EXP.md",
+    "github_release_version": "1.98.0"
+  },
+  "h09_freevideo_int8_exp_local": {
+    "status": "actual_UI_Light_8plus3_full5s_human_accepted_not_all_tasks_or_speed_certification",
+    "reviewed_templates": [
+      "examples/workflows/86-h09-reviewed/A2_FreeVideo_FP8_8plus3.json",
+      "examples/workflows/86-h09-reviewed/A2_FreeVideo_INT8_8plus3.json"
+    ],
+    "resource_adaptations_reexecuted": false,
+    "nodes": [
+      "MiniMaxH3FreeVideoINT8LoaderEXPT8",
+      "MiniMaxH3FreeVideoINT8SamplerEXPT8",
+      "MiniMaxH3FreeVideoINT8HIGH3EXPT8",
+      "MiniMaxH3FreeVideoINT8StageSaveEXPT8",
+      "MiniMaxH3FreeVideoINT8StageLoadEXPT8",
+      "MiniMaxH3FreeVideoINT8LoRAEXPT8",
+      "MiniMaxH3FreeVideoINT8EAVEXPT8",
+      "MiniMaxH3FreeVideoINT8PromptRelayEXPT8"
+    ],
+    "source_revision": "ebc94ecdeec3cbfe74040fe69a5116a62bf01dcd",
+    "model_revision": "da37681f5a1f7015fdb63482142b865111b687d3",
+    "runtime_schema": "t8-freevideo-runtime-int8-v1",
+    "precision": "int8_rowwise_convrot_group256",
+    "reference_audio_t": 1,
+    "bounded_kernel_probes": [
+      "linear-int8",
+      "cudnn",
+      "cudnn-additive-bias-128-plus-3"
+    ],
+    "prepared_tasks": [
+      "t2va",
+      "i2va",
+      "l2va",
+      "fl2va",
+      "ref2va",
+      "ref2va_audio",
+      "ref2va_av"
+    ],
+    "prepared_distinct_tables": 20,
+    "prepared_inventory_entries": 2589,
+    "native_sampler_runs": 0,
+    "execution": "isolated_official_engine_NOT_Core_DiT_sampler",
+    "completed_canvas_jobs": 1,
+    "completed_engine_stages": 2,
+    "native_delivered_dimensions": [
+      1024,
+      576
+    ],
+    "native_delivered_frames": 120,
+    "LOW_audio_preserved_exact": true,
+    "human_quality_accepted": true,
+    "human_review_case": "A2",
+    "human_review_revision": 15,
+    "human_acceptance_receipt": "artifacts/development/h09-20261010/human-review-b23-v1/audit.json",
+    "speed_verified": false,
+    "old_nodes_workflows_defaults_unchanged": true,
+    "published": true,
+    "documentation": "docs/H09_FREEVIDEO_INT8_EXP.md",
+    "github_release_version": "1.98.0"
+  },
+  "h09_production_recipes_local": {
+    "status": "actual_Director_UI_three_originals_retained_candidate_flow_human_accepted_unadopted",
+    "documentation": "docs/H09_PRODUCTION_RECIPES.md",
+    "human_candidate_review_accepted": true,
+    "reviewed_template": "examples/workflows/86-h09-reviewed/B1_Director_Candidates.json",
+    "resource_adaptations_reexecuted": false,
+    "human_review_case": "B1",
+    "human_review_revision": 15,
+    "human_acceptance_receipt": "artifacts/development/h09-20261010/human-review-b23-v1/audit.json",
+    "automatic_accept": false,
+    "old_nodes_workflows_defaults_unchanged": true,
+    "published": true,
+    "github_release_version": "1.98.0"
+  },
+  "h09_reference_join_local": {
+    "status": "actual_UI_reference_preview_join_route_conditioning_human_accepted_NOT_generated_identity",
+    "nodes": [
+      "MiniMaxH3ReferenceJoinEXPT8"
+    ],
+    "documentation": "docs/H09_REFERENCE_JOIN.md",
+    "MODEL_hooks_changed": false,
+    "strength_applied": false,
+    "native_sampler_runs": 0,
+    "human_quality_accepted": true,
+    "human_acceptance_scope": "specific_reference_preview_join_route_conditioning_NOT_generated_identity_or_strength",
+    "human_review_case": "B2",
+    "human_review_revision": 3,
+    "human_review_id": "a25f36b7eb0ac6fa988f01e5ff9c20464d1920a322893900c73f2f30dcc18d86",
+    "human_acceptance_receipt": "artifacts/development/h09-20261010/targeted-export-v1/audit.json",
+    "reviewed_template": "examples/workflows/86-h09-reviewed/B2_Reference_Join_Route.json",
+    "resource_adaptations_reexecuted": false,
+    "published": true,
+    "github_release_version": "1.98.0"
+  },
+  "h09_source_audio_plan_local": {
+    "status": "actual_UI_global_PCM_two_2p5s_windows_human_accepted_not_speaker_identity_certification",
+    "reviewed_template": "examples/workflows/86-h09-reviewed/A3_Source_PCM_Windows.json",
+    "resource_adaptations_reexecuted": false,
+    "nodes": [
+      "MiniMaxH3SourceAudioPlanEXPT8",
+      "MiniMaxH3SourceAudioWindowEXPT8"
+    ],
+    "documentation": "docs/H09_SOURCE_AUDIO_PLAN.md",
+    "fps": 24,
+    "tts": false,
+    "resampled": false,
+    "native_sampler_runs": 0,
+    "human_quality_accepted": true,
+    "human_review_case": "A3",
+    "human_review_revision": 15,
+    "human_acceptance_receipt": "artifacts/development/h09-20261010/human-review-b23-v1/audit.json",
+    "published": true,
+    "github_release_version": "1.98.0"
+  },
+  "h09_prompt_provider_local": {
+    "status": "actual_UI_specific_text_format_and_original_retention_human_accepted_unadopted",
+    "nodes": [
+      "MiniMaxH3FreeTokenRequestEXPT8",
+      "MiniMaxH3FreeTokenRewriteEXPT8",
+      "MiniMaxH3FreeTokenAdoptEXPT8"
+    ],
+    "documentation": "docs/H09_PROMPT_PROVIDER.md",
+    "model_revision": "ebb281ec70b05090aa6165b016eac8ec08e71b17",
+    "actual_successful_text_proposals": 2,
+    "automatic_accept": false,
+    "semantic_quality_accepted": true,
+    "human_acceptance_scope": "specific_text_format_and_original_retention_NOT_scene_improvement_or_all_inputs",
+    "human_review_case": "B3",
+    "human_review_revision": 3,
+    "human_review_id": "a25f36b7eb0ac6fa988f01e5ff9c20464d1920a322893900c73f2f30dcc18d86",
+    "human_acceptance_receipt": "artifacts/development/h09-20261010/targeted-export-v1/audit.json",
+    "reviewed_template": "examples/workflows/86-h09-reviewed/B3_FreeToken_Proposal.json",
+    "resource_adaptations_reexecuted": false,
+    "native_sampler_runs": 0,
+    "published": true,
+    "github_release_version": "1.98.0"
+  },
+  "h09_release_1_98": {
+    "version": "1.98.0",
+    "reviewed_cases": 7,
+    "saved_workflows": 9,
+    "registered_nodes": 720,
+    "preserved_legacy_nodes": 697,
+    "appended_nodes": 23,
+    "workflow_index": "examples/workflows/86-h09-reviewed/README.md",
+    "human_review_scope": "specific_cases_only",
+    "frozen_cache_implemented": false,
+    "all_h09_research_complete": false,
+    "original_workflows_preserved": true,
+    "automatic_adoption": false,
+    "new_acceptance_sampling_runs": 0,
+    "registry_active_not_assumed": true
   }
 }

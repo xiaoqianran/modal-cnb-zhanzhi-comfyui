@@ -7,17 +7,9 @@
 ## 📂 00 最新更新
 
 - 商用级-全自动换脸换头V2
-- ★★★ | MiniMax H3｜单人高质量数字人｜音频驱动多图参考 MV
-- MiniMax H3｜批量生素材图片｜支持文生图 图生图
-- ★★★ | MiniMax H3｜去油｜双采+加速+潜空间放大 全能多图参考-YZ金鱼版
-- MiniMax H3｜Self Lift｜高质量高速度｜8点加速｜双采
-- ★★★ | ★★｜MiniMax H3｜Self Lift双采｜导演台高质量高速度｜4步加速 全能多图参考 24G可跑15秒
-- ★★★ | ★★｜MiniMax H3｜T8文武双修均衡版｜语义桥 动修2-Vbvr后置 双采多图参考生视频 V4
+- ★★★ | ★★｜MiniMax H3｜文武均衡｜YZ金鱼版｜多图音频参考
+- ★★★ | ★★｜MiniMax H3 文戏｜单采极速官流｜多图音频参考
 - NanoBanana 2 大香蕉 图片编辑 人物角色场景资产 API 调用
-- Qwen Image 2.1｜四视图
-- Qwen+Image+2.1+图片编辑+25步官流
-- Qwen Image 2.1｜图片编辑 40步T8加速版
-- Qwen Image 2.1｜文生图 40步T8加速版
 
 ## 🎨 01 图片图像
 
@@ -77,6 +69,12 @@
     - 字体设计｜Qwen-Image 宋体艺术字形 字体设计
     - Qwen Image Layered 二合一 图像拆分图层 生成多透明通道图层
 
+- **Qwen-Image-2.1**
+    - Qwen Image 2.1｜四视图
+    - Qwen+Image+2.1+图片编辑+25步官流
+    - Qwen Image 2.1｜图片编辑 40步T8加速版
+    - Qwen Image 2.1｜文生图 40步T8加速版
+
 - **Qwen-Image-2512**
     - 文生图｜Qwen-Image-2512 文生图 8步加速
     - ★★★ | Qwen-Image-2512 文生图 洗图 高清放大 合集
@@ -120,11 +118,17 @@
     - LTX-2 图生视频
 
 - **MiniMax H3**
+    - ★★★ | MiniMax H3｜单人高质量数字人｜音频驱动多图参考 MV
     - ★★★ | MiniMax H3｜多模态参考导演台｜4步加速Lora 宫格分镜自动拆分+全能参考（图片｜视频｜音频）
     - ★★★ | MiniMax H3 加速｜文生视频 图生视频 多图参考 V2
+    - MiniMax H3｜批量生素材图片｜支持文生图 图生图
+    - ★★★ | MiniMax H3｜去油｜双采+加速+潜空间放大 全能多图参考-YZ金鱼版
     - ★★★ | MiniMax H3｜文生视频 图生视频 音频多图参考
     - Minimax H3 音频驱动多图参考 高质量数字人单人版MV
     - ★★★ | MiniMax H3｜Sageattn加速｜全能导演台 （图片｜视频）参考
+    - MiniMax H3｜Self Lift｜高质量高速度｜8点加速｜双采
+    - ★★★ | ★★｜MiniMax H3｜Self Lift双采｜导演台高质量高速度｜4步加速 全能多图参考 24G可跑15秒
+    - ★★★ | ★★｜MiniMax H3｜T8文武双修均衡版｜语义桥 动修2-Vbvr后置 双采多图参考生视频 V4
 
 - **Wan 2.2**
     - ★★★ | 长视频｜Wan 2.2 SVI Pro 图生视频 自动提示词 高一致性 20秒长视频

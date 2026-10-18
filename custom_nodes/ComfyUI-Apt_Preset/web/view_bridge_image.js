@@ -2,6 +2,23 @@ import { app } from '../../../scripts/app.js'
 // import { ComfyDialog } from '../../../scripts/ui.js'
 import { api } from '../../../scripts/api.js'
 
+const MASK_EDITOR_IMAGE = /^clipspace-painted-masked-\d+\.png$/i
+
+function isMaskEditorImage (image) {
+  return image?.filename && MASK_EDITOR_IMAGE.test(image.filename) && (image.type || 'input') === 'input'
+}
+
+function imageUrl (image) {
+  if (!image?.filename) return ''
+  const params = new URLSearchParams({
+    filename: image.filename,
+    type: image.type || 'temp',
+    subfolder: image.subfolder || '',
+    rand: String(Date.now())
+  })
+  return api.apiURL(`/view?${params.toString()}`)
+}
+
 //#region 
 app.registerExtension({
   name: 'web_node.edit_mask.view_bridge_image',    
@@ -18,8 +35,9 @@ app.registerExtension({
             return [128, 24] // a method to compute the current size of the widget
           },
           async serializeValue (nodeId, widgetIndex) {
-            // node=app.graph.getNodeById(node.id)
-            if (node.images) return { images: node.images }
+            const editedImages = (node.images || []).filter(isMaskEditorImage)
+            if (editedImages.length > 0) node.__viewBridgeEditedImages = editedImages
+            if (node.__viewBridgeEditedImages?.length > 0) return { images: node.__viewBridgeEditedImages }
             return {}
           }
         }
@@ -27,6 +45,7 @@ app.registerExtension({
         return widget
       }
     }
+
   },
 
   async beforeRegisterNodeDef (nodeType, nodeData, app) {
@@ -47,11 +66,26 @@ app.registerExtension({
         })
       }
     }
+
+    if (nodeData.name === 'view_bridge_image') {
+      const origOnExecuted = nodeType.prototype.onExecuted
+      nodeType.prototype.onExecuted = function (message) {
+        const result = origOnExecuted?.apply(this, arguments)
+        const sourceImage = message?.source_images?.[0]
+        if (sourceImage) this.__viewBridgeSourcePreviewUrl = imageUrl(sourceImage)
+        if (message?.clear_image_update?.at?.(-1) === true) {
+          this.__viewBridgeEditedImages = null
+          const imageUpdateWidget = this.widgets?.find(w => w.name === 'image_update')
+          if (imageUpdateWidget) imageUpdateWidget.value = {}
+        }
+        window.dispatchEvent(new CustomEvent('apt-media-source-preview-change', { detail: { nodeId: Number(this.id) } }))
+        return result
+      }
+    }
   },
   async loadedGraphNode (node, app) {
     if (node.type === 'view_bridge_image') {
-      let image_update = node.widgets.filter(w => w.name === 'image_update')[0]
-      console.log('#image_update', image_update)
+      const image_update = node.widgets.filter(w => w.name === 'image_update')[0]
 
       //从ComfyUI\web\scripts\widgets.js，IMAGEUPLOAD参考代码
       function showImage (file) {
@@ -69,9 +103,13 @@ app.registerExtension({
         node.setSizeForImage?.()
       }
 
-      if (image_update?.value?.images?.length > 0) {
-        showImage(image_update.value.images[0])
-        node.images = image_update.value.images
+      const editedImages = (image_update?.value?.images || []).filter(isMaskEditorImage)
+      if (editedImages.length > 0) {
+        node.__viewBridgeEditedImages = editedImages
+        showImage(editedImages[0])
+        node.images = editedImages
+      } else if (image_update) {
+        image_update.value = {}
       }
     }
   }
