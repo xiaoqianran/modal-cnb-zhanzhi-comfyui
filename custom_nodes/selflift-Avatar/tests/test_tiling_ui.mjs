@@ -14,7 +14,9 @@ await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64
 class Node {
     constructor(){this.size=[300,300];this.widgets=[
         {name:'highres_tiling',value:true}, {name:'tiling_mode',value:'auto'},
-        {name:'tiling_tiles',value:2}, {name:'tiling_axis',value:'auto'}];}
+        {name:'tiling_tiles',value:2}, {name:'tiling_axis',value:'auto'},
+        {name:'highres_tiling_mode',value:'spatial'}, {name:'highres_token_chunk',value:4096},
+        {name:'highres_weight_cache_gb',value:4}];}
     addDOMWidget(name,type,el,options){this.widgets.push({name,type,options});return this.widgets.at(-1);}
     computeSize(){return [300,300];}
     setDirtyCanvas(){}
@@ -63,4 +65,22 @@ node.widgets[3].callback();
 assert.match(node.selfliftTilingPanel.value.split('\n')[0], /pending/);
 node.widgets[0].value=false;node.widgets[0].callback();
 assert.match(node.selfliftTilingPanel.value.split('\n')[0], /OFF/);
+
+// Global-context controls and status.
+const widget=(name)=>node.widgets.find((w)=>w.name===name);
+node.widgets[0].value=true; node.widgets[4].value='global_stream'; node.widgets[4].callback();
+assert.match(node.selfliftTilingPanel.value, /global_stream/);
+assert.match(node.selfliftTilingPanel.value, /token_chunk=4096/);
+assert.equal(widget('tiling_mode').type, 'selflift-hidden');
+assert.notEqual(widget('highres_token_chunk').type, 'selflift-hidden');
+events.get('selflift-avatar-tiling')({detail:{node_id:'78',text:'RUNNING',plan:{kind:'global',mode:'global_stream'}}});
+assert.match(node.selfliftTilingPanel.value.split('\n')[0], /Global context/);
+node.widgets[4].value='global'; node.widgets[4].callback();
+assert.equal(widget('highres_weight_cache_gb').type, 'selflift-hidden');
+node.widgets[4].value='spatial'; node.widgets[4].callback();
+assert.notEqual(widget('tiling_mode').type, 'selflift-hidden');
+assert.equal(widget('highres_token_chunk').type, 'selflift-hidden');
+node.widgets[0].value=false; node.widgets[0].callback();
+assert.equal(widget('highres_tiling_mode').type, 'selflift-hidden');
 console.log('Automatic actual-count tests passed (live, complete, reset, cached text, numeric node ID, single tile).');
+console.log('Global-context frontend checks passed (mode, status, control visibility).');

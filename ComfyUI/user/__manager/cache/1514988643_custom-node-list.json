@@ -62263,6 +62263,77 @@
             "title": "FLUX 3 PE GGUF (T8)"
         },
         {
+            "author": "xm6018924",
+            "description": "ComfyUI 0.37.x launcher-compatibility shim: runtime-disables the comfy_aimdo memory/compiler graph, equivalent to launching with --disable-comfy-compiler, preventing aimdo memory compile error crashes during the first sampling step.",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-AimDo-Fix"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-AimDo-Fix",
+            "title": "BSAI-ComfyUI-AimDo-Fix"
+        },
+        {
+            "author": "xm6018924",
+            "description": "Native ComfyUI support for the official MiniMax-H3 8-step PDD acceleration LoRAs.",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-MiniMax-H3-PDD-Acc"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-MiniMax-H3-PDD-Acc",
+            "title": "BSAI-ComfyUI-MiniMax-H3-PDD-Acc"
+        },
+        {
+            "author": "xm6018924",
+            "description": "Unifies removal of the PyTorch per-process VRAM memory fraction (set_per_process_memory_fraction) limits imposed by ComfyUI custom nodes.",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-VRAM-Unlock"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-VRAM-Unlock",
+            "title": "BSAI-ComfyUI-VRAM-Unlock"
+        },
+        {
+            "author": "xm6018924",
+            "description": "Glitch & Noise Fix Guide for MiniMax H3 fast-motion clips: outputs recommended steps / attention / reference weight / negative prompt / checklist / post-process, with a realtime plan card on the node.",
+            "files": [
+                "https://github.com/xm6018924/BSAI-H3-MotionFix"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/xm6018924/BSAI-H3-MotionFix",
+            "title": "BSAI-H3-MotionFix"
+        },
+        {
+            "author": "j0eyhu",
+            "description": "Experimental text encoder offloading for Apple Silicon / Mac setups.",
+            "files": [
+                "https://github.com/j0eyhu/ComfyUI-MacOffload-TE"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/j0eyhu/ComfyUI-MacOffload-TE",
+            "title": "ComfyUI-MacOffload-TE"
+        },
+        {
+            "author": "AceDataCloud",
+            "description": "Generate Suno music through your Ace Data Cloud account, query the same task ID, and load completed audio into ComfyUI. Requires an Ace Data Cloud API key; generation consumes Credits. Cloud API only, with no local model or GPU needed.",
+            "files": [
+                "https://github.com/AceDataCloud/SunoComfyUI"
+            ],
+            "id": "ace-suno",
+            "install_type": "git-clone",
+            "reference": "https://github.com/AceDataCloud/SunoComfyUI",
+            "title": "Suno by Ace Data Cloud"
+        },
+        {
+            "author": "NotUsingGithub",
+            "description": "Wan27 image/video API nodes: account and model discovery, credit estimates, explicitly approved generation, and task tracking. Requires an active paid Wan27 subscription and uses website credits. Docs: https://wan2-7.io/mcp/guide/",
+            "files": [
+                "https://github.com/NotUsingGithub/ComfyUI-Wan27"
+            ],
+            "install_type": "git-clone",
+            "reference": "https://github.com/NotUsingGithub/ComfyUI-Wan27",
+            "title": "Wan27"
+        },
+        {
             "author": "ntdviet",
             "description": "Nodes:LatentGarbageCollector. This ComfyUI custom node flushes the GPU cache and empty cuda interprocess memory. It's helpfull for low memory environment such as the free Google Colab, especially when the workflow VAE decode latents of the size above 1500x1500.",
             "files": [
@@ -62480,36 +62551,6 @@
             "install_type": "unzip",
             "reference": "https://civitai.com/models/143293/image2halftone-node-for-comfyui",
             "title": "Image2Halftone Node for ComfyUI"
-        },
-        {
-            "author": "xm6018924",
-            "description": "ComfyUI 0.37.x launcher-compatibility shim: runtime-disables the comfy_aimdo memory/compiler graph, equivalent to launching with --disable-comfy-compiler, preventing aimdo memory compile error crashes during the first sampling step.",
-            "files": [
-                "https://github.com/xm6018924/BSAI-ComfyUI-AimDo-Fix"
-            ],
-            "install_type": "git-clone",
-            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-AimDo-Fix",
-            "title": "BSAI-ComfyUI-AimDo-Fix"
-        },
-        {
-            "author": "xm6018924",
-            "description": "Native ComfyUI support for the official MiniMax-H3 8-step PDD acceleration LoRAs.",
-            "files": [
-                "https://github.com/xm6018924/BSAI-ComfyUI-MiniMax-H3-PDD-Acc"
-            ],
-            "install_type": "git-clone",
-            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-MiniMax-H3-PDD-Acc",
-            "title": "BSAI-ComfyUI-MiniMax-H3-PDD-Acc"
-        },
-        {
-            "author": "xm6018924",
-            "description": "Unifies removal of the PyTorch per-process VRAM memory fraction (set_per_process_memory_fraction) limits imposed by ComfyUI custom nodes.",
-            "files": [
-                "https://github.com/xm6018924/BSAI-ComfyUI-VRAM-Unlock"
-            ],
-            "install_type": "git-clone",
-            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-VRAM-Unlock",
-            "title": "BSAI-ComfyUI-VRAM-Unlock"
         }
     ]
 }

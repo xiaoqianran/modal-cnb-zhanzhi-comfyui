@@ -23,9 +23,14 @@ from ..vdn_attention_compat import _factory_closure
 
 KEY = "bypass_lora"
 _SOURCE_PINS = {
-    "comfy.weight_adapter.bypass": "b60abb835679840be070b1f3ec7d45f8c26fd53e0349c2d084f92a4b971f12fd",
-    "comfy.weight_adapter.base": "a5083daaae27a0c0146bdbbaa1b5d06376b01b582fa38cb52eba4c8b10214d66",
-    "comfy.weight_adapter.lora": "5e30c8b8a22be6459883cb5d758fa76f725cc4688d4048200145b885567c4cec",
+    # LF-normalized reviewed sources. The second bypass revision is Core
+    # d91ed5f5b: inject/eject additionally save/restore comfy_force_forward.
+    "comfy.weight_adapter.bypass": {
+        "618c286c5f74e823318f41774e02cfcfa02d74ee9d51320ec0aa2694cd74aa8e",
+        "689de19c5cfda2a13568ae76c69f3b68d348fdb0e0f7d58e92ebc97468e55c09",
+    },
+    "comfy.weight_adapter.base": {"484f0d83a96e700f80c793e4bcc6a897d633233e51a59191d91da5e59da345c7"},
+    "comfy.weight_adapter.lora": {"e506062b4eb189be4c36f88270e0fd4dcce038c79a98f7163604ed6b44efe4b5"},
 }
 
 
@@ -81,7 +86,7 @@ def _authenticate_core():
         _require(Path(function.__code__.co_filename).resolve() == path, "live method source owner changed")
         if module.__name__ not in compiled:
             source = path.read_bytes()
-            _require(hashlib.sha256(source).hexdigest() == _SOURCE_PINS[module.__name__],
+            _require(hashlib.sha256(source.replace(b"\r\n", b"\n")).hexdigest() in _SOURCE_PINS[module.__name__],
                      "source is outside the audited native lifecycle")
             compiled[module.__name__] = _compiled_codes(source, function.__code__.co_filename)
         _require(executable_code_equal(function.__code__, compiled[module.__name__].get(name)),
@@ -112,8 +117,14 @@ def _inspect(model, *, allow_shared_owner=True):
         _require(type(path) is str and type(pair) is tuple and len(pair) == 2, "target descriptor changed")
         adapter, strength = pair
         _require(type(strength) in (int, float) and math.isfinite(strength), "strength is not finite")
-        _require(type(hook) is BypassForwardHook and set(vars(hook)) == {
-            "module", "adapter", "multiplier", "original_forward"}, "hook has foreign executable state")
+        hook_fields = {"module", "adapter", "multiplier", "original_forward"}
+        _require(type(hook) is BypassForwardHook and set(vars(hook)) in (
+            hook_fields, hook_fields | {"original_force_forward"}), "hook has foreign executable state")
+        force_forward = getattr(hook, "original_force_forward", getattr(hook.module, "comfy_force_forward", False))
+        _require(type(force_forward) is bool, "force-forward backup is not a boolean")
+        if hasattr(hook, "original_force_forward") and hook.original_forward is not None:
+            _require(getattr(hook.module, "comfy_force_forward", None) is True,
+                     "active bypass force-forward flag was changed")
         _require(type(adapter) is LoRAAdapter and hook.adapter is adapter and hook.multiplier == strength
                  and set(vars(adapter)) == {"loaded_keys", "weights", "multiplier", "is_conv", "conv_dim",
                     "kernel_size", "in_channels", "out_channels", "kw_dict"},
@@ -138,8 +149,6 @@ def _inspect(model, *, allow_shared_owner=True):
         weights = tuple(value.to(dtype=dtype) if isinstance(value, torch.Tensor)
                         and dtype in (torch.float32, torch.float16, torch.bfloat16) else value
                         for value in adapter.weights)
-        records.append({"path": path, "loaded_keys": sorted(adapter.loaded_keys),
-                        "weights": content_identity(weights), "geometry": content_identity(expected)})
         previous = hook.original_forward
         if previous is None:
             previous = module.forward
@@ -166,11 +175,15 @@ def _inspect(model, *, allow_shared_owner=True):
                          and previous.__self__.module is module,
                          "shared live hook target differs from its loaded owner")
                 previous = shared_original_forwards[path][1]
+                force_forward = shared_original_forwards[path][2]
         else:
             _require(isinstance(module.forward, MethodType) and module.forward.__self__ is hook
                      and module.forward.__func__ is BypassForwardHook._bypass_forward,
                      "live forward is outside the original injection lifecycle")
-        restores[path] = (module, previous)
+        records.append({"path": path, "loaded_keys": sorted(adapter.loaded_keys),
+                        "weights": content_identity(weights), "geometry": content_identity(expected),
+                        "original_force_forward": force_forward})
+        restores[path] = (module, previous, force_forward)
     # Bind every ordered target, strength, geometry and complete tensor digest,
     # but do not recursively expand hundreds of records into Relay/Stage JSON.
     # Hashing is lossless identity binding, not dropping weights or checking a
@@ -189,7 +202,7 @@ def project(model):
     view.model = copy(model.model)
     view.model._modules = dict(model.model._modules)
     cloned = {"": view.model}
-    for path, (original, forward) in restores.items():
+    for path, (original, forward, force_forward) in restores.items():
         parent = ""
         for part in path.split("."):
             current = (parent + "." + part).strip(".")
@@ -200,6 +213,7 @@ def project(model):
                 cloned[current] = child
             parent = current
         target = cloned[path]
+        target.comfy_force_forward = force_forward
         if isinstance(forward, MethodType) and forward.__self__ is original and forward.__func__ is type(original).forward:
             target.__dict__.pop("forward", None)
         else:

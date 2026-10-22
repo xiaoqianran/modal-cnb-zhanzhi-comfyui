@@ -119,7 +119,7 @@ def test_corrupt_artifacts_cannot_claim_completion(tmp_path, saved, fault):
     if fault == "short":
         path.write_bytes(b"bad")
     elif fault == "header":
-        path.write_bytes(struct.pack("<Q", storage.MAX_JSON + 1) + b"a" * 32)
+        path.write_bytes(struct.pack("<Q", 33) + b"a" * 32)
     else:
         with safe_open(str(path), framework="pt", device="cpu") as handle:
             tensors = {key: handle.get_tensor(key) for key in handle.keys()}

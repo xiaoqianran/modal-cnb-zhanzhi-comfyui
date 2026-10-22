@@ -1,5 +1,7 @@
 # FastH3 V2
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#34-fasth3-v2)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 These workflows are optional FastH3 V2 examples. They require the matching
 FastH3 V2 ConvRot checkpoint and the native MiniMax H3 V2 setup/runtime nodes.
 They are kept as explicit experimental routes; stable H3 workflows and their

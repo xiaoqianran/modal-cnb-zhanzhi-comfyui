@@ -387,6 +387,34 @@ def test_declared_merged_acceleration_warns_and_skips_only_automatic_extra_lora(
     assert chosen["turbo_lora"] == [("selected.safetensors", 0.5)]
 
 
+@pytest.mark.parametrize("mode", ["refs", "ends"])
+def test_manual_multiple_loras_preserved_on_reference_and_end_routes(tmp_path, monkeypatch, mode):
+    from h3_audio_t8_pkg import director_generation
+    _patch_director_models(monkeypatch)
+    monkeypatch.setattr(director_generation.folder_paths, "get_filename_list", lambda folder: ["one.safetensors", "two.safetensors"])
+    monkeypatch.setattr(director_generation.folder_paths, "get_full_path", lambda folder, name: name)
+    store = _store(tmp_path)
+    first, last = _image(store), _image(store, "last.png")
+    project = new_project()
+    shot = project["doc"]["shots"][0]
+    shot.update(mode=mode, tray=[first["id"], last["id"]], simplePrompt="A quiet scene.")
+    if mode == "refs":
+        shot["refs"] = [first["id"]]
+    else:
+        shot.update(first=first["id"], last=last["id"])
+    project["assets"] = [first, last]
+    project["doc"]["generation"].update(lora_mode="manual", loras=[
+        {"name": "one.safetensors", "enabled": True, "strength": .5},
+        {"name": "two.safetensors", "enabled": True, "strength": .7}])
+    built = build_director_generation_prompt(project, shot["id"], store)
+    rows = [value["inputs"] for value in built["prompt"].values()
+            if value["class_type"] == "MiniMaxH3LoRACompatibilityLoaderT8Advanced"]
+    assert [(row["lora_name"], row["strength_model"]) for row in rows] == [
+        ("one.safetensors", .5), ("two.safetensors", .7)]
+    assert built["prompt"]["6"]["inputs"]["steps"] == 8
+    assert any("风险由用户承担" in row["message"] for row in built["report"]["warnings"])
+
+
 def test_hyperflow_single_ignores_inactive_high_draft_but_dual_validates_it():
     from h3_audio_t8_pkg.director_sampling_settings import normalize_sampling
 

@@ -92,7 +92,10 @@ def load_curve_base(path, expected_sha256=None, *, disable_dynamic=False):
     state = comfy.utils.state_dict_prefix_replace(state, {prefix: ""}, filter_keys=True) if prefix else state
     state, metadata = comfy.utils.convert_old_quants(state, "", metadata=metadata)
     config = comfy.model_detection.model_config_from_unet(state, "", metadata=metadata)
-    if (type(config) is not comfy.supported_models.MiniMaxH3 or config.unet_config.get("num_layers") != 50
+    if type(config) is not comfy.supported_models.MiniMaxH3:
+        from .patch_stack_policy import warn_patch_stack
+        warn_patch_stack("Curve loader received another MODEL config class; checking actual curve dimensions")
+    if (config.unet_config.get("num_layers") != 50
             or config.unet_config.get("adaln_curve_grid") != 1025 or config.unet_config.get("time_embed_dim") != 8):
         raise ValueError("Curve loader only accepts the native fifty-block pruned H3 config")
     device = management.get_torch_device()

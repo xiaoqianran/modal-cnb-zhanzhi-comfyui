@@ -2654,6 +2654,21 @@ def _stage_odd_even_value(value):
     return value, None, None
 
 
+def _stage_trim_bridge_history(data, depth=0):
+    if not isinstance(data, Mapping) or not all(key in data for key in ("run_id", "stage_index", "total")):
+        return data
+    result = dict(data)
+    for key in ("stage_data", "stage_data_1", "stage_data_2", "stage_data_3",
+                "checkpoint_data_1", "checkpoint_data_2", "checkpoint_data_3"):
+        value = result.get(key)
+        if isinstance(value, Mapping) and all(field in value for field in ("run_id", "stage_index", "total")):
+            if depth:
+                result.pop(key)
+            else:
+                result[key] = _stage_trim_bridge_history(value, depth + 1)
+    return result
+
+
 class flow_stage_odd_even_hold:
     @classmethod
     def INPUT_TYPES(cls):
@@ -2731,7 +2746,7 @@ def _stage_save_checkpoint_data(stage_info, data, bridge):
     data, channel, _action = _stage_odd_even_value(data)
     if channel is not None and channel != bridge:
         raise ValueError(f"flow_stage_end: {channel} cannot be saved as {bridge}")
-    tensors, descriptor = _stage_encode_payload(data, "auto")
+    tensors, descriptor = _stage_encode_payload(_stage_trim_bridge_history(data), "auto")
     temp_path = path + ".tmp"
     try:
         comfy.utils.save_torch_file(
@@ -2914,7 +2929,7 @@ class flow_stage_end:
         def write_bridge(data, channel):
             if data is None:
                 return None, None, None
-            tensors, descriptor = _stage_encode_payload(data, "auto")
+            tensors, descriptor = _stage_encode_payload(_stage_trim_bridge_history(data), "auto")
             filename = _stage_payload_filename(stage_index, channel)
             temp_path = os.path.join(run_dir, filename + ".tmp")
             try:

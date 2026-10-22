@@ -7,11 +7,78 @@ import comfy
 import comfy.utils
 import node_helpers
 import comfy.model_management
+from comfy_api.latest import io
+from comfy_extras.nodes_qwen import TextEncodeQwenImage21
 
 from ..office_unit import *
 from ..main_unit import *
 from ..NodeBasic.C_promp import text_clip_Generate
 #endregion-----------------------------import----------------------------
+
+
+class sum_qwenImage21(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="sum_qwenImage21",
+            display_name="sum_qwenImage21",
+            category="Apt_Preset/chx_tool",
+            inputs=[
+                io.Custom("RUN_CONTEXT").Input("context"),
+                io.Model.Input("model", optional=True),
+                io.String.Input("prompt", default="", multiline=True, dynamic_prompts=True),
+                io.String.Input("negative_prompt", default="blur", multiline=False, dynamic_prompts=True),
+                io.Boolean.Input("prompt_enhance", default=False),
+                io.DynamicCombo.Input("resolution", tooltip="keep resolution：保持原尺寸；resize：统一分辨率。", options=[
+                    io.DynamicCombo.Option("keep resolution", []),
+                    io.DynamicCombo.Option("resize", [
+                        io.Float.Input("megapixels", default=1.0, min=0.01, max=16.0, step=0.01),
+                    ]),
+                ]),
+                io.Autogrow.Input("images", template=io.Autogrow.TemplatePrefix(
+                    io.Image.Input("image", optional=True), prefix="image", min=1, max=100,
+                ), optional=True),
+            ],
+            outputs=[
+                io.Custom("RUN_CONTEXT").Output(display_name="context"),
+                io.Conditioning.Output(display_name="positive"),
+                io.Conditioning.Output(display_name="negative"),
+                io.Latent.Output(display_name="latent"),
+                io.String.Output(display_name="text"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, context, prompt, negative_prompt, prompt_enhance, resolution: io.DynamicCombo.Type,
+                model=None, images: io.Autogrow.Type = None) -> io.NodeOutput:
+        clip = context.get("clip")
+        vae = context.get("vae")
+        if model is None:
+            model = context.get("model")
+        prompt = prompt or context.get("pos") or ""
+        negative_prompt = negative_prompt or "blur"
+
+        source_images = [images[name] for name in sorted(images or {}, key=lambda name: int(name.removeprefix("image")))
+                         if images[name] is not None]
+        if prompt_enhance:
+            enhance_images = (source_images[:5] + [None] * 5)[:5]
+            enhance_prompt = "\n\n".join((prompt.rstrip(), _QWEN2_ENHANCE_INSTRUCTION)).strip("\n")
+            enhanced_prompt = text_clip_Generate().generate(
+                clip=clip, prompt=enhance_prompt,
+                image1=enhance_images[0], image2=enhance_images[1], image3=enhance_images[2],
+                image4=enhance_images[3], image5=enhance_images[4],
+            )[0]
+            if enhanced_prompt:
+                prompt = "\n".join((prompt.rstrip(), enhanced_prompt.lstrip())).strip("\n")
+
+        qwen_images = {f"image_{index}": image for index, image in enumerate(source_images, start=1)}
+        image_resolution = 0 if resolution["resolution"] == "keep resolution" else round(math.sqrt(resolution["megapixels"]) * 1024)
+        positive, negative, latent = TextEncodeQwenImage21.execute(
+            clip, prompt, negative_prompt, vae=vae, resolution=image_resolution, images=qwen_images,
+        ).args
+        context = new_context(context, model=model, positive=positive, negative=negative, latent=latent,
+                              pos=prompt, neg=negative_prompt)
+        return io.NodeOutput(context, positive, negative, latent, prompt)
 
 
 _QWEN2_MAX_MEDIA = 16
@@ -128,7 +195,7 @@ class sum_QwenImage2:
     RETURN_TYPES = ("RUN_CONTEXT", "CONDITIONING", "CONDITIONING", "LATENT", "STRING")
     RETURN_NAMES = ("context", "positive", "negative", "latent", "text")
     FUNCTION = "encode"
-    CATEGORY = "Apt_Preset/chx_tool"
+    CATEGORY = "Apt_Preset/chx_tool/😺backup"
     DESCRIPTION = (
     )
 

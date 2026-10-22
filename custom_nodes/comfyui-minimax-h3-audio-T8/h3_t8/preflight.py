@@ -63,7 +63,7 @@ def run_preflight(
     if model is not None:
         diffusion_model = getattr(getattr(model, "model", None), "diffusion_model", None)
         if not isinstance(diffusion_model, MiniMaxH3Model):
-            errors.append("model is not a native ComfyUI MiniMax H3 diffusion model")
+            warnings.append("selected MODEL class is unverified; retained for execution at the user's risk")
     if video_vae is not None:
         video_vae_kind = classify_h3_vae(video_vae)
         facts["video_vae_kind"] = video_vae_kind

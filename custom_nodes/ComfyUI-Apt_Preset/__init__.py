@@ -54,9 +54,10 @@ from .NodeBasic.set_location import *
 from .NodeBasic.mask_human import *
 from .NodeChx.sum_text_yaml import *
 from .NodeChx.edit_imge import*
-from .NodeChx.Qwen_Image2 import sum_QwenImage2
+from .NodeChx.Qwen_Image2 import sum_QwenImage2, sum_qwenImage21
 
 from .NodeBasic.minimaxH3 import *
+from .NodeBasic.selflift_h3 import AD_selfliftH3_Sampler
 
 
 
@@ -75,6 +76,8 @@ from .NodeBasic.C_test import *
 NODE_CLASS_MAPPINGS= {
 
 
+
+
 #-------------------------------------------------------N
 
 "UC_load_model": UC_load_model,
@@ -90,49 +93,46 @@ NODE_CLASS_MAPPINGS= {
 "sum_load_simple": sum_load_simple,
 
 "sum_load_MiniMaxH3": sum_load_MiniMaxH3,
-"sum_editor": sum_editor,                      
-"sum_Ksampler": sum_Ksampler,  
-"sum_create_chx": sum_create_chx,  
 
+"sum_Ksampler": sum_Ksampler,   #    CATEGORY = "Apt_Preset/chx_ksample/ksample"
+"sum_editor": sum_editor,                      
+"sum_create_chx": sum_create_chx,  
+"sum_latent": sum_latent,       #      CATEGORY = "Apt_Preset/chx_load/😺backup" 
+"Data_preset_save": Data_preset_save, #    CATEGORY = "Apt_Preset/chx_load/😺backup"
 #-------------------------------------------------------S
 
 "Data_Highway":Data_Highway,#Web
 "Data_basic": Data_basic,                     
 "Data_select": Data_select,
 #"Data_chx_Merge":Data_chx_Merge,
-"Data_preset_save": Data_preset_save,
+
 
 "sum_TextEncode": sum_TextEncode,
-"sum_latent": sum_latent,     
 "sum_lora": sum_lora,
-"sum_stack_image": sum_stack_image,     
-"sum_stack_Wan": sum_stack_Wan,
-
 
 
 "sum_stack_QwenEditPlus":sum_stack_QwenEditPlus,
 "sum_QwenImage2": sum_QwenImage2,
+"sum_qwenImage21": sum_qwenImage21,
 "sum_stack_flux2_Klein": sum_stack_flux2_Klein,
+"sum_Flux3_Image": sum_Flux3_Image,
 
 
 #-sample-------------------------------------------#
 
-"basic_Ksampler_simple": basic_Ksampler_simple,  
-"basic_Ksampler_full": basic_Ksampler_full, 
+ 
 
-    
-"sampler_DynamicTileSplit": DynamicTileSplit, 
-"sampler_DynamicTileMerge": DynamicTileMerge,
-"sampler_enhance": sampler_enhance,
 
-"Scheduler_CondNoise": Scheduler_CondNoise,
-"Scheduler_MixScheduler": Scheduler_MixScheduler,
-"scheduler_manual_sigmas": scheduler_manual_sigmas,
-"scheduler_ModelAligned": scheduler_ModelAligned,
+
+
+#"scheduler_ModelAligned": scheduler_ModelAligned,
 "scheduler_sigmas2Graph": scheduler_sigmas2Graph,
 "scheduler_interactive_sigmas": scheduler_interactive_sigmas,
+"Scheduler_MixScheduler": Scheduler_MixScheduler,
 
 #--------***----------------------------#
+"basic_Ksampler_simple": basic_Ksampler_simple,  
+"basic_Ksampler_full": basic_Ksampler_full, 
 "basic_Ksampler_mid": basic_Ksampler_mid,        
 "basic_Ksampler_custom": basic_Ksampler_custom,
 "basic_Ksampler_adv": basic_Ksampler_adv,
@@ -141,6 +141,9 @@ NODE_CLASS_MAPPINGS= {
 "chx_ksampler_tile": chx_ksampler_tile,   
 "chx_Ksampler_dual_paint": chx_Ksampler_dual_paint, 
 "chx_Ksampler_inpaint": chx_Ksampler_inpaint,  
+"sampler_DynamicTileSplit": DynamicTileSplit, 
+"sampler_DynamicTileMerge": DynamicTileMerge,
+"sampler_enhance": sampler_enhance,
 
 
 #---------control tool------------------------------------------#
@@ -148,21 +151,21 @@ NODE_CLASS_MAPPINGS= {
 
 "model_patch_controlnet": model_patch_controlnet,
 #"pre_qwen_controlnet": pre_qwen_controlnet,    
-
+#"pre_mul_ref_latent": pre_mul_ref_latent,  
 
 "pre_controlnet": pre_controlnet,      
 "pre_controlnet_union": pre_controlnet_union, 
 "pre_inpaint_sum": pre_inpaint_sum,
 
 
-"pre_mul_Mulcondi": pre_mul_Mulcondi,   
-"pre_mul_ref_latent": pre_mul_ref_latent,  
-"pre_advanced_condi_merge":pre_advanced_condi_merge,
 
+"condi_mul_Mulcondi": condi_mul_Mulcondi,   
+"condi_advanced_merge":condi_advanced_merge,
+"condi_add_Noise": condi_add_Noise,
 #---------****------------------
 
 
-"pre_latent_light": pre_latent_light,
+
 "pre_guide": pre_guide,
 "pre_sample_data": pre_sample_data,
 
@@ -187,17 +190,19 @@ NODE_CLASS_MAPPINGS= {
 "Stack_latent": Stack_latent,
 "Stack_pre_Mark2": Stack_pre_Mark2,
 
-
+"sum_stack_image": sum_stack_image,   
 "Stack_sample_data": Stack_sample_data,
 "Stack_LoRA": Stack_LoRA,
 "Stack_IPA": Stack_IPA,
 "Stack_text": Stack_text,
 
-"Stack_Redux":Stack_Redux,
+
+
 "Stack_condi": Stack_condi,  
 "Stack_ControlNet":Stack_ControlNet,
 "Stack_CN_union":Stack_CN_union,   
-"Stack_inpaint": Stack_inpaint,
+#"Stack_inpaint": Stack_inpaint,
+#"Stack_Redux":Stack_Redux,
 "Stack_CN_union3": Stack_CN_union3,
 
 
@@ -211,23 +216,12 @@ NODE_CLASS_MAPPINGS= {
 "Stack_Ksampler_refine": Stack_Ksampler_refine,
 "Stack_ksampler_tile":Stack_ksampler_tile,
 
+
+
+
 #-------------wan---------------------------------------
 
-"Stack_WanFunControlToVideo": Stack_WanFunControlToVideo,
-"Stack_Wan22FunControlToVideo": Stack_Wan22FunControlToVideo,
-"Stack_WanFunInpaintToVideo": Stack_WanFunInpaintToVideo,
 
-"Stack_WanImageToVideo": Stack_WanImageToVideo,
-"Stack_WanFirstLastFrameToVideo": Stack_WanFirstLastFrameToVideo,
-"Stack_WanVaceToVideo": Stack_WanVaceToVideo,
-"Stack_WanAnimateToVideo": Stack_WanAnimateToVideo,
-
-"Stack_WanCameraImageToVideo": Stack_WanCameraImageToVideo,
-"Stack_WanTrackToVideo": Stack_WanTrackToVideo,
-"Stack_WanSoundImageToVideo": Stack_WanSoundImageToVideo,
-"Stack_WanSoundImageToVideoExtend": Stack_WanSoundImageToVideoExtend,
-"Stack_WanHuMoImageToVideo": Stack_WanHuMoImageToVideo,
-"Stack_WanPhantomSubjectToVideo": Stack_WanPhantomSubjectToVideo,
 
 "Stack_GradientAndStroke": Stack_GradientAndStroke,
 "Stack_ShadowAndGlow": Stack_ShadowAndGlow,
@@ -236,14 +230,12 @@ NODE_CLASS_MAPPINGS= {
 
 
 #--------AD------------------------------------------
-"AD_sch_IPA": AD_sch_IPA,
-"AD_sch_prompt_stack": AD_sch_prompt_stack,
-"AD_sch_value": AD_sch_value,
-"AD_sch_prompt_basic": AD_sch_prompt_basic,
+
+
 "AD_sch_mask_weigh":AD_sch_mask_weigh,
-"AD_VideoSeg_auto_auto": AD_VideoSeg_auto,
+"AD_sch_IPA": AD_sch_IPA,
+"AD_VideoSeg_auto": AD_VideoSeg_auto,
 "AD_media_trim_visual": AD_media_trim_visual,
-"AD_sch_image_merge":AD_sch_image_merge,  #    CATEGORY = "Apt_Preset/AD/😺backup"
 "AD_pingpong_vedio":AD_pingpong_vedio,
 "AD_MaskExpandBatch": AD_MaskExpandBatch, 
 "AD_ImageExpandBatch": AD_ImageExpandBatch,
@@ -270,7 +262,6 @@ NODE_CLASS_MAPPINGS= {
 "AD_MinMax_Ref2_generate_refine": AD_MinMax_Ref2_generate_refine,
 "AD_MinMax_Ref2_generate": AD_MinMax_Ref2_generate,
 "AD_MinMax_FL2_generate": AD_MinMax_FL2_generate,
-
 
 
 
@@ -325,7 +316,6 @@ NODE_CLASS_MAPPINGS= {
 
 #-------------输入输出 IO_Port-------------------
 "basicIn_clip": basicIn_clip,
-"basicIn_Vedio": basicIn_Vedio,
 "basicIn_input": basicIn_input,
 "basicIn_Remap_slide": basicIn_Remap_slide,
 "basicIn_int": basicIn_int,
@@ -336,11 +326,18 @@ NODE_CLASS_MAPPINGS= {
 "basicIn_Seed": basicIn_Seed,
 "basicIn_Boolean": basicIn_Boolean,
 "basicIn_img_INOUT": basicIn_img_INOUT,
+"basicIn_mask_INOUT": basicIn_mask_INOUT,
 
-#"basicIn_media_unpack": basicIn_media_unpack,
 "basicIn_OptionalPass": basicIn_OptionalPass,
+"basicIn_media_unpack": basicIn_media_unpack,
 "basicIn_media": basicIn_media,
 "basicIn_Media_Params": basicIn_Media_Params,
+
+"sch_Value":sch_Value,
+"sch_text" :sch_text,
+"sch_split_text":sch_split_text,   
+
+
 
 
 "IO_LoadImgBatch": IO_LoadImgBatch,
@@ -355,7 +352,7 @@ NODE_CLASS_MAPPINGS= {
 "IO_PathProcessor": IO_PathProcessor,
 "IO_load_anyimage": IO_load_anyimage,
 "IO_store_image": IO_store_image,
-"IO_EasyMark": IO_EasyMark,
+
 "IO_image_select": IO_image_select,
 "IO_save_image": IO_save_image, 
 "IO_input_any": IO_input_any,
@@ -365,12 +362,7 @@ NODE_CLASS_MAPPINGS= {
 
 #-------------data-------------------
 
-"sch_Prompt":sch_Prompt,
-"sch_Value":sch_Value,
-"sch_text" :sch_text,
-"sch_split_text":sch_split_text,   
-"sch_mask":sch_mask,
-"sch_image":sch_image,
+
 
 
 
@@ -379,6 +371,9 @@ NODE_CLASS_MAPPINGS= {
 "type_AnyListUnpack": type_AnyListUnpack, 
 "type_AnyBatchUnpack": type_AnyBatchUnpack,
 "type_SubConvert": type_SubConvert,
+"type_ImageAlphaSplit":type_ImageAlphaSplit,
+"type_Image_List2Batch":type_Image_List2Batch,
+
 
 "math_calculate": math_calculate, 
 "math_text_compare": math_text_compare,
@@ -389,22 +384,20 @@ NODE_CLASS_MAPPINGS= {
 "create_list": create_list,#wed
 "create_array": create_array,  #wed
 
-"type_ImageAlphaSplit":type_ImageAlphaSplit,
-"type_Image_List2Batch":type_Image_List2Batch,
-"type_Image_List2Batch_adv":type_Image_List2Batch_adv,
+
 "type_Image_Batch2List":type_Image_Batch2List,
 "type_Mask_List2Batch":type_Mask_List2Batch,
 "type_Mask_Batch2List":type_Mask_Batch2List,
 "type_ListToArray": type_ListToArray, 
 "type_ArrayToList": type_ArrayToList,
 
-"list_Value":list_Value,
 "list_fliter": list_fliter,
-"list_ListSlice": list_Slice, 
-"list_MergeList": list_Merge, #wed   
-"list_num_range": list_num_range,
+"list_Slice": list_Slice,
+"list_value_range": list_value_range,
+
+
 "array_Slice": array_Slice, 
-"array_Merge": array_Merge, #wed
+
 
 
 
@@ -414,11 +407,10 @@ NODE_CLASS_MAPPINGS= {
 #---------------model--------
 
 "model_tool_assy":model_tool_assy,
-"latent_chx_noise": latent_chx_noise,
-"latent_Image2Noise": latent_Image2Noise,
-"chx_latent_adjust": chx_latent_adjust,
+"latent_image2noise": latent_image2noise,
+"latent_chx_adjust": latent_chx_adjust,
 "latent_minimaxH3_scale": latent_minimaxH3_scale,
-
+"latent_mix2latent": latent_mix2latent,
 
 
 #----------------image------------------------
@@ -453,8 +445,8 @@ NODE_CLASS_MAPPINGS= {
 #--------------resize-----------------------------------------------
 "Image_CnMap_Resize": Image_CnMap_Resize,
 "Image_safe_size":Image_safe_size,
-"Image_target_adjust":Image_target_adjust,
-"Image_Resize_longsize": Image_Resize_longsize,
+
+
 "Image_precision_Converter":Image_precision_Converter,  
 
 "Image_UpscaleModel": Image_UpscaleModel,    
@@ -539,10 +531,10 @@ NODE_CLASS_MAPPINGS= {
 
 
 
-"lay_images_free_layout":lay_images_free_layout,
+
 "lay_image_grid_note": lay_image_grid_note,
 "lay_mul_image":lay_mul_image,
-"lay_ImageGrid": lay_ImageGrid,
+
 
 "texture_Offset": texture_Offset,
 "texture_create": texture_create,
@@ -621,6 +613,7 @@ NODE_CLASS_MAPPINGS= {
 "AI_web_tool": AI_web_tool,
 "AI_DoubaoWebPreview": AI_DoubaoWebPreview,
 "AI_PresetSave":AI_PresetSave,
+
 "AI_Qwen":AI_Qwen,
 "AI_Qwen_text":AI_Qwen_text,
 "AI_Qwen_skill":AI_Qwen_skill,
@@ -701,13 +694,14 @@ NODE_CLASS_MAPPINGS= {
 
 
 #region------------------------准备废弃-------------------------
-
-
+"type_Image_List2Batch_adv":type_Image_List2Batch_adv,
 "flow_QueueTrigger":flow_QueueTrigger,
 
+
+
+"IO_EasyMark": IO_EasyMark,
  #(Deprecated) #TITLE = "load_FLUX (Deprecated)"    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
 "Image_Resize2": Image_Resize2,#(Deprecated)
-
 
 
 "Data_sampleData": Data_sampleData,#(Deprecated)
@@ -720,15 +714,25 @@ NODE_CLASS_MAPPINGS= {
 
 
 
-
-"Image_solo_crop": Image_solo_crop,  #(Deprecated)   
-"chx_YC_LG_Redux": chx_YC_LG_Redux,#(Deprecated)  
-
 "load_Nanchaku":load_Nanchaku,
 "load_GGUF": UnetLoaderGGUF2,
+
 #------------------------隐藏节点-------------------------
 
-
+#"sum_stack_Wan": sum_stack_Wan,
+#"Stack_WanFunControlToVideo": Stack_WanFunControlToVideo,
+#"Stack_Wan22FunControlToVideo": Stack_Wan22FunControlToVideo,
+#"Stack_WanFunInpaintToVideo": Stack_WanFunInpaintToVideo,
+#"Stack_WanImageToVideo": Stack_WanImageToVideo,
+#"Stack_WanFirstLastFrameToVideo": Stack_WanFirstLastFrameToVideo,
+#"Stack_WanVaceToVideo": Stack_WanVaceToVideo,
+#"Stack_WanAnimateToVideo": Stack_WanAnimateToVideo,
+#"Stack_WanCameraImageToVideo": Stack_WanCameraImageToVideo,
+#"Stack_WanTrackToVideo": Stack_WanTrackToVideo,
+#"Stack_WanSoundImageToVideo": Stack_WanSoundImageToVideo,
+#"Stack_WanSoundImageToVideoExtend": Stack_WanSoundImageToVideoExtend,
+#"Stack_WanHuMoImageToVideo": Stack_WanHuMoImageToVideo,
+#"Stack_WanPhantomSubjectToVideo": Stack_WanPhantomSubjectToVideo,
 
 #"model_Regional": model_Regional,
 #"Apply_IPA": Apply_IPA,

@@ -64,7 +64,7 @@ def _prepare_source(model):
     from . import prompt_relay_advanced as relay
     from . import enhance_a_video_advanced as eav
     if type(model.model) is not comfy.model_base.MiniMaxH3:
-        raise ValueError('TST requires current native H3, not VDN or another architecture')
+        warn_patch_stack('TST received another MODEL class; preserving the selected model and checking its APIs')
     from .progressive_sampling_runtime import _empty_option
     if any(not _empty_option(value) for key, value in model.model_options.items() if key != 'transformer_options'):
         warn_patch_stack('TST retains existing sampler/model function overrides')

@@ -1617,7 +1617,7 @@ def _ensure_native_h3_model(model) -> None:
 
     diffusion_model = getattr(getattr(model, "model", None), "diffusion_model", None)
     if not isinstance(diffusion_model, MiniMaxH3Model):
-        raise ValueError("SPEED Advanced requires a native ComfyUI MiniMax H3 MODEL")
+        warn_patch_stack("SPEED received another MODEL class; retaining the user's model selection")
     # SPEED changes resolution/sigma, not the attention algorithm. Inspect a
     # normalized copy to allow authenticated Core sparse hooks; leave the
     # original hooks and lifecycle callbacks active for the native model.

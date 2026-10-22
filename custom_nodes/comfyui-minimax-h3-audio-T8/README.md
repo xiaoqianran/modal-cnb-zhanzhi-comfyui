@@ -21,6 +21,8 @@ Windows 更新提示 `Filename too long`？见[短路径与恢复说明](docs/WI
 
 先替换自己的模型和素材，不要直接运行示例里的占位文件。
 
+直接写整段提示词：[普通提示词工作流总索引](examples/workflows/PLAIN_PROMPTS.md)，含双采、分块与恢复副本。
+
 |你想做什么|入口|
 |---|---|
 |同条件先音后画／Wuli普通Hybrid（EXP）|[H13两份已审工作流](examples/workflows/88-h13-reviewed/README.md) · [接线与边界](docs/H13_AUDIO_FIRST_HYBRID.md)|

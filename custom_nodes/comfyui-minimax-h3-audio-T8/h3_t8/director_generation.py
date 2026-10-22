@@ -373,9 +373,10 @@ def build_director_generation_prompt(
     # FastH3 V2 is already a trained 8-step diffusion checkpoint; applying the
     # ordinary H3 Turbo LoRA on top changes its learned-gate contract.
     lora_names = []
+    legacy_turbo_route = task in {"t2va", "i2va"} and sound == "native" and not relay_enabled and not fast_enabled
     if sampling["mode"] in {"two_pass", "hyperflow"}:
         pass  # Stage-specific LoRA stacks are built from the unpatched base below.
-    elif task in {"t2va", "i2va"} and sound == "native" and not relay_enabled and not fast_enabled:
+    elif legacy_turbo_route:
         requested_rows = [row for row in generation["loras"] if row["enabled"]]
         if generation["lora_mode"] == "auto" and not requested_rows:
             selected = _optional_turbo_lora()
@@ -387,7 +388,12 @@ def build_director_generation_prompt(
                 for row in requested_rows
             ]
     elif generation["lora_mode"] == "manual" and any(row["enabled"] for row in generation["loras"]):
-        raise ValueError("当前首尾/参考/Relay/FastH3 路线不支持手动 LoRA；请切回文字原生路线")
+        lora_names = [
+            (_pick_requested("loras", row["name"], (row["name"],), "LoRA"), row["strength"])
+            for row in generation["loras"] if row["enabled"]
+        ]
+        report["warnings"].append({"shot_id": shot_id,
+            "message": "保留手动 LoRA 及顺序；本路线组合未经效果验证，风险由用户承担，不据此自动缩短采样步数。"})
     for lora, strength in lora_names:
         graph[str(next_id)] = {
             "class_type": "MiniMaxH3LoRACompatibilityLoaderT8Advanced",
@@ -526,7 +532,7 @@ def build_director_generation_prompt(
     sampler_inputs = {
         "model": [fast_setup_id, 0] if fast_setup_id else [condition_model_id, 0],
         "av_latent": [latent_id, 2 if relay_enabled else 1],
-        "steps": 8 if fast_setup_id else (4 if lora_names else 8),
+        "steps": 4 if lora_names and legacy_turbo_route else 8,
         "shift_video": 12.0,
         "shift_audio": 3.0,
         "sampler_name": "dual_clock_euler",

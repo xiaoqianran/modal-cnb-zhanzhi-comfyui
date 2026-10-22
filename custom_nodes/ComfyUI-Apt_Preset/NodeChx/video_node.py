@@ -93,7 +93,7 @@ def clip_vision_output_encode(clip_vision_name, image):
     return (output,)
 
 
-#region----------------源码 ---------------------
+#region----------------源码 ---------------移除------
 
 
 
@@ -391,7 +391,6 @@ class sum_stack_Wan:
             )
         context = new_context(context, clip=clip, positive=positive, latent=latent, negative=negative, model=model)
         return (context, model, positive, negative, latent, trim_latent, trim_image, video_frame_offset)
-
 
 
 
@@ -754,7 +753,7 @@ class Stack_WanPhantomSubjectToVideo:
 
 
 
-
+#endregion--------------------------------------
 
 
 

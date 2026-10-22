@@ -267,24 +267,19 @@ def test_h3_world_frontend_workflow_is_fixed_contract_and_mirrored():
     ]
     assert USER_WORKFLOW.read_text(encoding="utf-8") == SOURCE_WORKFLOW.read_text(encoding="utf-8")
     source_index = (ROOT / "examples" / "workflows" / "README.md").read_text(encoding="utf-8")
-    user_index = (
+    installed_root = (
         Path(folder_paths.__file__).resolve().parent
         / "user"
         / "default"
         / "workflows"
         / "MiniMax H3 T8"
-        / "README.md"
-    ).read_text(encoding="utf-8")
-    # The four EXP workflow categories are intentionally not installed in the
-    # user's live workflow directory. Preserve the complete published index
-    # comparison after removing only these explicit, independently tested rows.
-    local_only = [line for line in source_index.splitlines(keepends=True)
-                  if line.startswith(("| `28-progressive-sampling` |", "| `29-dlss-fi` |", "| `30-trt-vae` |", "| `31-topaz` |"))]
-    assert len(local_only) == 4
-    published_index = source_index
-    for line in local_only:
-        published_index = published_index.replace(line, "", 1)
-    assert published_index == user_index
+    )
+    # A partial user installation is not a mirror of the research catalogue.
+    # Check its generated, installed-only index without replacing user README.
+    from tools.workflow_installed_index import INDEX_NAME, render_installed_index
+    user_index = (installed_root / INDEX_NAME).read_text(encoding="utf-8")
+    assert user_index == render_installed_index(source_index, installed_root)
+    assert "[26-h3-world](26-h3-world/README.md)" in user_index
     assert (
         ROOT
         / "examples"

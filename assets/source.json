@@ -147,6 +147,8 @@
     "MelBandRoFormer/MelBandRoformer_fp16.safetensors": "https://cnb.cool/ai-models/Kijai/MelBandRoFormer_comfy/-/lfs/6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
   },
   "loras": {
+    "Qwen2.1_万物移除Remove_GH.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/232291942500dd1f2277918797af2185f6d90f46e9fc5cb43041e7fa8f763c6f",
+    "Qwen2.1 一致性无偏移_GH_V1.0.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/cb7835fe76a0c5daee5c1bffbb178af7281f7afeacab8e58a73f461aacc5a78c",
     "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/ddfdd94f4c9a0f32bf3649bb8e98ca20db572e4db6bcd9cca546a5b33ea32d11",
     "minimax_h3_dmad_full_dareties_v4_step600_comfy_fro.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/4d4ea608992d72303e4971f78728f587f43ecb72490f365a042ed82e37a907ce",
     "MysticXXX_MMH3-V1.safetensors": "https://cnb.cool/zhan_zhi/Models/-/lfs/7dd837f4c5420d4ec59f3ff1757b3f9d264a6c0f120d65d9c4f59c77584dd0be",

@@ -15,7 +15,7 @@ from . import chunked_v5_storage as base_storage
 from . import temporal_chunked_v5 as scoped_runtime
 from . import temporal_chunked_relay as scoped_relay
 from . import temporal_chunked_driver as scoped_driver
-from .storage import MAX_JSON, _digest, _json_file, _lease, _path, _root, file_sha, fingerprint_stage
+from .storage import _digest, _json_file, _lease, _path, _root, file_sha, fingerprint_stage
 from .. import temporal_dialogue_bank as banks
 from .. import temporal_dialogue_encoding as encoding
 from .. import temporal_dialogue_identity as identity
@@ -77,8 +77,6 @@ def save_scoped_window(result, source, lifted, prepared, plan, bank, storage_roo
                     "implementation": _implementation(), "automatic_cache_reuse": False,
                     "provider_equivalence_certified": False, "quality_accepted": False}
         payload = canonical(manifest).encode("utf-8")
-        if len(payload) > MAX_JSON:
-            raise ValueError("Scoped window manifest exceeds metadata limit")
         pending, path = directory / "scope.json.partial", directory / "scope.json"
         with pending.open("xb") as stream:
             stream.write(payload)
@@ -97,7 +95,7 @@ def load_scoped_window(source, lifted, prepared, plan, bank, storage_root,
     if path.name != "scope.json" or not path.parent.is_dir():
         raise ValueError("Select a completed scoped scope.json, not an old unscoped window")
     with _lease(path.parent):
-        if not path.is_file() or not 0 < path.stat().st_size <= MAX_JSON or file_sha(path) != expected_sha:
+        if not path.is_file() or not 0 < path.stat().st_size or file_sha(path) != expected_sha:
             raise ValueError("Scoped manifest SHA mismatch or missing completion")
         manifest = _json_file(path)
         required = {"schema", "base_artifact_path", "base_artifact_sha256", "binding",

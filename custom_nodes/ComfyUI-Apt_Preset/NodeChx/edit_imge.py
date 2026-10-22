@@ -7,6 +7,7 @@ import math
 import comfy
 import node_helpers
 import comfy.utils
+from comfy_api.latest import io
 from nodes import common_ksampler, CLIPTextEncode
 import torch.nn.functional as F
 from comfy_extras.nodes_flux import EmptyFlux2LatentImage
@@ -16,7 +17,7 @@ from comfy_extras.nodes_flux import EmptyFlux2LatentImage
 
 
 from ..office_unit import *
-from .main_stack import Apply_LoRAStack,Apply_CN_union,Apply_latent,Apply_Redux
+from .main_stack import Apply_LoRAStack,Apply_CN_union,Apply_latent
 from ..main_unit import *
 
 
@@ -52,7 +53,7 @@ except ImportError:
 
 
 
-class pre_advanced_condi_merge:
+class condi_advanced_merge:
     @classmethod
     def INPUT_TYPES(s):
         inputs = {
@@ -1150,6 +1151,77 @@ class sum_stack_flux2_Klein:
             negative_out = node_helpers.conditioning_set_values(negative_out, {"concat_mask": mask})
 
         return (positive_out, negative_out, out_latent,)
+
+
+class sum_Flux3_Image(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="sum_Flux3_Image",
+            display_name="sum_Flux3_Image",
+            category="Apt_Preset/chx_tool",
+            inputs=[
+                io.Custom("RUN_CONTEXT").Input("context"),
+                io.Model.Input("model", optional=True),
+                io.String.Input("prompt", default="", multiline=True, dynamic_prompts=True),
+                io.String.Input("negative_prompt", default="blur", multiline=False, dynamic_prompts=True),
+                io.DynamicCombo.Input("resolution", tooltip="keep resolution：保持原尺寸；resize：统一分辨率。", options=[
+                    io.DynamicCombo.Option("keep resolution", []),
+                    io.DynamicCombo.Option("resize", [
+                        io.Float.Input("megapixels", default=1.0, min=0.01, max=16.0, step=0.01),
+                    ]),
+                ]),
+                io.Autogrow.Input("images", template=io.Autogrow.TemplatePrefix(
+                    io.Image.Input("image", optional=True), prefix="image", min=1, max=100,
+                ), optional=True),
+            ],
+            outputs=[
+                io.Custom("RUN_CONTEXT").Output(display_name="context"),
+                io.Conditioning.Output(display_name="positive"),
+                io.Conditioning.Output(display_name="negative"),
+                io.Latent.Output(display_name="latent"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, context, prompt, negative_prompt, resolution: io.DynamicCombo.Type,
+                model=None, images: io.Autogrow.Type = None) -> io.NodeOutput:
+        clip = context.get("clip")
+        vae = context.get("vae")
+        if model is None:
+            model = context.get("model")
+        prompt = prompt or context.get("pos") or ""
+        negative_prompt = negative_prompt or "blur"
+
+        ref_latents = []
+        for name in sorted(images or {}, key=lambda name: int(name.removeprefix("image"))):
+            image = images[name]
+            if image is None:
+                continue
+            if resolution["resolution"] == "resize":
+                height, width = image.shape[1:3]
+                scale = math.sqrt(resolution["megapixels"] * 1024 * 1024 / (width * height))
+                width = max(1, round(width * scale))
+                height = max(1, round(height * scale))
+                image = comfy.utils.common_upscale(image.movedim(-1, 1), width, height, "lanczos", "disabled").movedim(1, -1)
+            if vae is not None:
+                ref_latents.append(vae.encode(image))
+
+        positive = CLIPTextEncode().encode(clip, prompt)[0]
+        negative = CLIPTextEncode().encode(clip, negative_prompt)[0]
+        if ref_latents:
+            positive = node_helpers.conditioning_set_values(positive, {"reference_latents": ref_latents}, append=True)
+            negative = node_helpers.conditioning_set_values(negative, {"reference_latents": ref_latents}, append=True)
+            latent = {"samples": ref_latents[0] * 0.0}
+        else:
+            size = 1024
+            if resolution["resolution"] == "resize":
+                size = round(math.sqrt(resolution["megapixels"] * 1024 * 1024))
+            latent = EmptyFlux2LatentImage.execute(size, size, 1)[0]
+
+        context = new_context(context, model=model, positive=positive, negative=negative, latent=latent,
+                              pos=prompt, neg=negative_prompt)
+        return io.NodeOutput(context, positive, negative, latent)
 
 
 

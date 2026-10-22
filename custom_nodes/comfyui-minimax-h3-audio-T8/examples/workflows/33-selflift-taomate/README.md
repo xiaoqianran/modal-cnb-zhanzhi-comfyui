@@ -1,5 +1,7 @@
 # SelfLift 渐进双采与 TaoMate（实验）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#33-selflift-taomate)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录包含 9 个已经完成绑定样片验收的前端工作流。它们保留 MiniMax H3 原生音视频联合生成，并覆盖 SelfLift 的 LOW 4 步 → 学习型 3D latent 放大 → HIGH 4 步、独立 LOW/HIGH 模型链、TST、EAV、Prompt Relay、KJ/Sol 后端，以及 TaoMate 原生 3/4 步 T2VA 对照。
 
 ## 先选哪一个

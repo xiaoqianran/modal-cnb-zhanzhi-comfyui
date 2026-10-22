@@ -189,7 +189,7 @@ def build_kijai_pdd_8step_setup(model, av_latent, path, *, base_variant="FL2VA",
         raise ValueError("Select FL2VA or Ref2VA")
     diffusion = model.get_model_object("diffusion_model")
     if diffusion.__class__.__name__ != "MiniMaxH3Model":
-        raise TypeError("Kijai PDD requires native MiniMaxH3Model")
+        warn_patch_stack("Kijai PDD received another MODEL class; probing its actual weight lifecycle")
     capability = pdd.probe_native_pdd_core(diffusion)
     if not capability["available"]:
         raise RuntimeError("Kijai relative PDD needs native shape-changing weight/bias lifecycle and FinalLayer schedule support: "

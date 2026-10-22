@@ -1,0 +1,193 @@
+{
+  "id": "a9f66682-c984-5695-a0af-e936372ae498",
+  "revision": 0,
+  "last_node_id": 9,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 4,
+      "type": "MiniMaxH3PlainPromptRecipeEXPT8",
+      "title": "完整提示词 · 普通文本",
+      "pos": [
+        1320,
+        -390
+      ],
+      "size": [
+        480,
+        502
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "prompt_recipe",
+          "type": "H3_T8_PROMPT_RELAY_PLAN",
+          "links": null
+        },
+        {
+          "name": "compiled_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "timeline_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3PlainPromptRecipeEXPT8"
+      },
+      "widgets_values": [
+        "Nighttime cinematic continuous shot of one woman in red Hanfu, coherent identity, natural fabric motion, stable moonlight, synchronized wind and cloth ambience.\n\nThe woman looks toward the camera and slowly raises one hand.\n\nShe spins rapidly through the night sky, red gauze sleeves drawing wide arcs.\n\nThe camera pulls far back while she becomes small against the moonlit clouds.",
+        124
+      ]
+    },
+    {
+      "id": 6,
+      "type": "MarkdownNote",
+      "title": "① 这是无模型预检工作流",
+      "pos": [
+        0,
+        120
+      ],
+      "size": [
+        650,
+        300
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "MarkdownNote"
+      },
+      "widgets_values": [
+        "## 不加载模型，也不采样\n\n点击运行后只执行Event→Plan→Resource Estimate→Preview。估算节点计算H3 packed行数和Relay显式bias，Preview检查哈希、24fps、`17n+5`、空档、重叠和每段至少5帧。全部Event关闭时显示BYPASS且bias为0。估算不含模型权重、完整attention、CLIP/VAE、VBAR或碎片，不能当成16GB安全证明。"
+      ],
+      "color": "#214d35",
+      "bgcolor": "#12281d"
+    },
+    {
+      "id": 7,
+      "type": "MarkdownNote",
+      "title": "② 修改与串联规则",
+      "pos": [
+        700,
+        120
+      ],
+      "size": [
+        650,
+        300
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "MarkdownNote"
+      },
+      "widgets_values": [
+        "## 一个节点写一个局部动作\n\n复制Event，把上一项输出连到下一项`previous_events`，最后一项接Plan。`frames`的end包含端点；`seconds/percent`的end是边界；`auto_equal`会忽略start/end。全局人物、场景和声音只写在Plan的global_prompt。"
+      ],
+      "color": "#214d35",
+      "bgcolor": "#12281d"
+    },
+    {
+      "id": 8,
+      "type": "MarkdownNote",
+      "title": "③ READY之后再接模型",
+      "pos": [
+        1400,
+        120
+      ],
+      "size": [
+        650,
+        300
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "MarkdownNote"
+      },
+      "widgets_values": [
+        "## 预检通过不等于画质通过\n\nResource Estimate的Plan输出继续进入Preview，再可接Query Route或Conditioning。资源数字只覆盖显式Relay bias；READY只证明时间线合同正确。二者都不证明Prompt Relay一定提质、音频不变或任意16GB组合安全。真正生成仍先用report_only，再显式切apply_exp。"
+      ],
+      "color": "#214d35",
+      "bgcolor": "#12281d"
+    },
+    {
+      "id": 9,
+      "type": "MarkdownNote",
+      "title": "普通提示词 · 从这里开始",
+      "pos": [
+        -900,
+        -890
+      ],
+      "size": [
+        800,
+        400
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "普通提示词副本\n\n来源：examples/workflows/14-prompt-relay/2026-08-20_H3_Prompt_Relay_Plan_Preview_Advanced_EXP.json\n\n在“完整提示词”框一次填写整段画面、动作与对白。两采／各阶段的文字框可分别编辑；原图的全局与局部文字已合并，不再按事件时间段路由。\n原采样次数、LoRA、底模、放大、音频和阶段接线保留。\n恢复版请先使用对应普通版 Full 保存新缓存，再填入新的文件路径和 SHA。Prepared LTX 的普通文字仍由准备包的 prompt／文本缓存提供。\n旧 NOTE 中的 Relay 操作属于原版；本副本按上述普通入口编辑。"
+      ]
+    }
+  ],
+  "links": [],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Prompt Relay 无模型事件预检",
+      "bounding": [
+        -40,
+        -550,
+        3000,
+        1040
+      ],
+      "color": "#6950a1",
+      "font_size": 28,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.78,
+      "offset": [
+        120,
+        420
+      ]
+    },
+    "ue_links": [],
+    "t8_prompt_relay_preview": {
+      "schema": 1,
+      "model_loaded": false,
+      "sampling_executed": false
+    },
+    "t8_plain_source": "examples/workflows/14-prompt-relay/2026-08-20_H3_Prompt_Relay_Plan_Preview_Advanced_EXP.json"
+  },
+  "version": 0.4
+}

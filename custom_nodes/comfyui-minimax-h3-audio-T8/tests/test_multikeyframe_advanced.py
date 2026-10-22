@@ -480,6 +480,76 @@ def test_current_core_target_mask_rows_are_preserved_by_advanced_forward():
     assert torch.equal(audio_rows, expected_audio_rows)
 
 
+@pytest.mark.parametrize("masked", [False, True])
+@pytest.mark.parametrize("curve", [False, True])
+def test_installed_forward_runs_real_core_with_keyframes_and_independent_strengths(monkeypatch, masked, curve):
+    import comfy.ops
+    from comfy.ldm.modules import attention
+    monkeypatch.setattr(minimax_model, "optimized_attention", attention.attention_pytorch)
+    torch.manual_seed(443)
+    diffusion = minimax_model.MiniMaxH3Model(
+        hidden_size=8, num_layers=1, token_refiner_num_layers=0,
+        num_attention_heads=2, attention_head_dim=8, ffn_hidden_size=16,
+        text_dim=8, timestep_input_dim=4, time_embed_hidden_size=8, time_embed_dim=4,
+        rope_inv_freq_len=1, adaln_curve_grid=8 if curve else None,
+        dtype=torch.float32, device="cpu", operations=comfy.ops.disable_weight_init)
+    for parameter in diffusion.parameters():
+        torch.nn.init.normal_(parameter, std=0.05)
+    diffusion.requires_grad_(False)
+    diffusion.rope.inv_freq.fill_(1.)
+    if curve:
+        diffusion.adaln_t_table.normal_(std=0.1)
+    patcher = make_model_patcher()
+    patcher.model.diffusion_model = diffusion
+    patched = patch_multikeyframe_model(patcher, require_per_condition_forward=True)
+    installed = patched.get_model_object("diffusion_model._forward")
+    assert installed.__func__ is not diffusion._forward.__func__
+    latents = [torch.randn(1, 24, 1, 4, 4) for _ in range(2)]
+    keyframes = [{"resolved_frame_index": index * 4, "latent": latent}
+                 for index, latent in enumerate(latents)]
+    layout = minimax_model.PackedLayout(2, 2, 4, 4, 3, keyframes=keyframes)
+    payload = {"layout": layout, "cond_video_latents": latents, "keyframes": keyframes,
+               "visual_cond_noise_aug": 0.999, PAYLOAD_VISUAL_NOISE_AUGS_KEY: [0.999, 0.999],
+               MULTIKEYFRAME_SCHEMA_KEY: MULTIKEYFRAME_SCHEMA, "seed": 99}
+    x = [torch.randn(1, 24, 2, 4, 4), torch.randn(1, 32, 2, 3)]
+    context, timestep = torch.randn(1, 2, 8), torch.tensor([500.])
+    masks = {}
+    if masked:
+        masks["denoise_mask"] = torch.ones(1, 1, 2, 4, 4)
+        masks["denoise_mask"][:, :, 0] = 0.
+        masks["audio_denoise_mask"] = torch.tensor([[[[0., .5, 1.], [0., .5, 1.]]]])
+    options = {"sample_sigmas": torch.tensor([1., .5, 0.])}
+    with torch.no_grad():
+        expected = diffusion._forward(x, timestep, context, transformer_options=options.copy(),
+                                      minimax_payload=payload, **masks)
+        actual = installed(x, timestep, context, transformer_options=options.copy(),
+                           minimax_payload=payload, **masks)
+        for left, right in zip(expected, actual):
+            torch.testing.assert_close(left, right, rtol=1e-5, atol=1e-6)
+        changed = dict(payload, **{PAYLOAD_VISUAL_NOISE_AUGS_KEY: [0.7, 0.999]})
+        revised = installed(x, timestep, context, transformer_options=options.copy(),
+                            minimax_payload=changed, **masks)
+        assert not torch.equal(actual[0], revised[0])
+        for left, right in zip(actual, revised):
+            assert left.shape == right.shape and torch.isfinite(right).all()
+    assert payload[PAYLOAD_VISUAL_NOISE_AUGS_KEY] == [0.999, 0.999]
+    assert patcher.object_patches == {}  # original model was not modified
+    assert not torch.cuda.is_initialized()
+
+
+def test_conditioning_report_does_not_claim_retained_foreign_forward_is_active():
+    model = make_model_patcher()
+    selected = types.MethodType(lambda self, *args, **kwargs: "foreign", model.model.diffusion_model)
+    model.add_object_patch("diffusion_model._forward", selected)
+    result = build_multikeyframe_conditioning(
+        model=model, first_frame_noise_aug=.9, last_frame_noise_aug=.99, **_conditioning_args())
+    report = json.loads(result[-1])
+    assert report["per_condition_forward_requested"] is True
+    assert report["per_condition_forward_patch"] is False
+    assert any("requested but is not installed" in warning for warning in report["warnings"])
+    assert result[0].get_model_object("diffusion_model._forward") is selected
+
+
 def test_fully_generated_target_masks_keep_the_unmasked_schedule():
     video_time, audio_time, video_rows, audio_rows = _target_mask_timestep_rows(
         torch.ones((1, 1, 1, 4, 4)),

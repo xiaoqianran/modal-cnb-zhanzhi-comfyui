@@ -18,7 +18,7 @@ import torch
 from ..native_latent_checkpoint_advanced import _encode_metadata_value, _decode_metadata_value
 from .ltx_rgb_stage import PREP_PIPELINE, _tensor, _report
 from .results import _input_identity, canonical
-from .storage import _root, _path, _lease, _digest, _json_file, file_sha, MAX_JSON, MAX_FILE
+from .storage import _root, _path, _lease, _digest, _json_file, file_sha
 
 SCHEMA = "t8.modular-sampling.ltx-rgb-source.v1"
 FIELDS = {"source_frames", "source_audio", "prepared_frames", "prep_report_json", "ltx_latent", "bit_depth"}
@@ -74,8 +74,6 @@ def validate_source(values):
 
 
 def _check_tensors(tensors):
-    if sum(t.numel() * t.element_size() for t in tensors.values()) > MAX_FILE - MAX_JSON:
-        raise ValueError("RGB handoff exceeds the 20 GiB limit")
     for tensor in tensors.values():
         if tensor.is_floating_point() and not bool(torch.isfinite(tensor).all()):
             raise ValueError("RGB handoff contains non-finite tensor metadata")
@@ -100,8 +98,6 @@ def save_source(values, storage_root, prefix="rgb_source", *, interrupt=lambda: 
     if used != set(tensors) or validate_source(snapshot) != identity or validate_source(values) != identity:
         raise ValueError("RGB source changed while snapshotting")
     payload = canonical({"schema": SCHEMA, "state": encoded, "identity": identity})
-    if len(payload.encode("utf8")) > MAX_JSON:
-        raise ValueError("RGB source metadata exceeds the 4 MiB limit")
     root = _root(storage_root, create=True)
     selected = _path(root, prefix)
     directory = selected.with_name(selected.name + "-" + uuid.uuid4().hex)
@@ -112,7 +108,7 @@ def save_source(values, storage_root, prefix="rgb_source", *, interrupt=lambda: 
         save_file(tensors, str(partial), metadata={METADATA_KEY: payload})
         with partial.open("rb+") as handle:
             size = struct.unpack("<Q", handle.read(8))[0]
-            if not 0 < size <= MAX_JSON:
+            if not 0 < size <= os.fstat(handle.fileno()).st_size - 8:
                 raise ValueError("RGB source tensor header exceeds its bound")
             os.fsync(handle.fileno())
         interrupt()
@@ -144,13 +140,13 @@ def load_source(storage_root, artifact_path, artifact_sha256, *, interrupt=lambd
     if path.name != "manifest.json" or not path.parent.is_dir():
         raise ValueError("Select a committed RGB source manifest.json")
     with _lease(path.parent):
-        if not path.is_file() or not 0 < path.stat().st_size <= MAX_JSON or file_sha(path) != expected:
+        if not path.is_file() or not 0 < path.stat().st_size or file_sha(path) != expected:
             raise ValueError("RGB source manifest SHA mismatch or missing completion")
         manifest = _json_file(path)
         if (set(manifest) != {"schema", "state_file", "state_bytes", "state_sha256", "payload_sha256", "data_only"}
                 or manifest["schema"] != SCHEMA or manifest["state_file"] != "state.safetensors"
                 or manifest["data_only"] is not True or type(manifest["state_bytes"]) is not int
-                or not 8 < manifest["state_bytes"] <= MAX_FILE):
+                or not 8 < manifest["state_bytes"]):
             raise ValueError("Unknown RGB source manifest contract")
         state = _path(root, (path.parent / manifest["state_file"]).relative_to(root).as_posix())
         if (not state.is_file() or state.stat().st_size != manifest["state_bytes"]
@@ -158,7 +154,7 @@ def load_source(storage_root, artifact_path, artifact_sha256, *, interrupt=lambd
             raise ValueError("RGB source tensor size or SHA differs")
         with state.open("rb") as handle:
             size = struct.unpack("<Q", handle.read(8))[0]
-        if not 0 < size <= min(MAX_JSON, state.stat().st_size - 8):
+        if not 0 < size <= state.stat().st_size - 8:
             raise ValueError("RGB source tensor header exceeds its bound")
         interrupt()
         with safe_open(str(state), framework="pt", device="cpu") as handle:

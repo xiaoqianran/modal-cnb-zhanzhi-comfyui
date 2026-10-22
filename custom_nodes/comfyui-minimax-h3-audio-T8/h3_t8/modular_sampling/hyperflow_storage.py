@@ -16,7 +16,7 @@ from ..native_latent_checkpoint_advanced import _encode_metadata_value, _decode_
 from .hyperflow import ContinuousBoundary, ContinuousResult
 from .progressive import portable
 from .results import canonical
-from .storage import MAX_FILE, MAX_JSON, _digest, _lease, _path, _root, file_sha
+from .storage import _digest, _lease, _path, _root, file_sha
 
 SCHEMA = "t8.modular-sampling.frozen-hyperflow-continuous.v1"
 KINDS = {"head": (ContinuousBoundary, "hyperflow-head.safetensors"),
@@ -33,7 +33,7 @@ def _unique(pairs):
 
 
 def _payload(text):
-    if type(text) is not str or len(text.encode("utf-8")) > MAX_JSON:
+    if type(text) is not str:
         raise ValueError("HyperFlow metadata exceeds its limit")
     value = json.loads(text, object_pairs_hook=_unique)
     if (type(value) is not dict or set(value) != {"schema", "kind", "receipt_json", "state"}
@@ -45,11 +45,11 @@ def _payload(text):
 
 
 def _check_file(path):
-    if not path.is_file() or not 8 < path.stat().st_size <= MAX_FILE:
+    if not path.is_file() or not 8 < path.stat().st_size:
         raise ValueError("Missing or oversized HyperFlow artifact")
     with path.open("rb") as handle:
         count = struct.unpack("<Q", handle.read(8))[0]
-    if not 0 < count <= MAX_JSON or count > path.stat().st_size - 8:
+    if not 0 < count or count > path.stat().st_size - 8:
         raise ValueError("Invalid HyperFlow safetensors header size")
 
 
@@ -95,8 +95,6 @@ def _save(result, storage_root, prefix, kind):
     encoded = _encode_metadata_value(state, tensors, path="hyperflow.state")
     payload = canonical({"schema": SCHEMA, "kind": kind, "receipt_json": result.receipt_json, "state": encoded})
     _decode(_payload(payload), tensors)
-    if sum(value.numel() * value.element_size() for value in tensors.values()) > MAX_FILE - MAX_JSON:
-        raise ValueError("HyperFlow tensors exceed the size limit")
     root = _root(storage_root, create=True)
     base = _path(root, prefix)
     directory = base.with_name(base.name + "-" + uuid.uuid4().hex)

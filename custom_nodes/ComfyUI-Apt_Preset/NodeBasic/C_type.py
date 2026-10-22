@@ -83,8 +83,8 @@ class type_Image_List2Batch_adv:
     
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("image_batch", "new_image_list")
-    FUNCTION = "convert"
-    CATEGORY = "Apt_Preset/data/list|Batch"
+    FUNCTION = "convert"  
+    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
 
     def parse_color(self, color_input):
         color_map = {
@@ -572,6 +572,7 @@ class create_list:
     NAME = "create_list"
     RETURN_TYPES = (ANY_TYPE, )
     RETURN_NAMES = ("list", )
+    INPUT_IS_LIST = True
     OUTPUT_IS_LIST = (True, )
     FUNCTION = "run"
     CATEGORY = "Apt_Preset/data"
@@ -580,7 +581,11 @@ class create_list:
         output_list = []
         for k, v in kwargs.items():
             if k.startswith(PACK_PREFIX):
-                output_list.append(v)
+                for item in v:
+                    if isinstance(item, list):
+                        output_list.extend(item)
+                    else:
+                        output_list.append(item)
         return (output_list, )
 
 
@@ -603,6 +608,7 @@ class create_array:
     NAME = "create_array"
     RETURN_TYPES = ("LIST",)
     RETURN_NAMES = ("array",)
+    INPUT_IS_LIST = True
     FUNCTION = "run"
     CATEGORY = "Apt_Preset/data"
 
@@ -610,7 +616,11 @@ class create_array:
         output_list = []
         for k, v in kwargs.items():
             if k.startswith(PACK_PREFIX):
-                output_list.append(v)
+                for item in v:
+                    if isinstance(item, list):
+                        output_list.extend(item)
+                    else:
+                        output_list.append(item)
         return (output_list, )
 
 

@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location('selflift_avatar_test', PLUGIN/'__
 plugin = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = plugin
 spec.loader.exec_module(plugin)
-from selflift_avatar_test import nodes, avatar_masks as masks, selflift, avatar_sampling, h3_tiling
+from selflift_avatar_test import nodes, avatar_masks as masks, selflift, avatar_sampling, h3_tiling, h3_global_tiling, h3_output_chunking
 import torch
 import comfy.latent_formats
 import comfy.model_base
@@ -421,6 +421,269 @@ class PipelineTests(unittest.TestCase):
         am = torch.zeros_like(self.a); am[...,-1] = 1
         with self.assertRaisesRegex(ValueError,'partial audio'):
             self.run_pipeline(NestedTensor([torch.ones_like(self.v),am]),tiling=True)
+    def test_global_mode_accepts_partial_masks_and_reports_plan(self):
+        # Spatial tiling rejects this; full-sequence global context must accept it.
+        am = torch.zeros_like(self.a); am[...,-1] = 1
+        reports=[]
+        fallback_model = Patcher()
+        fallback_model._selflift_global_fallback = "attention_override"
+        with patch.object(nodes, '_global_tiled_model',
+                          side_effect=lambda model, chunk, mode, cache: fallback_model) as global_model:
+            result = self.run_pipeline(
+                NestedTensor([torch.ones_like(self.v), am]), tiling=True,
+                highres_tiling_mode="global_stream", highres_token_chunk=2048,
+                highres_weight_cache_gb=2.0, on_tiling_plan=reports.append)
+        self.assertEqual(global_model.call_args.args[1:], (2048, "global_stream", 2.0))
+        self.assertEqual(reports[-1]["kind"], "global")
+        self.assertEqual(reports[-1]["mode"], "global_stream")
+        self.assertEqual(reports[-1]["token_chunk"], 2048)
+        self.assertEqual(reports[-1]["fallback"], "attention_override")
+        self.assertTrue(reports[-1]["full_sequence"])
+        self.assertEqual(self.stages, [2,2])
+        self.assertEqual(self.tile_inputs, [])
+        self.assertIn("samples", result)
+    def test_global_mode_accepts_video_preservation(self):
+        mv = torch.ones_like(self.v); mv[:,:,:1] = 0
+        with patch.object(nodes, '_global_tiled_model',
+                          side_effect=lambda model, chunk, mode, cache: model):
+            self.run_pipeline(NestedTensor([mv, torch.zeros_like(self.a)]), tiling=True,
+                              highres_tiling_mode="global")
+    def test_global_mode_validates_chunk_and_cache(self):
+        for kwargs, pattern in [
+            ({"highres_tiling_mode":"global", "highres_token_chunk":64}, "highres_token_chunk"),
+            ({"highres_tiling_mode":"global", "highres_weight_cache_gb":-1}, "highres_weight_cache_gb"),
+            ({"highres_tiling_mode":"unknown"}, "highres_tiling_mode"),
+        ]:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaisesRegex(ValueError, pattern):
+                    self.run_pipeline(None, tiling=True, **kwargs)
+
+
+class GlobalWrapperTests(unittest.TestCase):
+    def _patcher(self):
+        p = Patcher()
+        p.model.diffusion_model.blocks = torch.nn.ModuleList([torch.nn.Module()])
+        return p
+
+    def test_global_dense_wrapper_builds_without_native_sparse(self):
+        patched = h3_global_tiling.tiled_model(self._patcher(), 128, use_stream=False)
+        self.assertIsInstance(patched, Patcher)
+        self.assertTrue(patched.model_options)
+
+    def test_global_stream_requires_native_sparse(self):
+        with self.assertRaisesRegex(ValueError, 'native Model Sparse Attention'):
+            h3_global_tiling.tiled_model(self._patcher(), 128, use_stream=True)
+
+    def test_unknown_attention_override_falls_back_to_full_sequence(self):
+        patcher = self._patcher()
+        patcher.model_options.setdefault('transformer_options', {})['optimized_attention_override'] = object()
+        self.assertTrue(h3_global_tiling._has_unknown_attention_override(
+            patcher.model_options['transformer_options']))
+        with self.assertLogs(level='WARNING') as logs:
+            patched = h3_global_tiling.tiled_model(patcher, 128, use_stream=True)
+        self.assertIsInstance(patched, Patcher)
+        self.assertEqual(patched._selflift_global_fallback, 'attention_override')
+        self.assertTrue(any('Falling back to the full-sequence global path' in line for line in logs.output))
+        self.assertEqual(h3_global_tiling._sparse_specs(
+            patcher.model.diffusion_model,
+            patcher.model_options['transformer_options'],
+            force_dense_on_unknown=True), {})
+
+    def test_backend_override_is_removed_for_full_sequence_fallback(self):
+        def backend_override(_func, *args, **kwargs):
+            raise AssertionError('backend override must not run in fallback')
+        backend_override.__qualname__ = (
+            'ModelPatcher.set_model_optimized_attention.<locals>.optimized_attention_override'
+        )
+        self.assertTrue(h3_global_tiling._is_backend_attention_override(backend_override))
+        patcher = self._patcher()
+        patcher.model_options.setdefault('transformer_options', {})['optimized_attention_override'] = backend_override
+        with self.assertLogs(level='WARNING') as logs:
+            patched = h3_global_tiling.tiled_model(patcher, 128, use_stream=True)
+        self.assertEqual(patched._selflift_global_fallback, 'attention_backend')
+        self.assertTrue(any('dense attention backend override detected' in line for line in logs.output))
+
+    def test_forward_removes_backend_override_only(self):
+        def backend_override(_func, *args, **kwargs):
+            return None
+        backend_override.__qualname__ = (
+            'ModelPatcher.set_model_optimized_attention.<locals>.optimized_attention_override'
+        )
+        video = torch.randn(1, 24, 3, 8, 8)
+        audio = torch.randn(1, 32, 2, 7)
+        seen = {}
+        class Network:
+            blocks = torch.nn.ModuleList([])
+        class Executor:
+            class_obj = Network()
+            def __call__(self, streams, timestep, context, options, minimax_payload=None, **kwargs):
+                seen['options'] = options
+                return streams
+        h3_global_tiling._forward(
+            Executor(), [video, audio], torch.tensor([500.]), torch.zeros(1, 2, 4),
+            {'optimized_attention_override': backend_override},
+        )
+        self.assertNotIn('optimized_attention_override', seen['options'])
+
+    def test_chunked_block_uses_full_attention_override_path(self):
+        class FakeAttention(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.seen_tokens = None
+                self.seen_options = None
+            def forward(self, x, rope_freqs=None, transformer_options=None):
+                self.seen_tokens = x.shape[0]
+                self.seen_options = transformer_options
+                return x.clone()
+
+        class FakeBlock(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.attn = FakeAttention()
+                self.norm1 = torch.nn.Identity()
+                self.norm2 = torch.nn.Identity()
+                self.mlp = torch.nn.Sequential(torch.nn.Linear(8, 8), torch.nn.GELU(), torch.nn.Linear(8, 8))
+            def adaln_proj(self, _t_emb):
+                zero = torch.zeros(1, dtype=torch.float32)
+                one = torch.ones(1, dtype=torch.float32)
+                return zero, one, one, zero, one, one
+
+        block = FakeBlock()
+        x = torch.randn(11, 8)
+        override = object()
+        with torch.inference_mode():
+            out = h3_global_tiling.chunked_block(
+                block, x, None, [(0, 11, 0)], None,
+                {'optimized_attention_override': override}, 4)
+        self.assertEqual(block.attn.seen_tokens, 11)
+        self.assertIs(block.attn.seen_options['optimized_attention_override'], override)
+        self.assertEqual(out.shape, x.shape)
+        self.assertTrue(torch.isfinite(out).all())
+
+    def test_mode_to_wrapper_flags(self):
+        model = self._patcher()
+        cases = [('global_stream', False, True), ('global', False, False), ('global_ram', True, False)]
+        for mode, use_ram, use_stream in cases:
+            with self.subTest(mode=mode):
+                with patch.object(h3_global_tiling, 'tiled_model') as build:
+                    nodes._global_tiled_model(model, 2048, mode, 2.5)
+                build.assert_called_once_with(
+                    model, 2048, use_ram=use_ram, use_stream=use_stream, weight_cache_gb=2.5
+                )
+
+    def test_global_forward_keeps_full_streams_and_masks(self):
+        video = torch.randn(1, 24, 3, 8, 8)
+        audio = torch.randn(1, 32, 2, 7)
+        vmask = torch.ones_like(video)
+        amask = torch.zeros_like(audio)
+        seen = {}
+
+        class Network:
+            blocks = torch.nn.ModuleList([torch.nn.Module()])
+
+        class Executor:
+            class_obj = Network()
+
+            def __call__(self, streams, timestep, context, options, minimax_payload=None, **kwargs):
+                seen['video_shape'] = tuple(streams[0].shape)
+                seen['audio_shape'] = tuple(streams[1].shape)
+                seen['video_mask'] = kwargs['denoise_mask'].clone()
+                seen['audio_mask'] = kwargs['audio_denoise_mask'].clone()
+                seen['layout'] = minimax_payload.get('layout')
+                return streams
+
+        out = h3_global_tiling._forward(
+            Executor(), [video, audio], torch.tensor([500.]), torch.zeros(1, 2, 4), {},
+            minimax_payload={'layout': 'full-layout'},
+            denoise_mask=vmask, audio_denoise_mask=amask)
+        self.assertTrue(torch.equal(out[0], video))
+        self.assertTrue(torch.equal(out[1], audio))
+        self.assertEqual(seen['video_shape'], tuple(video.shape))
+        self.assertEqual(seen['audio_shape'], tuple(audio.shape))
+        self.assertEqual(seen['layout'], 'full-layout')
+        torch.testing.assert_close(seen['video_mask'], vmask)
+        torch.testing.assert_close(seen['audio_mask'], amask)
+
+
+class GlobalChunkingTests(unittest.TestCase):
+    class _Attn(torch.nn.Module):
+        def __init__(self, dim, heads):
+            super().__init__()
+            self.heads = heads
+            self.head_dim = dim // heads
+            self.qkv_proj = torch.nn.Linear(dim, 3 * dim, bias=False)
+            self.q_norm = torch.nn.RMSNorm(self.head_dim)
+            self.k_norm = torch.nn.RMSNorm(self.head_dim)
+            self.out_proj = torch.nn.Linear(dim, dim, bias=False)
+
+    class _Block(torch.nn.Module):
+        def __init__(self, dim, heads):
+            super().__init__()
+            self.attn = GlobalChunkingTests._Attn(dim, heads)
+            self.norm1 = torch.nn.Identity()
+            self.norm2 = torch.nn.Identity()
+            self.mlp = torch.nn.Sequential(
+                torch.nn.Linear(dim, dim), torch.nn.GELU(), torch.nn.Linear(dim, dim)
+            )
+
+        def adaln_proj(self, _t_emb):
+            zero = torch.zeros(1, dtype=torch.float32)
+            one = torch.ones(1, dtype=torch.float32)
+            return zero, one, one, zero, one, one
+
+    def test_chunked_dense_block_matches_full_sequence(self):
+        torch.manual_seed(7)
+        dim, heads, tokens = 8, 2, 17
+        base = self._Block(dim, heads)
+        x = torch.randn(tokens, dim)
+        full = copy.deepcopy(base)
+        chunked = copy.deepcopy(base)
+        x_full, x_chunked = x.clone(), x.clone()
+        with torch.inference_mode():
+            h3_global_tiling.chunked_block(full, x_full, None, [(0, tokens, 0)], None, {}, tokens)
+            h3_global_tiling.chunked_block(chunked, x_chunked, None, [(0, tokens, 0)], None, {}, 4)
+        torch.testing.assert_close(x_chunked, x_full, rtol=1e-5, atol=1e-6)
+
+    def test_per_token_segments_are_sliced_with_chunks(self):
+        rows = torch.arange(8).reshape(8, 1)
+        segments = h3_global_tiling._segments_slice([(0, 8, rows)], 2, 6)
+        self.assertEqual(len(segments), 1)
+        start, end, sliced = segments[0]
+        self.assertEqual((start, end), (0, 4))
+        torch.testing.assert_close(sliced.flatten(), torch.arange(2, 6))
+
+    def test_input_projection_chunking_matches_full(self):
+        torch.manual_seed(11)
+        linear = torch.nn.Linear(8, 4)
+        x = torch.randn(17, 8)
+        full = linear(x)
+        chunked = h3_output_chunking.chunked_projection(linear.forward, 4, x)
+        torch.testing.assert_close(chunked, full, rtol=1e-6, atol=1e-7)
+
+    def test_projection_chunking_installation_is_restored(self):
+        linear = torch.nn.Linear(8, 4)
+        network = SimpleNamespace(video_patch_proj=linear, audio_patch_proj=None)
+        original_func = linear.forward.__func__
+        installed = h3_output_chunking._install_projection_chunking(network, 4)
+        self.assertTrue(installed)
+        self.assertIn("forward", linear.__dict__)
+        h3_output_chunking._restore_projection_chunking(installed)
+        self.assertNotIn("forward", linear.__dict__)
+        self.assertIs(linear.forward.__func__, original_func)
+
+    def test_output_chunking_without_native_embed_method(self):
+        class Final:
+            def forward(self, *args, **kwargs):
+                return args[0]
+        class Network:
+            video_patch_proj = torch.nn.Linear(8, 8)
+            audio_patch_proj = torch.nn.Linear(8, 8)
+            def __init__(self):
+                self.final_layer = Final()
+        network = Network()
+        with h3_output_chunking.output_chunking(network, 4):
+            self.assertIn("forward", network.final_layer.__dict__)
+        self.assertNotIn("forward", network.final_layer.__dict__)
 
 
 class TilingTests(unittest.TestCase):
@@ -558,7 +821,42 @@ class TilingControlTests(unittest.TestCase):
         self.assertEqual(schema['optional']['tiling_tiles'][0],[2,4,6,8])
         self.assertTrue(all(type(n) is int for n in schema['optional']['tiling_tiles'][0]))
         self.assertEqual(schema['optional']['tiling_axis'][1]['default'],'auto')
+        self.assertEqual(schema['optional']['highres_tiling_mode'][1]['default'],'spatial')
+        self.assertEqual(schema['optional']['highres_tiling_mode'][0],
+                         ['spatial','global_stream','global','global_ram'])
+        self.assertEqual(schema['optional']['highres_token_chunk'][1]['default'],4096)
+        self.assertEqual(schema['optional']['highres_weight_cache_gb'][1]['default'],4.0)
         self.assertEqual(schema['hidden']['unique_id'],'UNIQUE_ID')
+    def test_global_plan_text(self):
+        for mode in ("global_stream","global","global_ram"):
+            with self.subTest(mode=mode):
+                text=nodes.format_plan({"kind":"global","mode":mode,"token_chunk":4096,"weight_cache_gb":4.0})
+                self.assertIn('Full sequence',text)
+                self.assertIn(mode,text)
+                self.assertIn('full-sequence video/audio masks',text)
+        fallback=nodes.format_plan({"kind":"global","mode":"global_stream","token_chunk":4096,
+                                    "weight_cache_gb":4.0,"fallback":"attention_override"})
+        self.assertIn('Fallback',fallback)
+        backend=nodes.format_plan({"kind":"global","mode":"global_stream","token_chunk":4096,
+                                   "weight_cache_gb":4.0,"fallback":"attention_backend"})
+        self.assertIn('backend override removed',backend)
+    def test_node_global_options_passed(self):
+        output={'samples':torch.zeros(1)}
+        def sample(*a,**kw):
+            kw['on_tiling_plan']({'kind':'global','mode':'global_stream','token_chunk':2048,
+                                  'weight_cache_gb':2.0,'full_sequence':True})
+            return output
+        with patch.object(nodes,'progressive_sample',side_effect=sample) as sample_call:
+            result=nodes.SelfLiftAvatarH3Sampler().sample(
+                None,[],[],None,output,None,None,1,1.,2,.5,.5,.5,1.,'none',
+                highres_tiling=True,highres_tiling_mode='global_stream',
+                highres_token_chunk=2048,highres_weight_cache_gb=2.0)
+        kwargs=sample_call.call_args.kwargs
+        self.assertEqual(kwargs['highres_tiling_mode'],'global_stream')
+        self.assertEqual(kwargs['highres_token_chunk'],2048)
+        self.assertEqual(kwargs['highres_weight_cache_gb'],2.0)
+        self.assertIn('Full sequence',result['ui']['selflift_tiling'][0])
+        self.assertIn('full-sequence video/audio masks',result['ui']['selflift_tiling'][0])
     def test_node_returns_latent_and_ui_with_default_options(self):
         output={'samples':torch.zeros(1)}
         with patch.object(nodes,'progressive_sample',return_value=output) as sample:

@@ -1,6 +1,151 @@
 {
     "custom_nodes": [
         {
+            "author": "NotUsingGithub",
+            "title": "Wan27",
+            "reference": "https://github.com/NotUsingGithub/ComfyUI-Wan27",
+            "files": [
+                "https://github.com/NotUsingGithub/ComfyUI-Wan27"
+            ],
+            "install_type": "git-clone",
+            "description": "Wan27 image/video API nodes: account and model discovery, credit estimates, explicitly approved generation, and task tracking. Requires an active paid Wan27 subscription and uses website credits. Docs: https://wan2-7.io/mcp/guide/"
+        },
+        {
+            "author": "AceDataCloud",
+            "title": "Suno by Ace Data Cloud",
+            "id": "ace-suno",
+            "reference": "https://github.com/AceDataCloud/SunoComfyUI",
+            "files": [
+                "https://github.com/AceDataCloud/SunoComfyUI"
+            ],
+            "install_type": "git-clone",
+            "description": "Generate Suno music through your Ace Data Cloud account, query the same task ID, and load completed audio into ComfyUI. Requires an Ace Data Cloud API key; generation consumes Credits. Cloud API only, with no local model or GPU needed."
+        },
+        {
+            "author": "xm6018924",
+            "title": "BSAI-H3-MotionFix",
+            "reference": "https://github.com/xm6018924/BSAI-H3-MotionFix",
+            "files": [
+                "https://github.com/xm6018924/BSAI-H3-MotionFix"
+            ],
+            "install_type": "git-clone",
+            "description": "Glitch & Noise Fix Guide for MiniMax H3 fast-motion clips: outputs recommended steps / attention / reference weight / negative prompt / checklist / post-process, with a realtime plan card on the node."
+        },
+        {
+            "author": "j0eyhu",
+            "title": "ComfyUI-MacOffload-TE",
+            "reference": "https://github.com/j0eyhu/ComfyUI-MacOffload-TE",
+            "files": [
+                "https://github.com/j0eyhu/ComfyUI-MacOffload-TE"
+            ],
+            "install_type": "git-clone",
+            "description": "Experimental text encoder offloading for Apple Silicon / Mac setups."
+        },
+        {
+            "author": "xm6018924",
+            "title": "BSAI-ComfyUI-AimDo-Fix",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-AimDo-Fix",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-AimDo-Fix"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI 0.37.x launcher-compatibility shim: runtime-disables the comfy_aimdo memory/compiler graph, equivalent to launching with --disable-comfy-compiler, preventing aimdo memory compile error crashes during the first sampling step."
+        },
+        {
+            "author": "xm6018924",
+            "title": "BSAI-ComfyUI-MiniMax-H3-PDD-Acc",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-MiniMax-H3-PDD-Acc",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-MiniMax-H3-PDD-Acc"
+            ],
+            "install_type": "git-clone",
+            "description": "Native ComfyUI support for the official MiniMax-H3 8-step PDD acceleration LoRAs."
+        },
+        {
+            "author": "xm6018924",
+            "title": "BSAI-ComfyUI-VRAM-Unlock",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-VRAM-Unlock",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-VRAM-Unlock"
+            ],
+            "install_type": "git-clone",
+            "description": "Unifies removal of the PyTorch per-process VRAM memory fraction (set_per_process_memory_fraction) limits imposed by ComfyUI custom nodes."
+        },
+        {
+            "author": "T8star",
+            "title": "FLUX 3 PE GGUF (T8)",
+            "id": "flux3-pe-gguf-t8",
+            "reference": "https://github.com/T8mars/Comfyui-Flux3-PE-GGUF-T8",
+            "files": [
+                "https://github.com/T8mars/Comfyui-Flux3-PE-GGUF-T8"
+            ],
+            "install_type": "git-clone",
+            "description": "Local FLUX 3 PUP prompt enhancement with Q4_K_M GGUF, reference images and layout support. Windows/NVIDIA; separate model and runtime downloads are required."
+        },
+        {
+            "author": "jeankassio",
+            "title": "ComfyUI_YuE2",
+            "id": "ComfyUI_YuE2",
+            "reference": "https://github.com/jeankassio/ComfyUI_YuE2",
+            "files": [
+                "https://github.com/jeankassio/ComfyUI_YuE2"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI nodes for the official YuE2 Python pipeline: model loading, style/lyrics input, symbolic composition, semantic generation, acoustic synthesis, stereo decoding and score-conditioned covers. The engine is pinned to YuE2 v0.1.6"
+        },
+        {
+            "author": "Strix-3D",
+            "title": "ComfyUI-DLSS5-Enhancer-v15",
+            "reference": "https://github.com/Strix-3D/ComfyUI-DLSS5-Enhancer-v15",
+            "files": [
+                "https://github.com/Strix-3D/ComfyUI-DLSS5-Enhancer-v15"
+            ],
+            "install_type": "git-clone",
+            "description": "NVIDIA DLSS 5 Neural Rendering and RTX Upscaling for ComfyUI."
+        },
+        {
+            "author": "hanshs474",
+            "title": "ComfyUI-Veida",
+            "id": "comfyui-veida",
+            "reference": "https://github.com/hanshs474/ComfyUI-Veida",
+            "files": [
+                "https://github.com/hanshs474/ComfyUI-Veida"
+            ],
+            "install_type": "git-clone",
+            "description": "Generate and edit images through the Veida AI API. Works without an API key on the free tier; add a key to use your account's models (GPT Image 2.5, GPT Image 2, Nano Banana 2, Seedream 5.0)."
+        },
+        {
+            "author": "hanshs474",
+            "title": "ComfyUI-emaki",
+            "id": "comfyui-emaki",
+            "reference": "https://github.com/hanshs474/ComfyUI-emaki",
+            "files": [
+                "https://github.com/hanshs474/ComfyUI-emaki"
+            ],
+            "install_type": "git-clone",
+            "description": "Seedance 2.5 text to video and image to video through the emaki API (Seedance 2.0, MiniMax H3, Veo 3.1 and Nano Banana 2 for first frames too). No local GPU; needs an emaki API key."
+        },
+        {
+            "author": "zaum",
+            "title": "ComfyUI Sidebar Hider",
+            "reference": "https://github.com/zaum/comfyui-sidebar-hider",
+            "files": [
+                "https://github.com/zaum/comfyui-sidebar-hider"
+            ],
+            "install_type": "git-clone",
+            "description": "A ComfyUI frontend extension for hiding and rearranging left sidebar toolbar icons, with optional auto-hide."
+        },
+        {
+            "author": "BSAI",
+            "title": "BSAI-ComfyUI-FastH3",
+            "reference": "https://github.com/xm6018924/BSAI-ComfyUI-FastH3",
+            "files": [
+                "https://github.com/xm6018924/BSAI-ComfyUI-FastH3"
+            ],
+            "install_type": "git-clone",
+            "description": "ComfyUI nodes for fast H3 video (with synced audio) generation: 4-step FastVideo FastH3 + Native VSA (Video Sparse Attention). Text-to-Video / Image-to-Video / Multi-reference / 4K Upscale."
+        },
+        {
             "author": "Iakov Savelev",
             "title": "Flow-WLS & DPM++ Extended Samplers",
             "id": "research-unipc-dpmpp",

@@ -24,7 +24,7 @@ from . import chunked_v5, chunked_v5_effects, chunked_v5_relay
 from . import chunked_v5_storage_compat as compat
 from .chunked_v5 import StandardPrepared, StandardWindowResult, _check_lift
 from .results import _input_identity, canonical
-from .storage import MAX_FILE, MAX_JSON, _digest, _json_file, _lease, _path, _root, file_sha
+from .storage import _digest, _json_file, _lease, _path, _root, file_sha
 
 
 SCHEMA = "t8.modular-sampling.chunked-v5-frozen-window.v1"
@@ -137,9 +137,6 @@ def save_window(result, source, lifted, prepared, plan, storage_root,
         tensors = {}
         encoded = _encode_metadata_value(_state(result), tensors, path="chunked_v5.window")
         payload = canonical({"schema": SCHEMA, "binding": binding, "state": encoded})
-        if len(payload.encode("utf-8")) > MAX_JSON or sum(
-                item.numel() * item.element_size() for item in tensors.values()) > MAX_FILE - MAX_JSON:
-            raise ValueError("v5 frozen window exceeds metadata or tensor size limit")
         snapshot = _decode_metadata_value(encoded, tensors, set(), path="chunked_v5.window")
         if verify_window(_rebuild(snapshot, binding, lifted), source, lifted, prepared, plan) != binding:
             raise ValueError("v5 frozen window serialization changed content")
@@ -149,7 +146,7 @@ def save_window(result, source, lifted, prepared, plan, storage_root,
         save_file(tensors, str(partial), metadata={"chunked_v5_json": payload})
         with partial.open("rb+") as handle:
             header_bytes = struct.unpack("<Q", handle.read(8))[0]
-            if not 0 < header_bytes <= MAX_JSON:
+            if not 0 < header_bytes <= os.fstat(handle.fileno()).st_size - 8:
                 raise ValueError("v5 frozen tensor header exceeds its limit")
             os.fsync(handle.fileno())
         os.replace(partial, state)
@@ -183,7 +180,7 @@ def load_window(source, lifted, prepared, plan, storage_root, artifact_path,
         raise ValueError("Select a completed v5 manifest.json")
     expected_sha = _digest(artifact_sha256)
     with _lease(manifest_path.parent):
-        if (not manifest_path.is_file() or not 0 < manifest_path.stat().st_size <= MAX_JSON or
+        if (not manifest_path.is_file() or not 0 < manifest_path.stat().st_size or
                 file_sha(manifest_path) != expected_sha):
             raise ValueError("v5 frozen manifest SHA mismatch or missing completion")
         manifest = _json_file(manifest_path)
@@ -210,13 +207,13 @@ def load_window(source, lifted, prepared, plan, storage_root, artifact_path,
             raise ValueError("v5 frozen window does not match current source, plan or noise")
         state_path = _path(root, (manifest_path.parent / "state.safetensors").relative_to(root).as_posix())
         if (not state_path.is_file() or type(manifest["state_bytes"]) is not int or
-                not 8 < manifest["state_bytes"] <= MAX_FILE or
+                not 8 < manifest["state_bytes"] or
                 state_path.stat().st_size != manifest["state_bytes"] or
                 file_sha(state_path) != _digest(manifest["state_sha256"])):
             raise ValueError("v5 frozen tensor size or SHA mismatch")
         with state_path.open("rb") as handle:
             header_bytes = struct.unpack("<Q", handle.read(8))[0]
-        if not 0 < header_bytes <= MAX_JSON or header_bytes > state_path.stat().st_size - 8:
+        if not 0 < header_bytes or header_bytes > state_path.stat().st_size - 8:
             raise ValueError("v5 frozen tensor header exceeds its limit")
         with safe_open(str(state_path), framework="pt", device="cpu") as handle:
             metadata = handle.metadata()

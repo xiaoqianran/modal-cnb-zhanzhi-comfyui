@@ -1,5 +1,7 @@
 # S16 HyperFlow P7 分离式长视频（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#49-hyperflow-p7-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录按 segment0／segment1、无效果或外置 EAV／Prompt Relay／组合在 LOW／HIGH／两段的10种作用配置，以及四种保存／恢复方式提供80张可编辑实验图。原 P7 一体工作流不迁移。新图是通用示例，不是旧公开图原尺寸、seed或画音的逐帧替代。
 
 - `Full_NoStageSave`：LOW 0:4 → 原 learned3D → 原音频 reconcile → HIGH fresh 4:8，并保存**未接受**候选，不保存阶段回执。

@@ -326,6 +326,21 @@ class basicIn_img_INOUT:
         return (image,)
 
 
+class basicIn_mask_INOUT:
+    CATEGORY = "Apt_Preset/IO_Port/basicIn"
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"optional": {"mask": ("MASK",)}}
+
+    RETURN_TYPES = ("MASK",)
+    RETURN_NAMES = ("mask",)
+    FUNCTION = "pass_through"
+
+    def pass_through(self, mask=None):
+        return (mask,)
+
+
 class basicIn_media:
     CATEGORY = "Apt_Preset/IO_Port"
 
@@ -347,16 +362,6 @@ class basicIn_media:
 
 
 _MEDIA_UNPACK_MAX_INPUTS = 64
-_MEDIA_UNPACK_TAG_RE = re.compile(
-    r"(?:<\s*)?(picture|image|video|audio|图片|图像|视频|音频)\s*#?\s*(\d+)(?:\s*>)?",
-    re.IGNORECASE,
-)
-_MEDIA_UNPACK_SEGMENT_RE = re.compile(
-    r"(?:^|\n)\s*(?:#segment\s*\d+\s*-+|【\s*Segment\s+\d+\s*】)\s*",
-    re.IGNORECASE,
-)
-
-
 def _media_unpack_kind(value, declared=""):
     kind = str(declared or "").strip().lower()
     if kind in {"batch", "text"}:
@@ -376,35 +381,18 @@ def _media_unpack_kind(value, declared=""):
     return ""
 
 
-def _media_unpack_texts(value):
-    values = value if isinstance(value, (list, tuple)) else [value]
-    texts = []
-    for item in values:
-        if not isinstance(item, str):
-            continue
-        parts = [part.strip() for part in _MEDIA_UNPACK_SEGMENT_RE.split(item) if part.strip()]
-        texts.extend(parts or [item])
-    return texts
-
-
 class basicIn_media_unpack:
     CATEGORY = "Apt_Preset/IO_Port"
 
     @classmethod
     def INPUT_TYPES(cls):
-        optional = {
-            "media": ("IMAGE,VIDEO,AUDIO,STRING,ARRAY",),
-        }
+        optional = {"media": ("IMAGE,VIDEO,AUDIO,STRING,ARRAY",)}
         for index in range(1, _MEDIA_UNPACK_MAX_INPUTS + 1):
             optional[f"media_{index}"] = ("IMAGE,VIDEO,AUDIO,STRING,ARRAY", {"lazy": True})
             optional[f"media_type_{index}"] = ("STRING", {"default": ""})
         return {
             "required": {
                 "output_index": ("INT", {"default": 1, "min": 1, "max": 5000, "step": 1}),
-                "shot_mode": ("BOOLEAN", {
-                    "default": False,
-                    "tooltip": "开启后按文本分段索引输出该段实际引用的素材",
-                }),
             },
             "optional": optional,
         }
@@ -412,48 +400,22 @@ class basicIn_media_unpack:
     RETURN_TYPES = ("VIDEO", "STRING", "IMAGE", "AUDIO")
     RETURN_NAMES = ("index_video", "index_text", "index_image", "index_audio")
     FUNCTION = "unpack"
-    DESCRIPTION = "按 Media 接入顺序解包；分镜模式按所选文本段中的素材标签输出。"
+    DESCRIPTION = "按 Media 接入顺序选择一项素材，从对应类型的输出端口送出。"
 
-    def check_lazy_status(self, output_index, shot_mode=False, media=None, **kwargs):
+    def check_lazy_status(self, output_index, media=None, **kwargs):
         selected = max(0, int(output_index) - 1)
-        inputs = []
+        if media is not None:
+            if selected == 0:
+                return []
+            selected -= 1
         for index in range(1, _MEDIA_UNPACK_MAX_INPUTS + 1):
             name = f"media_{index}"
             kind = _media_unpack_kind(kwargs.get(name), kwargs.get(f"media_type_{index}"))
             if kind:
-                inputs.append((name, kind, kwargs.get(name)))
-
-        if not shot_mode:
-            if media is not None:
                 if selected == 0:
-                    return []
+                    return [name] if kwargs.get(name) is None else []
                 selected -= 1
-            if selected < len(inputs) and inputs[selected][2] is None:
-                return [inputs[selected][0]]
-            return []
-
-        text_inputs = [item for item in inputs if item[1] == "text"]
-        missing_text = [name for name, _kind, value in text_inputs if value is None]
-        if missing_text:
-            return missing_text
-        texts = []
-        for _name, _kind, value in text_inputs:
-            texts.extend(_media_unpack_texts(value))
-        if selected >= len(texts):
-            return []
-        aliases = {
-            "picture": "image", "image": "image", "图片": "image", "图像": "image",
-            "video": "video", "视频": "video", "audio": "audio", "音频": "audio",
-        }
-        references = {}
-        for match in _MEDIA_UNPACK_TAG_RE.finditer(texts[selected]):
-            references.setdefault(aliases[match.group(1).lower()], int(match.group(2)) - 1)
-        required = []
-        for kind, ordinal in references.items():
-            matches = [item for item in inputs if item[1] == kind]
-            if 0 <= ordinal < len(matches) and matches[ordinal][2] is None:
-                required.append(matches[ordinal][0])
-        return required
+        return []
 
     @staticmethod
     def _collect_ordered(media=None, **kwargs):
@@ -469,55 +431,17 @@ class basicIn_media_unpack:
                 items.append((value, kind))
         return items
 
-    @staticmethod
-    def _collect(media=None, **kwargs):
-        grouped = {"video": [], "text": [], "image": [], "audio": []}
-        for value, kind in basicIn_media_unpack._collect_ordered(media, **kwargs):
-            if kind == "text":
-                grouped["text"].extend(_media_unpack_texts(value))
-            elif kind in grouped:
-                grouped[kind].append(value)
-        return grouped
-
-    def unpack(self, output_index, shot_mode=False, media=None, **kwargs):
+    def unpack(self, output_index, media=None, **kwargs):
         selected = max(0, int(output_index) - 1)
         blocker = lambda: ExecutionBlocker(None)
-
-        if not shot_mode:
-            items = self._collect_ordered(media, **kwargs)
-            if selected >= len(items):
-                return tuple(blocker() for _ in range(4))
-            value, kind = items[selected]
-            if value is None or kind not in {"video", "text", "image", "audio"}:
-                return tuple(blocker() for _ in range(4))
-            values = {kind: value}
-            return tuple(values.get(output_kind, blocker()) for output_kind in ("video", "text", "image", "audio"))
-
-        grouped = self._collect(media, **kwargs)
-        if selected >= len(grouped["text"]):
+        items = self._collect_ordered(media, **kwargs)
+        if selected >= len(items):
             return tuple(blocker() for _ in range(4))
-        text = grouped["text"][selected]
-        references = {}
-        aliases = {
-            "picture": "image", "image": "image", "图片": "image", "图像": "image",
-            "video": "video", "视频": "video", "audio": "audio", "音频": "audio",
-        }
-        for match in _MEDIA_UNPACK_TAG_RE.finditer(text):
-            kind = aliases[match.group(1).lower()]
-            references.setdefault(kind, int(match.group(2)) - 1)
-        valid = {
-            kind: grouped[kind][index]
-            for kind, index in references.items()
-            if 0 <= index < len(grouped[kind])
-        }
-        if not valid:
+        value, kind = items[selected]
+        if value is None or kind not in {"video", "text", "image", "audio"}:
             return tuple(blocker() for _ in range(4))
-        return (
-            valid.get("video", blocker()),
-            text,
-            valid.get("image", blocker()),
-            valid.get("audio", blocker()),
-        )
+        values = {kind: value}
+        return tuple(values.get(output_kind, blocker()) for output_kind in ("video", "text", "image", "audio"))
 
 
 class basicIn_OptionalPass:
@@ -774,6 +698,8 @@ class view_Data:
     def render(self, any):
         if isinstance(any, list):
             listLen = len(any)
+            if listLen == 1 and isinstance(any[0], list):
+                return "Array:\n" + "".join(f"[#{i}] {element}\n" for i, element in enumerate(any[0]))
             if listLen > 1:
                 result = "List:\n"
                 for i, element in enumerate(any):
@@ -3445,138 +3371,38 @@ from typing import Optional, Dict, Any, List
 GLOBAL_STORED_IMAGES: List[torch.Tensor] = []
 GLOBAL_DISPLAY_DATA: List[Dict[str, Any]] = []
 
+
 class IO_store_image:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {},
-            "optional": {
-                "image": ("IMAGE", {}),
-                "image_output": (["Hide", "Preview", "Save", "Hide/Save"], {"default": "Preview"}),
-                "release_total": ("INT", {"default": 0, "min": 0, "step": 1}),
-            },
-            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO",},
+            "optional": {"image": ("IMAGE", {})},
+            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
+
     NAME = "IO_store_image"
-    RETURN_TYPES = ("IMAGE", "INT")
-    RETURN_NAMES = ("image", "release_total")
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
     FUNCTION = "store_image"
     CATEGORY = "Apt_Preset/IO_Port"
     OUTPUT_NODE = True
-    DESCRIPTION = """
-    输出逻辑：
-    - 全部尺寸一致时：
-      - release_total ≤ 0 → 输出最后一张图像
-      - release_total > 0 → 
-        1. 存储总数 = release_total → 输出全部
-        2. 存储总数 < release_total → 关闭输出
-        3. 存储总数 > release_total → 从后面数够数量的图像输出
-    - 若不是全部一致时：仅输出最后一张图像
-"""
+    DESCRIPTION = "缓存输入图像并预览全部缓存内容；图像输出为最后一张。"
 
     def __init__(self):
         global GLOBAL_STORED_IMAGES, GLOBAL_DISPLAY_DATA
         GLOBAL_STORED_IMAGES = []
         GLOBAL_DISPLAY_DATA = []
-        print("IO_store_image node initialized (storage reset)")
 
-    # ========== 核心改造：原IMAGE_BooleanSwitch合并为内部方法 ==========
-    def _image_boolean_switch(self, switch: bool, image: Optional[torch.Tensor] = None):
-        """原IMAGE_BooleanSwitch的核心逻辑，合并为内部私有方法"""
-        if switch is True:
-            return (image,)
-        else:
-            if ExecutionBlocker is not None:
-                return (ExecutionBlocker(None),)
-            else:
-                return ({},)
-
-    def store_image(self, image: Optional[torch.Tensor] = None, 
-                   prompt: Any = None, image_output: str = None, 
-                   extra_pnginfo: Any = None, release_total: float = 0) -> Dict[str, Any]:
-        global GLOBAL_STORED_IMAGES, GLOBAL_DISPLAY_DATA
-        
-        # 图像存储逻辑：去重+追加，原逻辑保留不变
+    def store_image(self, image: Optional[torch.Tensor] = None,
+                    prompt: Any = None, extra_pnginfo: Any = None) -> Dict[str, Any]:
         if image is not None:
-            if not GLOBAL_STORED_IMAGES:
+            if not GLOBAL_STORED_IMAGES or image.shape != GLOBAL_STORED_IMAGES[-1].shape or not torch.allclose(image, GLOBAL_STORED_IMAGES[-1]):
                 GLOBAL_STORED_IMAGES.append(image)
                 GLOBAL_DISPLAY_DATA.append(self._prepare_image_display(image))
-            else:
-                last_img = GLOBAL_STORED_IMAGES[-1]
-                if image.shape != last_img.shape:
-                    GLOBAL_STORED_IMAGES.append(image)
-                    GLOBAL_DISPLAY_DATA.append(self._prepare_image_display(image))
-                else:
-                    if not torch.allclose(image, last_img):
-                        GLOBAL_STORED_IMAGES.append(image)
-                        GLOBAL_DISPLAY_DATA.append(self._prepare_image_display(image))
-        
-        total_stored = len(GLOBAL_STORED_IMAGES)
-        output_image = None
-        switch_boolean = False  # 核心布尔开关，默认关闭输出
 
-        # 通道数不一致的判断逻辑
-        if total_stored > 0:
-            channels = [img.shape[1] for img in GLOBAL_STORED_IMAGES]
-            if len(set(channels)) > 1:
-                print("Warning: Images have different channel counts, outputting last image")
-                output_image = GLOBAL_STORED_IMAGES[-1]
-                current_total = total_stored
-                return self._prepare_return_data(output_image, current_total, image_output, prompt, extra_pnginfo)
-        
-        # 判断所有存储图像尺寸是否一致
-        if total_stored > 0:
-            sizes = [(img.shape[2], img.shape[3]) for img in GLOBAL_STORED_IMAGES]
-            sizes_consistent = len(set(sizes)) == 1
-        else:
-            sizes_consistent = False
-        
-        # ========== 核心改造：全新业务逻辑 + 标准IF布尔判断 ==========
-        if total_stored == 0:
-            output_image = image
-            current_total = 0
-        else:
-            # 尺寸不一致 → 固定输出最后一张图像
-            if not sizes_consistent:
-                output_image = GLOBAL_STORED_IMAGES[-1]
-                current_total = total_stored
-            # 尺寸一致 → 执行新的核心分支逻辑
-            else:
-                release_total = int(release_total)
-                # 分支1: release_total ≤ 0 → 默认仅输出最后一张图像
-                if release_total <= 0:
-                    switch_boolean = True
-                    output_image = GLOBAL_STORED_IMAGES[-1]
-                    current_total = total_stored
-                # 分支2: release_total > 0 → 三层IF布尔判断
-                else:
-                    # 子分支1: 存储总数 = release_total → 布尔真，打开输出，输出全部
-                    if total_stored == release_total:
-                        switch_boolean = True
-                        output_image = torch.cat(GLOBAL_STORED_IMAGES, dim=0)
-                        current_total = total_stored
-                    # 子分支2: 存储总数 < release_total → 布尔假，关闭输出
-                    elif total_stored < release_total:
-                        switch_boolean = False
-                        output_image = None
-                        current_total = total_stored
-                    # 子分支3: 存储总数 > release_total → 布尔真，打开输出，输出倒数N张
-                    elif total_stored > release_total:
-                        switch_boolean = True
-                        start_idx = total_stored - release_total
-                        selected_imgs = GLOBAL_STORED_IMAGES[start_idx:]
-                        output_image = torch.cat(selected_imgs, dim=0)
-                        current_total = release_total
-
-        # 兜底空值处理
-        if output_image is None:
-            output_image = image
-            current_total = 0
-
-        # ========== 核心调用：使用合并后的内部开关逻辑，控制最终输出 ==========
-        final_output_image = self._image_boolean_switch(switch_boolean, output_image)[0]
-
-        return self._prepare_return_data(final_output_image, current_total, image_output, prompt, extra_pnginfo)
+        output_image = GLOBAL_STORED_IMAGES[-1] if GLOBAL_STORED_IMAGES else ExecutionBlocker(None)
+        return self._prepare_return_data(output_image, prompt, extra_pnginfo)
 
     def _prepare_image_display(self, image_tensor: torch.Tensor) -> Dict[str, Any]:
         try:
@@ -3602,30 +3428,16 @@ class IO_store_image:
                 "shape": image_tensor.shape if isinstance(image_tensor, torch.Tensor) else "invalid"
             }
     
-    def _prepare_return_data(self, output_image: torch.Tensor, current_total: int, 
-                            image_output: str, prompt: Any, extra_pnginfo: Any) -> Dict[str, Any]:
-        try:
-            results = []
-            for img in GLOBAL_STORED_IMAGES:
-                results.extend(easySave(img, 'easyPreview', image_output, prompt, extra_pnginfo))
-        except NameError:
-            results = []
-            print("Warning: easySave function not found")
-        
-        if image_output in ("Hide", "Hide/Save"):
-            return {"ui": {}, "result": (output_image, current_total)}
-        return {"ui": {"images": results}, "result": (output_image, current_total)}
+    def _prepare_return_data(self, output_image: torch.Tensor,
+                             prompt: Any, extra_pnginfo: Any) -> Dict[str, Any]:
+        results = []
+        for img in GLOBAL_STORED_IMAGES:
+            results.extend(easySave(img, 'easyPreview', 'Preview', prompt, extra_pnginfo))
+        return {"ui": {"images": results}, "result": (output_image,)}
 
     @classmethod
-    def IS_CHANGED(cls, image: Optional[torch.Tensor] = None, 
-                   release_total: float = 0, image_output: str = None,
-                   prompt: Any = None, extra_pnginfo: Any = None, **kwargs) -> str:
-        img_id = f"{image.shape}-{id(image)}" if isinstance(image, torch.Tensor) else "none"
-        return json.dumps({
-            "image_id": img_id, 
-            "release_total": int(release_total),
-            "image_output": image_output
-        })
+    def IS_CHANGED(cls, image: Optional[torch.Tensor] = None, **kwargs) -> str:
+        return f"{image.shape}-{id(image)}" if isinstance(image, torch.Tensor) else "none"
 
     def get_display_content(self) -> Dict[str, Any]:
         return {
@@ -3672,7 +3484,7 @@ class IO_EasyMark:
     RETURN_TYPES = ("IMAGE", "IMAGE", "MASK", "MASK", "MASK", "MASK", "MASK", "MASK", "MASK")
     RETURN_NAMES = ("原图", "合成图", "总mask", "黑mask", "白mask", "红mask", "绿mask", "蓝mask", "灰mask")
     FUNCTION = "main"
-    CATEGORY = "Apt_Preset/IO_Port"
+    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
 
     def main(self, brush_data, brush_size, image_base64):
         if isinstance(image_base64, (list, tuple)):
@@ -4375,97 +4187,56 @@ class IO_RegexPreset:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "preset": (["排除空内容", "排除空+纯空白", "包含关键词", "不包含关键词", "以关键词开头", "以关键词结尾", "多关键词包含(或)", "多关键词包含(且)", "批量排除关键词", "匹配数字", "匹配字母", "匹配中文", "匹配数字+字母", "排除特定值", "仅匹配特定值", "匹配文件名开头数字", "匹配文件名结尾数字", "匹配括号中的数字", "自定义"], {"default": "自定义"}),
+                "preset": (["排除空内容", "排除空+纯空白", "包含关键词", "不包含关键词", "以关键词开头", "以关键词结尾", "多关键词包含(或)", "多关键词包含(且)", "批量排除关键词", "匹配数字", "匹配字母", "匹配中文", "匹配数字+字母", "排除特定值", "仅匹配特定值", "匹配文件名开头数字", "匹配文件名结尾数字", "匹配括号中的数字"], {"default": "排除空内容"}),
             },
             "optional": {
-                "custom_regex": ("STRING", {"default": "", "placeholder": "自定义正则（无需/包裹，例：^[\u4e00-\u9fa5]+$）"}),
-                "keyword": ("STRING", {"default": "", "placeholder": "输入关键词，多值用|分隔（例：油画|水彩）"}),
                 "ignore_case": ("BOOLEAN", {"default": True, "label_on": "忽略大小写", "label_off": "区分大小写"}),
-                "escape_special_chars": ("BOOLEAN", {"default": True, "label_on": "转义特殊字符", "label_off": "保留特殊字符"}),
-                "preview_test_text": ("STRING", {"default": "", "multiline": True, "placeholder": "测试文本，多值用|分隔（例：12图片.png|图片(34).png）"})
-            }
+            },
         }
 
-    def get_rule_desc(self, preset, keyword, ignore_case):
-        desc_map = {
-            "排除空内容": "筛选掉空字符串选项，仅保留含至少1个字符的选项",
-            "排除空+纯空白": "筛选掉空/纯空格/制表符选项，仅保留非空白字符选项",
-            "包含关键词": f"仅显示包含「{keyword}」的选项（{'忽略' if ignore_case else '区分'}大小写）",
-            "不包含关键词": f"排除所有包含「{keyword}」的选项（{'忽略' if ignore_case else '区分'}大小写）",
-            "以关键词开头": f"仅显示以「{keyword}」开头的选项（{'忽略' if ignore_case else '区分'}大小写）",
-            "以关键词结尾": f"仅显示以「{keyword}」结尾的选项（{'忽略' if ignore_case else '区分'}大小写）",
-            "多关键词包含(或)": f"仅显示包含「{keyword.replace('|', '」或「')}」的选项（{'忽略' if ignore_case else '区分'}大小写）",
-            "多关键词包含(且)": f"仅显示同时包含「{keyword.replace('|', '」和「')}」的选项（{'忽略' if ignore_case else '区分'}大小写）",
-            "批量排除关键词": f"排除包含「{keyword.replace('|', '」或「')}」的所有选项（{'忽略' if ignore_case else '区分'}大小写）",
-            "匹配数字": "仅显示包含数字（0-9）的选项",
-            "匹配字母": "仅显示包含英文字母（a-z/A-Z）的选项",
-            "匹配中文": "仅显示包含中文（\u4e00-\u9fa5）的选项",
-            "匹配数字+字母": "仅显示包含数字或字母的选项",
-            "排除特定值": f"精准排除「{keyword}」这个选项（完全匹配）",
-            "仅匹配特定值": f"仅显示「{keyword}」这个选项（完全匹配）",
-            "匹配文件名开头数字": "仅匹配文件名开头的连续数字（如12图片.png中的12）",
-            "匹配文件名结尾数字": "仅匹配文件名扩展名前的最后两位数字（如图片63.png中的63）",
-            "匹配括号中的数字": "仅匹配括号内的连续数字（如图片(45).png中的45）",
-            "自定义": f"使用自定义正则：{self.custom_regex if hasattr(self, 'custom_regex') else '无'}"
-        }
-        return desc_map.get(preset, "未知筛选规则")
-
-
-    def preview_regex_effect(self, regex_pattern, test_text):
-        if not regex_pattern or not test_text:
-            return "无测试数据"
-        core_regex = regex_pattern.strip('/')
-        if not core_regex:
-            return "正则格式错误"
-        test_options = [opt.strip() for opt in test_text.split('|')]
-        matched_options = []
-        try:
-            flags = re.IGNORECASE if self.ignore_case else 0
-            pattern = re.compile(core_regex, flags)
-            for opt in test_options:
-                if pattern.search(opt):
-                    matched_options.append(opt)
-        except Exception as e:
-            return f"正则错误：{str(e)}"
-        return f"匹配结果：{', '.join(matched_options) if matched_options else '无匹配项'}"
-
-
-    def generate_regex(self, preset, keyword, ignore_case, escape_special_chars, custom_regex="", preview_test_text=""):
-        self.ignore_case = ignore_case
-        self.custom_regex = custom_regex
-        keyword = keyword.strip() if keyword else ""
-        processed_keyword = re.escape(keyword) if escape_special_chars and keyword else keyword
-        keyword_list = [k.strip() for k in processed_keyword.split('|') if k.strip()]
+    def generate_regex(self, preset, ignore_case=True):
         case_flag = "i" if ignore_case else ""
         regex_map = {
-            "排除空内容": rf"/.+/{case_flag}",
-            "排除空+纯空白": rf"/^\S+/{case_flag}",
-            "包含关键词": rf"/{processed_keyword}/{case_flag}" if keyword else rf"/.+/{case_flag}",
-            "不包含关键词": rf"/^(?!.*{processed_keyword}).*$/{case_flag}" if keyword else rf"/.+/{case_flag}",
-            "以关键词开头": rf"/^{processed_keyword}/{case_flag}" if keyword else rf"/.+/{case_flag}",
-            "以关键词结尾": rf"/{processed_keyword}$/{case_flag}" if keyword else rf"/.+/{case_flag}",
-            "多关键词包含(或)": rf"/{'|'.join(keyword_list)}/{case_flag}" if keyword_list else rf"/.+/{case_flag}",
-            "多关键词包含(且)": rf"/^(?=.*{')(?=.*'.join(keyword_list)}).*$/{case_flag}" if keyword_list else rf"/.+/{case_flag}",
-            "批量排除关键词": rf"/^(?!.*({'|'.join(keyword_list)})).*$/{case_flag}" if keyword_list else rf"/.+/{case_flag}",
-            "匹配数字": rf"/\d+/{case_flag}",
-            "匹配字母": rf"/[a-zA-Z]+/{case_flag}",
-            "匹配中文": rf"/[\u4e00-\u9fa5]+/{case_flag}",
-            "匹配数字+字母": rf"/[a-zA-Z0-9]+/{case_flag}",
-            "排除特定值": rf"/^(?!{processed_keyword}$).*$/{case_flag}" if keyword else rf"/.+/{case_flag}",
-            "仅匹配特定值": rf"/^{processed_keyword}$/{case_flag}" if keyword else rf"/.+/{case_flag}",
-            "匹配文件名开头数字": rf"/^\d+/{case_flag}",
-            "匹配文件名结尾数字": rf"/\d{{2}}(?=\.\w+$)/{case_flag}",
-            "匹配括号中的数字": rf"/\((\d+)\)/{case_flag}",
-            "自定义": rf"/{custom_regex}/{case_flag}" if custom_regex else rf"/.+/{case_flag}"
+            "排除空内容": r"/.+/",
+            "排除空+纯空白": r"/\S/",
+            "包含关键词": r"/油画/",
+            "不包含关键词": r"/^(?!.*油画).*$/",
+            "以关键词开头": r"/^油画/",
+            "以关键词结尾": r"/油画$/",
+            "多关键词包含(或)": r"/油画|水彩/",
+            "多关键词包含(且)": r"/^(?=.*油画)(?=.*水彩).*$/",
+            "批量排除关键词": r"/^(?!.*(?:油画|水彩)).*$/",
+            "匹配数字": r"/\d+/",
+            "匹配字母": r"/[a-zA-Z]+/",
+            "匹配中文": r"/[\u4e00-\u9fa5]+/",
+            "匹配数字+字母": r"/[a-zA-Z0-9]+/",
+            "排除特定值": r"/^(?!油画$).*$/",
+            "仅匹配特定值": r"/^油画$/",
+            "匹配文件名开头数字": r"/^\d+/",
+            "匹配文件名结尾数字": r"/\d{2}(?=\.\w+$)/",
+            "匹配括号中的数字": r"/\(\d+\)/",
         }
-        final_regex = regex_map.get(preset, rf"/.+/{case_flag}")
-        rule_desc = self.get_rule_desc(preset, keyword, ignore_case)
-        if preview_test_text:
-            preview_result = self.preview_regex_effect(final_regex, preview_test_text)
-            rule_desc += f"\n{preview_result}"
-        return (final_regex, rule_desc)
-
-
+        description_map = {
+            "排除空内容": "匹配至少含一个字符的文本；纯空格仍会保留。\n使用前：[空字符串, 空格, 山] → 使用后：[空格, 山]",
+            "排除空+纯空白": "匹配至少含一个非空白字符的文本，排除空字符串、空格和制表符。\n使用前：[空字符串, 空格, 山] → 使用后：[山]",
+            "包含关键词": "匹配任意位置包含固定词「油画」的文本。\n使用前：[油画风景, 水彩风景] → 使用后：[油画风景]",
+            "不包含关键词": "只保留不含固定词「油画」的文本。\n使用前：[油画风景, 水彩风景] → 使用后：[水彩风景]",
+            "以关键词开头": "匹配以固定词「油画」开头的文本，前面不能有其他字符。\n使用前：[油画风景, 风景油画] → 使用后：[油画风景]",
+            "以关键词结尾": "匹配以固定词「油画」结尾的文本，后面不能有其他字符。\n使用前：[油画风景, 风景油画] → 使用后：[风景油画]",
+            "多关键词包含(或)": "匹配包含「油画」或「水彩」任意一词的文本。\n使用前：[油画风景, 水彩风景, 素描风景] → 使用后：[油画风景, 水彩风景]",
+            "多关键词包含(且)": "文本中必须同时含有「油画」和「水彩」，顺序不限。\n使用前：[油画水彩混合, 油画风景, 水彩风景] → 使用后：[油画水彩混合]",
+            "批量排除关键词": "排除含「油画」或「水彩」任意一词的文本。\n使用前：[油画风景, 水彩风景, 素描风景] → 使用后：[素描风景]",
+            "匹配数字": "文本任意位置出现连续数字即可匹配，并可提取该数字段。\n使用前：[图片12, 图片甲] → 使用后：[图片12]（匹配片段：12）",
+            "匹配字母": "文本任意位置出现连续英文字母即可匹配。\n使用前：[图A, 图一] → 使用后：[图A]（匹配片段：A）",
+            "匹配中文": "文本任意位置出现常用汉字即可匹配。\n使用前：[图片A, imageA] → 使用后：[图片A]（匹配片段：图片）",
+            "匹配数字+字母": "出现数字或英文字母任意一种即可匹配，不要求两种同时存在。\n使用前：[图1, 图A, 图甲] → 使用后：[图1, 图A]",
+            "排除特定值": "整段文本恰好是固定值「油画」时排除；包含它的较长文本仍保留。\n使用前：[油画, 油画风景, 水彩] → 使用后：[油画风景, 水彩]",
+            "仅匹配特定值": "只匹配整段文本恰好等于固定值「油画」的项。\n使用前：[油画, 油画风景, 水彩] → 使用后：[油画]",
+            "匹配文件名开头数字": "文件名开头必须是连续数字；匹配片段是开头数字。\n使用前：[12图片.png, 图片12.png] → 使用后：[12图片.png]（匹配片段：12）",
+            "匹配文件名结尾数字": "扩展名前必须紧挨至少两位数字，匹配末尾两位。\n使用前：[图片63.png, 图片6.png] → 使用后：[图片63.png]（匹配片段：63）",
+            "匹配括号中的数字": "匹配英文圆括号包围的连续数字，匹配片段包含括号。\n使用前：[图片(45).png, 图片45.png] → 使用后：[图片(45).png]（匹配片段：(45)）",
+        }
+        return (regex_map[preset][:-1] + "/" + case_flag, description_map[preset])
 
 
 class IO_LoadShotBatch:
@@ -5308,26 +5079,6 @@ class view_node_Script:
 
 
 # ==================== 节点1：尺寸帧率传递 ====================
-class basicIn_Vedio:
-    CATEGORY = "Apt_Preset/IO_Port/basicIn"
-
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "width": ("INT", {"default": 512, "min": 1, "max": 8192}),
-                "height": ("INT", {"default": 512, "min": 1, "max": 8192}),
-                "length": ("INT", {"default": 16, "min": 1, "max": 9999}),
-                "frame_rate": ("INT", {"default": 24, "min": 1, "max": 120}),
-            }
-        }
-    
-    RETURN_TYPES = ("INT", "INT", "INT", "INT")
-    RETURN_NAMES = ("width", "height", "length", "frame_rate")
-    FUNCTION = "forward"
-    
-    def forward(self, width, height, length, frame_rate):
-        return (width, height, length, frame_rate)
 
 
 from nodes import  CLIPTextEncode

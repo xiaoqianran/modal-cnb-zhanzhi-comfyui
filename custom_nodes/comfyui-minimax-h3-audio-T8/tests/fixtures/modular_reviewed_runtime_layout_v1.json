@@ -136,7 +136,7 @@
     },
     "detail_sampling_advanced.py": {
       "path": "h3_t8/detail_sampling_advanced.py",
-      "ast_sha256": "386f068f13f2f37fcd83902a8db453d24ea839256eb3b857a63cef3993eb3dba"
+      "ast_sha256": "a4b7bf655087604d3eabcfe9378b992891da86760fa2e954b88ba74ceef59fbe"
     },
     "long_video_in_node_loop_advanced.py": {
       "path": "h3_t8/long_video_in_node_loop_advanced.py",
@@ -160,11 +160,11 @@
     },
     "progressive_sampling_runtime.py": {
       "path": "h3_t8/progressive_sampling_runtime.py",
-      "ast_sha256": "7a940ba6dd4b1f3b234c7a43807d42046823f3eb96729474fa9825552ab6cbb0"
+      "ast_sha256": "832eb4572385aacc25aad1ca2f4ee0ad1b8ba465ebb3c829db09e1e661467d93"
     },
     "speed_advanced.py": {
       "path": "h3_t8/speed_advanced.py",
-      "ast_sha256": "5f9bc39c5868bf04bdc1c8a1e31f696787f8704b47f5cd6ca8d71a56dd7f3e62"
+      "ast_sha256": "5dd593781c12e69fca3a7552155a63fb5abf3aa6a192b017a43576b16e6e663c"
     }
   }
 }

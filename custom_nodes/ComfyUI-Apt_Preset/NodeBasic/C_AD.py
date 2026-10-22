@@ -738,242 +738,9 @@ class AD_sch_mask_weigh:
         return (torch.cat(out, dim=0),)
 
 
-class AD_sch_prompt_basic:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "clip": ("CLIP",),
-                "prompts": ("STRING", {"multiline": True, "default": DefaultPromp}),
-                "easing_type": (list(easing_functions.keys()), {"default": "Linear"}),
-            },
-            "optional": {
-                "max_length": ("INT", {"default": 120, "min": 0, "max": 100000}),
-                "f_text": ("STRING", {"default": "", "multiline": False}),
-                "b_text": ("STRING", {"default": "", "multiline": False}),
-
-            }
-        }
-
-    RETURN_TYPES = ("CONDITIONING","IMAGE")
-    RETURN_NAMES = ("positive","graph")
-    FUNCTION = "create_schedule"
-    CATEGORY = "Apt_Preset/AD/😺backup"
-    DESCRIPTION = """
-    - 插入缓动函数举例Examples functions：
-    - 0:0.5 @Sine_In@
-    - 30:1 @Linear@
-    - 60:0.5
-    - 90:1
-    - 支持的缓动函数Supported easing functions:
-    - Linear,
-    - Sine_In,Sine_Out,Sine_InOut,Sin_Squared,
-    - Quart_In,Quart_Out,Quart_InOut,
-    - Cubic_In,Cubic_Out,Cubic_InOut,
-    - Circ_In,Circ_Out,Circ_InOut,
-    - Back_In,Back_Out,Back_InOut,
-    - Elastic_In,Elastic_Out,Elastic_InOut,
-    - Bounce_In,Bounce_Out,Bounce_InOut"
-    """
-    def create_schedule(self,clip, prompts: str, max_length=0, easing_type="Linear", f_text="", b_text="", ):
-
-        frames = parse_prompt_schedule(prompts.strip(), easing_type=easing_type)
-        curve_img = generate_frame_weight_curve_image(frames, max_length)
-        positive = build_conditioning(frames, clip, max_length, f_text=f_text, b_text=b_text)
-
-        return ( positive, curve_img)
-
-
-class AD_sch_value:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "values": ("STRING", {"multiline": True, "default": DefaultValue}),
-                "easing_type": (list(easing_functions.keys()), {"default": "Linear"}),
-            },
-            "optional": {
-                "max_length": ("INT", {"default": 120, "min": 0, "max": 100000}),
-                "scale_factor": ("FLOAT", {"default": 1.0, "min": 0.001, "max": 1000.0, "step": 0.01}),
-                "offset": ("FLOAT", {"default": 0.0, "min": -1000.0, "max": 1000.0, "step": 0.01}),
-            }
-        }
-
-    # 修改返回类型，添加 INT
-    RETURN_TYPES = (ANY_TYPE, "IMAGE")
-    RETURN_NAMES = ("data",  "graph")
-    FUNCTION = "create_schedule"
-    CATEGORY = "Apt_Preset/AD/😺backup"
-    DESCRIPTION = """
-    - 插入缓动函数举例Examples functions：
-    - 0:0.5 @Sine_In@
-    - 30:1 @Linear@
-    - 60:0.5
-    - 90:1
-    - 支持的缓动函数Supported easing functions:
-    - Linear,
-    - Sine_In,Sine_Out,Sine_InOut,Sin_Squared,
-    - Quart_In,Quart_Out,Quart_InOut,
-    - Cubic_In,Cubic_Out,Cubic_InOut,
-    - Circ_In,Circ_Out,Circ_InOut,
-    - Back_In,Back_Out,Back_InOut,
-    - Elastic_In,Elastic_Out,Elastic_InOut,
-    - Bounce_In,Bounce_Out,Bounce_InOut"
-    """
-    def create_schedule(self, values: str, easing_type="Linear", max_length=0, scale_factor=1.0, offset=0.0, ):
-        keyframes = parse_prompt_schedule(values.strip(), easing_type=easing_type)
-        if not keyframes:
-            raise ValueError("No valid keyframes found.")
-
-        if max_length <= 0:
-            max_length = keyframes[-1].index + 1
-
-        values_seq = [None] * max_length
-        frame_methods = []  # 用于记录每段使用的插值方法
-
-        # 遍历所有关键帧，为每个帧设置值并处理与下一个关键帧之间的插值
-        for i in range(len(keyframes)):
-            curr_kf = keyframes[i]
-            curr_idx = curr_kf.index
-
-            try:
-                curr_val = float(curr_kf.prompt)
-            except ValueError:
-                continue
-
-            if curr_idx >= max_length:
-                break
-
-            # 设置当前帧数值
-            values_seq[curr_idx] = curr_val
-
-            # 如果不是最后一帧，则处理与下一帧之间的插值
-            if i + 1 < len(keyframes):
-                next_kf = keyframes[i + 1]
-                next_idx = next_kf.index
-                next_val = float(next_kf.prompt)
-
-                if next_idx >= max_length:
-                    continue
-
-                diff_len = next_idx - curr_idx
-                weights = torch.linspace(0, 1, diff_len + 1)[1:-1]
-                easing_weights = [apply_easing(w.item(), curr_kf.interp_method) for w in weights]
-                transformed_weights = [min(max(w * scale_factor + offset, 0.0), 1.0) for w in easing_weights]
-
-                for j, w in enumerate(transformed_weights):
-                    idx = curr_idx + j + 1
-                    if idx >= max_length:
-                        break
-                    values_seq[idx] = curr_val * (1.0 - w) + next_val * w
-
-                # 记录插值区间及使用的 interp_method（用于绘图）
-                frame_methods.append((curr_idx, next_idx, curr_kf.interp_method))
-
-        # 填充首尾缺失帧
-        first_valid = next((i for i in range(max_length) if values_seq[i] is not None), None)
-        last_valid = None
-        for i in range(max_length):
-            if values_seq[i] is not None:
-                last_valid = i
-            elif last_valid is not None:
-                values_seq[i] = values_seq[last_valid]
-
-        if first_valid is not None:
-            for i in range(first_valid):
-                values_seq[i] = values_seq[first_valid]
-
-        # 构建输出 tensor
-        value_tensor = torch.tensor(values_seq, dtype=torch.float32).unsqueeze(0).unsqueeze(-1)
-
-        # 将 value_tensor 转换为 np.array
-        value_array = np.array(value_tensor.squeeze().tolist(), dtype=np.float32)
-
-        # 转换为 int 类型的 np.array
-        values_int_array = np.array([int(val) if val is not None else 0 for val in values_seq], dtype=np.int32)
-
-        # 绘图使用实际数值
-        curve_img = generate_value_curve_image_with_data(values_seq, max_length, frame_methods)
-
-        # 修改返回值，使用 np.array
-        return (value_array, curve_img)
-
-
-
 
 COLOR_CHOICES = ["red", "green", "blue", "yellow", "orange", "purple", "pink", "brown", "gray"]
 
-class AD_sch_image_merge:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "data1": ("FLOAT", {"forceInput": True}),
-                "data2": ("FLOAT", {"forceInput": True}),
-                "color1": (COLOR_CHOICES, {"default": "red"}),
-                "color2": (COLOR_CHOICES, {"default": "green"})
-            },
-            "optional": {
-                "data3": ("FLOAT", {"forceInput": True}),
-                "data4": ("FLOAT", {"forceInput": True}),
-                "color3": (COLOR_CHOICES, {"default": "blue"}),
-                "color4": (COLOR_CHOICES, {"default": "yellow"})
-            }
-        }
-
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("merged_graph",)
-    FUNCTION = "generate_multi_value_image"
-    CATEGORY = "Apt_Preset/AD/😺backup"
-
-    def generate_multi_value_image(self, data1, data2, color1, color2, data3=None, data4=None, color3=None, color4=None):
-
-
-        # 存储所有输入数据和对应颜色
-        data_list = [data1, data2]
-        color_list = [color1, color2]
-
-        if data3 is not None:
-            data_list.append(data3)
-            color_list.append(color3)
-        if data4 is not None:
-            data_list.append(data4)
-            color_list.append(color4)
-
-        # 过滤出可迭代对象并计算最大长度
-        iterable_data = [data for data in data_list if isinstance(data, collections.abc.Iterable) and not isinstance(data, (str, bytes))]
-        if iterable_data:
-            max_length = max(len(data) for data in iterable_data)
-        else:
-            max_length = 1  # 如果没有可迭代对象，设置默认长度为 1
-
-        plt.figure(figsize=(12, 6))
-
-        # 绘制每条曲线
-        for i, data in enumerate(data_list):
-            if isinstance(data, collections.abc.Iterable) and not isinstance(data, (str, bytes)):
-                y = [v if v is not None else 0.0 for v in data]
-                plt.plot(range(len(y)), y, marker='o', linestyle='-', markersize=3, color=color_list[i], label=f"Data {i + 1}")
-            else:
-                # 处理单个数值的情况
-                plt.axhline(y=data, color=color_list[i], label=f"Data {i + 1}")
-
-        plt.title("Multiple Interpolated Value Curves per Frame")
-        plt.xlabel("Frame Index")
-        plt.ylabel("Value")
-        plt.grid(True)
-        plt.legend(loc="upper left")
-
-        buffer = BytesIO()
-        plt.savefig(buffer, format='png')
-        plt.close()
-        buffer.seek(0)
-        image = Image.open(buffer)
-
-        def pil2tensor(image):
-            return torch.from_numpy(np.array(image).astype(np.float32) / 255.0).unsqueeze(0)
-
-        return (pil2tensor(image),)
 
 
 
@@ -1037,7 +804,7 @@ from comfy_extras.nodes_audio import load as load_audio
 from comfy_execution.graph import ExecutionBlocker
 from comfy_extras.nodes_custom_sampler import BasicGuider, KSamplerSelect, RandomNoise, SplitSigmas
 from comfy_extras.nodes_lt import LTXVSeparateAVLatent
-from nodes import VAEDecode
+from nodes import ConditioningZeroOut, VAEDecode
 from ..office_unit import BasicScheduler
 from ..NodeChx.main_nodes import basic_Ksampler_custom, AD_CreateVideo, _apt_default_positive, _apt_replace_av_video_latent, _apt_second_pass_positive
 from .C_latent import latent_minimaxH3_scale
@@ -1061,8 +828,8 @@ class AD_In_VideoSplit(io.ComfyNode):
                 io.Int.Input("select_every_nth", default=1, min=1, max=2**53 - 1, step=1, display_mode=io.NumberDisplay.number),
             ],
             outputs=[
-                io.Video.Output(display_name="VIDEO"),
-                io.Image.Output(display_name="IMAGE"),
+                io.Video.Output(display_name="video"),
+                io.Image.Output(display_name="image"),
                 io.Audio.Output(display_name="audio"),
             ],
         )
@@ -2276,6 +2043,7 @@ from .minimaxH3 import (
     h3_keyframe_anchor,
     h3_export_video_tail,
 )
+from .selflift_h3 import AD_selfliftH3_Sampler
 
 # 复用 H3 节点工具函数（若 comfy_extras 中不存在 H3 模块则全部置空，节点将在执行时报错）
 try:
@@ -4323,7 +4091,7 @@ class _AD_MinMaxBase:
                       motion_context_frames=_AD_GUIDE_CONTEXT_LENGTH, sampling_policy=None,
                       vae_tile="default", sample_tiled=False, tile_count=2,
                       overlap_pixels=128, bridge_seams=False,
-                      sigmas=None, create_video=True):
+                      sigmas=None, create_video=True, selflift_options=None):
         node_name = type(self).__name__
         context_frames = int(motion_context_frames)
         trim_frames = context_frames if has_context_latent else 0
@@ -4331,7 +4099,12 @@ class _AD_MinMaxBase:
             context, model=model, positive=positive, latent=latent
         )
         if not create_video:
-            if sample_tiled:
+            if selflift_options is not None:
+                sampled_context, denoised_latent = self._selflift_sample(
+                    guide_context, seed, latent, sigmas, vae_tile,
+                    selflift_options, sampling_policy, decode_images=False,
+                )
+            elif sample_tiled:
                 sampled_context, denoised_latent = self._tiled_euler_sample(
                     guide_context, seed, latent=latent, sigmas=sigmas,
                     sampling_policy=sampling_policy, vae_tile=vae_tile,
@@ -4381,6 +4154,12 @@ class _AD_MinMaxBase:
                 second_context, seed, latent=scaled_latent, sigmas=low_sigmas,
                 sampling_policy=sampling_policy, vae_tile=vae_tile,
             )
+        elif selflift_options is not None:
+            sampled_context, first_denoise_latent = self._selflift_sample(
+                guide_context, seed, latent, sigmas, vae_tile,
+                selflift_options, sampling_policy, decode_images=True,
+            )
+            final_denoise_latent = first_denoise_latent
         elif sample_tiled:
             sampled_context, first_denoise_latent = self._tiled_euler_sample(
                 guide_context, seed, latent=latent, sigmas=sigmas,
@@ -6223,7 +6002,7 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
                                  unique_id=None, workflow_prompt=None,
                                  merged_output_slot=2, create_video=True,
                                  retain_images_in_context=True,
-                                 bridge_channel="data1"):
+                                 bridge_channel="data1", selflift_options=None):
         """Run the first pass and video export from a prepared Ref2 context."""
         # 外部 model / latent 一旦接入就覆盖 context 里的，输出 context 同步写回新的
         if model is not None:
@@ -6258,6 +6037,13 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
 
         active_model = prepared_context.get("model")
         positive = prepared_context.get("positive")
+        if selflift_options is not None:
+            sampling_signature += (
+                f"|selflift:{json.dumps(selflift_options, sort_keys=True, ensure_ascii=False)}"
+                f"|sampler:{prepared_context.get('sampler')}|cfg:{prepared_context.get('cfg')}"
+                f"|scheduler:{prepared_context.get('scheduler')}|steps:{prepared_context.get('steps')}"
+                f"|vae_tile:{vae_tile}"
+            )
         seed = int(seed)
         fps = float(fps)
         has_context_latent = bool(sample_state.get("has_context_latent", False))
@@ -6371,6 +6157,7 @@ class AD_MinMax_Ref2_generate(_AD_MinMaxBase, _AD_MinMaxRef2GuideBase):
             bridge_seams=bridge_seams,
             sigmas=sigmas,
             create_video=create_video,
+            selflift_options=selflift_options,
         )
         if isinstance(denoise_latent1, collections.abc.Mapping):
             denoise_latent1 = dict(denoise_latent1)
@@ -6503,7 +6290,7 @@ class AD_MiniMax_guide(AD_MinMax_Ref2_generate):
 
     RETURN_TYPES = ("CONDITIONING", "LATENT", "STRING")
     RETURN_NAMES = ("positive", "latent", "text")
-    CATEGORY = "Apt_Preset/AD"
+    CATEGORY = "Apt_Preset/AD/😺backup"
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -6967,7 +6754,7 @@ class AD_MinMax_Ref2_generate_refine(_AD_MinMaxBase):
 
 
 class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_generate):
-    """Unified Ref2 sampler: one node type, sample_mode selects base or refine.
+    """Unified Ref2 sampler: one node type, sample_mode selects the sampling path.
 
     stage_info_data carries stage_info_channel (data1/data2/data3) which decides
     the save mark and history channel. No workflow node id or output slot is used.
@@ -6981,12 +6768,48 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
     FUNCTION = "execute"
     CATEGORY = "Apt_Preset/AD"
 
+    @staticmethod
+    def _selflift_sample(context, seed, latent, sigmas, vae_tile, options,
+                         sampling_policy, decode_images):
+        model = context.get("model")
+        vae = context.get("vae")
+        positive = _apt_default_positive(context.get("positive"), context.get("clip"))
+        missing = [name for name, value in (
+            ("model", model), ("vae", vae), ("positive", positive),
+            ("sampler", context.get("sampler")), ("cfg", context.get("cfg")),
+        ) if value is None]
+        if missing:
+            raise ValueError(f"AD_MinMax_Ref2_sample selflift context is missing: {', '.join(missing)}")
+        if sigmas is None:
+            if context.get("steps") is None or context.get("scheduler") is None:
+                raise ValueError("AD_MinMax_Ref2_sample selflift needs steps and scheduler without SIGMAS")
+            sigmas = BasicScheduler().get_sigmas(
+                model, context.get("scheduler"), int(context.get("steps")), 1.0
+            )[0]
+        if sampling_policy is not None:
+            guider = BasicGuider().get_guider(model, positive)[0]
+            model = model.clone()
+            model.model_options = _ad_h3_wrap_guider(guider, sampling_policy, latent).model_options
+        sampler = KSamplerSelect().get_sampler(context.get("sampler"))[0]
+        negative = ConditioningZeroOut().zero_out(positive)[0]
+        with _ad_h3_vae_tile_scope(vae, vae_tile):
+            denoised = AD_selfliftH3_Sampler().sample(
+                model=model, positive=positive, negative=negative, vae=vae,
+                latent_image=latent, sampler=sampler, sigmas=sigmas,
+                seed=int(seed), cfg=float(context.get("cfg")), **options,
+            )[0]
+            images = VAEDecode().decode(vae, denoised)[0] if decode_images else None
+        sampled_context = new_context(context, positive=positive, latent=denoised, images=images)
+        if not decode_images:
+            sampled_context["images"] = None
+        return sampled_context, denoised
+
     @classmethod
     def VALIDATE_INPUTS(cls, sample_mode="base", refine_model="None", latent_model="", sampling_profile="None"):
         profile_result = super().VALIDATE_INPUTS(sampling_profile=sampling_profile)
         if profile_result is not True:
             return profile_result
-        if sample_mode not in ("base", "pixel_refine", "latent_refine"):
+        if sample_mode not in ("base", "pixel_refine", "latent_refine", "selflift"):
             return f"Unknown Ref2 sample mode: {sample_mode}"
         if sample_mode == "pixel_refine" and refine_model != "None":
             if refine_model not in folder_paths.get_filename_list("upscale_models"):
@@ -7010,8 +6833,8 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
             }),
             "seed": _ad_fixed_seed_input(),
             "sample_mode": (
-                ["base", "pixel_refine", "latent_refine"],
-                {"default": "base", "tooltip": "base：基础采样（非放大）；pixel_refine：图像域放大精修；latent_refine：潜空间放大精修。"},
+                ["base", "pixel_refine", "latent_refine", "selflift"],
+                {"default": "base", "tooltip": "base：基础采样；pixel_refine：图像域放大精修；latent_refine：潜空间放大精修；selflift：低分辨率前段采样后升至目标尺寸。"},
             ),
         }
         controls = {}
@@ -7056,6 +6879,11 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
                 "tooltip": "关闭后仅输出latent，不输出视频",
             },
         )
+        selflift_inputs = AD_selfliftH3_Sampler.INPUT_TYPES()
+        for name in ("transition_step", "lowres_scale", "rho", "w_min", "w_max", "upscaler_model"):
+            required[name] = selflift_inputs["required"][name]
+        for name in ("highres_tiling", "upscaler_unload"):
+            required[name] = selflift_inputs["optional"][name]
         return {
             "required": required,
             "optional": {
@@ -7072,14 +6900,17 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
                 latent_scale, low_sigma_start_step, sampling_profile="None",
                 VAE_TILE="None", latent_sample_tile="None",
                 create_video=True,
-                 stage_info_data=None, model=None, latent=None, sigmas=None,
-                unique_id=None, workflow_prompt=None):
+                stage_info_data=None, model=None, latent=None, sigmas=None,
+                unique_id=None, workflow_prompt=None,
+                transition_step=6, lowres_scale=0.5, rho=0.0,
+                w_min=0.5, w_max=1.0, upscaler_model="none",
+                highres_tiling=False, upscaler_unload=True):
         if context is None:
             blocker = ExecutionBlocker(None)
             return blocker, blocker, blocker, blocker, blocker
 
         vae_tile_profile = "default" if VAE_TILE == "None" else VAE_TILE
-        latent_tile_key = latent_sample_tile
+        latent_tile_key = "None" if sample_mode == "selflift" else latent_sample_tile
 
         channel = None
         run_id, stage_index, total = None, 0, 1
@@ -7087,10 +6918,10 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
             channel = stage_info_data.get("stage_info_channel")
             run_id, stage_index, total = _ad_stage_info(stage_info_data)
 
-        if sample_mode == "base":
+        if sample_mode in ("base", "selflift"):
             if channel is not None and channel not in ("data1", "data2", "data3"):
                 raise ValueError(
-                    f"AD_MinMax_Ref2_sample: sample_mode=base requires "
+                    f"AD_MinMax_Ref2_sample: sample_mode={sample_mode} requires "
                     f"a valid stage_info_channel, got {channel}"
                 )
             channel = channel or "data1"
@@ -7109,15 +6940,20 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
             raise ValueError(f"AD_MinMax_Ref2_sample: invalid sample_mode: {sample_mode}")
 
         # ---- First pass: reuse the full first-pass sampling path ----
-        if sample_mode == "base":
+        if sample_mode in ("base", "selflift"):
             prepared = context
-            lat = prepared.get("latent")
+            lat = latent if sample_mode == "selflift" and latent is not None else prepared.get("latent")
             if not isinstance(lat, collections.abc.Mapping):
                 raise ValueError("AD_MinMax_Ref2_sample needs a latent produced by AD_MinMax_Ref2")
             ss = lat.get("apt_h3_ref2_sample_state")
             if not isinstance(ss, collections.abc.Mapping):
                 raise ValueError("AD_MinMax_Ref2_sample context is missing first-pass sampling state")
             ss = dict(ss)
+            if sample_mode == "selflift" and (
+                ss.get("continuation_method") == "native_redraw_av"
+                or lat.get("apt_h3_native_mask_mode") == "redraw"
+            ):
+                raise ValueError("AD_MinMax_Ref2_sample selflift: use none, guide_22 or guide_39 motion context instead of native_39")
             prepared_stage_index = int(ss.get("stage_index", 0))
             if isinstance(stage_info_data, collections.abc.Mapping):
                 if prepared_stage_index != stage_index:
@@ -7163,13 +6999,27 @@ class AD_MinMax_Ref2_sample(AD_MinMax_Ref2_generate_refine, AD_MinMax_Ref2_gener
             lat = dict(lat)
             lat["apt_h3_ref2_sample_state"] = ss
             prepared = new_context(prepared, latent=lat)
+            selflift_options = None
+            if sample_mode == "selflift":
+                selflift_options = {
+                    "transition_step": int(transition_step),
+                    "lowres_scale": float(lowres_scale),
+                    "rho": float(rho),
+                    "w_min": float(w_min),
+                    "w_max": float(w_max),
+                    "upscaler_model": upscaler_model,
+                    "highres_tiling": bool(highres_tiling),
+                    "upscaler_unload": bool(upscaler_unload),
+                }
             sampled_context, sample_latent, video, merged_video = self._sample_prepared_context(
                 prepared, fps=fps, seed=seed, sampling_profile=sampling_profile,
                 vae_tile=vae_tile_profile, latent_sample_tile=latent_tile_key,
-                sigmas=sigmas, model=model, latent=latent,
+                sigmas=sigmas, model=model, latent=lat if sample_mode == "selflift" else latent,
                 unique_id=unique_id, workflow_prompt=workflow_prompt,
                 create_video=bool(create_video),
                 bridge_channel=channel,
+                merged_output_slot=3,
+                selflift_options=selflift_options,
             )
             segment_image = (
                 video.get_components().images

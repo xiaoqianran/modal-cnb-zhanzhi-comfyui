@@ -964,43 +964,25 @@
     }
   },
   "sum_lora": {
-    "display_name": "sum_LoRA",
+    "display_name": "sum_lora",
     "inputs": {
       "context": {
         "name": "context"
-      },
-      "lora_01": {
-        "name": "LoRA_01"
-      },
-      "strength_01": {
-        "name": "强度_01"
-      },
-      "lora_02": {
-        "name": "LoRA_02"
-      },
-      "strength_02": {
-        "name": "强度_02"
-      },
-      "lora_03": {
-        "name": "LoRA_03"
-      },
-      "strength_03": {
-        "name": "强度_03"
       },
       "model": {
         "name": "模型"
       },
       "clip": {
-        "name": "clip"
+        "name": "CLIP"
       },
-      "pos": {
-        "name": "正向提示词"
+      "lora_name_1": {
+        "name": "LoRA_1"
       },
-      "neg": {
-        "name": "负向提示词"
+      "strength_1": {
+        "name": "强度_1"
       },
-      "style": {
-        "name": "风格"
+      "enabled_1": {
+        "name": "启用_1"
       }
     },
     "outputs": {
@@ -1008,10 +990,10 @@
         "name": "context"
       },
       "1": {
-        "name": "正向条件"
+        "name": "模型"
       },
       "2": {
-        "name": "负向条件"
+        "name": "CLIP"
       }
     }
   },
@@ -1030,8 +1012,8 @@
       "ipa_stack": {
         "name": "IPA堆栈"
       },
-      "redux_stack": {
-        "name": "Redux堆栈"
+      "text_stack": {
+        "name": "文本堆栈"
       },
       "condi_stack": {
         "name": "条件堆栈"
@@ -1041,9 +1023,6 @@
       },
       "cn_stack": {
         "name": "ControlNet堆栈"
-      },
-      "inpaint": {
-        "name": "内绘"
       },
       "latent_stack": {
         "name": "latent堆栈"
@@ -1457,21 +1436,14 @@
       "fade": {
         "name": "淡化"
       },
-      "smooth": {
-        "name": "平滑"
-      },
       "cfg_scale_override": {
         "name": "CFG缩放覆盖"
       }
-    },
-    "outputs": {
-      "0": {
-        "name": "输出0"
-      }
     }
   },
-  "Scheduler_CondNoise": {
-    "display_name": "Scheduler_条件噪声",
+
+  "condi_add_Noise": {
+    "display_name": "Cond_条件噪声",
     "inputs": {
       "conditioning": {
         "name": "条件"
@@ -2191,7 +2163,7 @@
       }
     }
   },
-  "pre_mul_Mulcondi": {
+  "condi_mul_Mulcondi": {
     "display_name": "pre_多条件",
     "inputs": {
       "context": {
@@ -2255,7 +2227,7 @@
       }
     }
   },
-  "pre_advanced_condi_merge": {
+  "condi_advanced_merge": {
     "display_name": "pre_高级条件融合",
     "inputs": {
       "main_cond": {
@@ -2295,11 +2267,14 @@
       }
     }
   },
-  "pre_latent_light": {
-    "display_name": "pre_latent光照",
+  "latent_mix2latent": {
+    "display_name": "latent_mix2latent",
     "inputs": {
       "context": {
         "name": "context"
+      },
+      "mix_mode": {
+        "name": "混合模式"
       },
       "weigh": {
         "name": "权重"
@@ -3612,188 +3587,6 @@
       }
     }
   },
-  "AD_sch_prompt_adv": {
-    "display_name": "AD_高级调度提示词",
-    "inputs": {
-      "context": {
-        "name": "context"
-      },
-      "text1": {
-        "name": "文本1"
-      },
-      "keyframe1": {
-        "name": "关键帧1"
-      },
-      "interpolation_method1": {
-        "name": "插值方法1"
-      },
-      "text2": {
-        "name": "文本2"
-      },
-      "keyframe2": {
-        "name": "关键帧2"
-      },
-      "interpolation_method2": {
-        "name": "插值方法2"
-      },
-      "text3": {
-        "name": "文本3"
-      },
-      "keyframe3": {
-        "name": "关键帧3"
-      },
-      "interpolation_method3": {
-        "name": "插值方法3"
-      },
-      "text4": {
-        "name": "文本4"
-      },
-      "keyframe4": {
-        "name": "关键帧4"
-      },
-      "interpolation_method4": {
-        "name": "插值方法4"
-      },
-      "text5": {
-        "name": "文本5"
-      },
-      "keyframe5": {
-        "name": "关键帧5"
-      },
-      "interpolation_method5": {
-        "name": "插值方法5"
-      },
-      "text6": {
-        "name": "文本6"
-      },
-      "keyframe6": {
-        "name": "关键帧6"
-      },
-      "interpolation_method6": {
-        "name": "插值方法6"
-      },
-      "schedule": {
-        "name": "调度"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "关键帧条件"
-      },
-      "1": {
-        "name": "调度"
-      }
-    }
-  },
-  "AD_sch_prompt_stack": {
-    "display_name": "AD_调度提示词堆栈",
-    "inputs": {
-      "prompts": {
-        "name": "提示词"
-      },
-      "easing_type": {
-        "name": "缓动类型"
-      },
-      "max_length": {
-        "name": "最大长度"
-      },
-      "f_text": {
-        "name": "前文本"
-      },
-      "b_text": {
-        "name": "后文本"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "提示词堆栈"
-      }
-    }
-  },
-  "AD_sch_latent": {
-    "display_name": "AD_调度latent",
-    "inputs": {
-      "text": {
-        "name": "文本"
-      },
-      "max_frames": {
-        "name": "最大帧数"
-      },
-      "easing_type": {
-        "name": "缓动类型"
-      },
-      "prev_latent_kf": {
-        "name": "前一latent关键帧"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "latent关键帧"
-      },
-      "1": {
-        "name": "图表"
-      }
-    }
-  },
-  "AD_sch_value": {
-    "display_name": "AD_调度值",
-    "inputs": {
-      "values": {
-        "name": "值"
-      },
-      "easing_type": {
-        "name": "缓动类型"
-      },
-      "max_length": {
-        "name": "最大长度"
-      },
-      "scale_factor": {
-        "name": "缩放因子"
-      },
-      "offset": {
-        "name": "偏移"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "数据"
-      },
-      "1": {
-        "name": "图表"
-      }
-    }
-  },
-  "AD_sch_prompt_basic": {
-    "display_name": "AD_基础调度提示词",
-    "inputs": {
-      "clip": {
-        "name": "CLIP"
-      },
-      "prompts": {
-        "name": "提示词"
-      },
-      "easing_type": {
-        "name": "缓动类型"
-      },
-      "max_length": {
-        "name": "最大长度"
-      },
-      "f_text": {
-        "name": "前文本"
-      },
-      "b_text": {
-        "name": "后文本"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "正向条件"
-      },
-      "1": {
-        "name": "图表"
-      }
-    }
-  },
   "AD_sch_mask_weigh": {
     "display_name": "AD_调度遮罩权重",
     "inputs": {
@@ -3822,40 +3615,9 @@
       }
     }
   },
-  "AD_sch_image_merge": {
-    "display_name": "AD_调度图像合并",
-    "inputs": {
-      "data1": {
-        "name": "数据1"
-      },
-      "data2": {
-        "name": "数据2"
-      },
-      "color1": {
-        "name": "颜色1"
-      },
-      "color2": {
-        "name": "颜色2"
-      },
-      "data3": {
-        "name": "数据3"
-      },
-      "data4": {
-        "name": "数据4"
-      },
-      "color3": {
-        "name": "颜色3"
-      },
-      "color4": {
-        "name": "颜色4"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "合并图表"
-      }
-    }
-  },
+
+
+
   "AD_DrawSchedule": {
     "display_name": "AD_绘制调度",
     "inputs": {
@@ -3875,28 +3637,9 @@
       }
     }
   },
-  "AD_slice_Condi": {
-    "display_name": "AD_切片条件",
-    "inputs": {
-      "keyframed_condition": {
-        "name": "关键帧条件"
-      },
-      "schedule": {
-        "name": "调度"
-      },
-      "offset": {
-        "name": "偏移"
-      },
-      "total_flame": {
-        "name": "总帧数"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "正向条件"
-      }
-    }
-  },
+
+
+ 
   "AD_MaskExpandBatch": {
     "display_name": "AD_遮罩扩展批次",
     "inputs": {
@@ -4424,20 +4167,11 @@
     "inputs": {
       "image": {
         "name": "图像"
-      },
-      "image_output": {
-        "name": "图像输出"
-      },
-      "release_total": {
-        "name": "释放总数"
       }
     },
     "outputs": {
       "0": {
         "name": "图像"
-      },
-      "1": {
-        "name": "释放总数"
       }
     }
   },
@@ -4873,6 +4607,9 @@
       "context": {
         "name": "context"
       },
+      "clip": {
+        "name": "CLIP"
+      },
       "main_prompt_ratio": {
         "name": "整体prompt占比"
       },
@@ -5016,8 +4753,8 @@
       "schedule": {
         "name": "调度"
       },
-      "current_frame": {
-        "name": "当前帧"
+      "current_index": {
+        "name": "current_index"
       },
       "easing_type": {
         "name": "缓动类型"
@@ -5025,16 +4762,16 @@
     },
     "outputs": {
       "0": {
-        "name": "整数"
+        "name": "index_int"
       },
       "1": {
-        "name": "浮点数"
+        "name": "index_float"
       },
       "2": {
-        "name": "权重"
+        "name": "list_int"
       },
       "3": {
-        "name": "长度"
+        "name": "list_float"
       }
     }
   },
@@ -5044,22 +4781,16 @@
       "keyframe_list": {
         "name": "关键帧列表"
       },
-      "current_frame": {
-        "name": "当前帧"
-      },
-      "easing_type": {
-        "name": "缓动类型"
+      "current_index": {
+        "name": "current_index"
       }
     },
     "outputs": {
       "0": {
-        "name": "当前提示词"
+        "name": "index_prompt"
       },
       "1": {
-        "name": "下一个提示词"
-      },
-      "2": {
-        "name": "权重"
+        "name": "list_prompt"
       }
     }
   },
@@ -5069,8 +4800,8 @@
       "text": {
         "name": "文本"
       },
-      "current_frame": {
-        "name": "当前帧"
+      "index": {
+        "name": "index"
       },
       "preset": {
         "name": "预设"
@@ -5081,51 +4812,17 @@
     },
     "outputs": {
       "0": {
-        "name": "分割文本"
+        "name": "index_text"
       },
       "1": {
-        "name": "长度"
+        "name": "list_text"
       }
     }
   },
-  "sch_mask": {
-    "display_name": "sch_遮罩",
-    "inputs": {
-      "masks": {
-        "name": "遮罩"
-      },
-      "current_frame": {
-        "name": "当前帧"
-      },
-      "max_frames": {
-        "name": "最大帧数"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "选中遮罩"
-      }
-    }
-  },
-  "sch_image": {
-    "display_name": "sch_图像",
-    "inputs": {
-      "images": {
-        "name": "图像"
-      },
-      "current_frame": {
-        "name": "当前帧"
-      },
-      "max_frames": {
-        "name": "最大帧数"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "选中图像"
-      }
-    }
-  },
+
+
+
+
   "type_AnyIndex": {
     "display_name": "type_任意索引",
     "inputs": {
@@ -5164,8 +4861,8 @@
       "schedule": {
         "name": "调度"
       },
-      "max_frames": {
-        "name": "最大帧数"
+      "max_index": {
+        "name": "max_index"
       },
       "easing_type": {
         "name": "缓动类型"
@@ -5177,9 +4874,6 @@
       },
       "1": {
         "name": "整数"
-      },
-      "2": {
-        "name": "权重"
       }
     }
   },
@@ -5374,11 +5068,11 @@
       }
     }
   },
-  "list_ListSlice": {
-    "display_name": "list_列表切片",
+  "list_Slice": {
+    "display_name": "list_Slice",
     "inputs": {
-      "ANY": {
-        "name": "任意"
+      "list": {
+        "name": "list"
       },
       "start": {
         "name": "开始"
@@ -5393,17 +5087,8 @@
       }
     }
   },
-  "list_MergeList": {
-    "display_name": "list_合并列表",
-    "inputs": {},
-    "outputs": {
-      "0": {
-        "name": "输出0"
-      }
-    }
-  },
-  "list_num_range": {
-    "display_name": "list_数字范围",
+  "list_value_range": {
+    "display_name": "list_value_range",
     "inputs": {
       "start": {
         "name": "开始"
@@ -5411,8 +5096,8 @@
       "stop": {
         "name": "停止"
       },
-      "num": {
-        "name": "数量"
+      "total": {
+        "name": "total"
       }
     },
     "outputs": {
@@ -5442,19 +5127,11 @@
     },
     "outputs": {
       "0": {
-        "name": "数组"
+        "name": "data"
       }
     }
   },
-  "array_Merge": {
-    "display_name": "array_合并数组",
-    "inputs": {},
-    "outputs": {
-      "0": {
-        "name": "数组"
-      }
-    }
-  },
+
   "pack_Pack": {
     "display_name": "pack_打包",
     "inputs": {},
@@ -5532,7 +5209,7 @@
       }
     }
   },
-  "latent_chx_noise": {
+  "latent_image2noise": {
     "display_name": "latent_通道噪声",
     "inputs": {
       "images": {
@@ -5600,7 +5277,7 @@
       }
     }
   },
-  "chx_latent_adjust": {
+  "latent_chx_adjust": {
     "display_name": "chx_latent调整",
     "inputs": {
       "brightness": {
@@ -7570,40 +7247,7 @@
       }
     }
   },
-  "Image_target_adjust": {
-    "display_name": "Image_目标面积调整",
-    "inputs": {
-      "image": {
-        "name": "图像"
-      },
-      "target_width": {
-        "name": "目标宽度"
-      },
-      "target_height": {
-        "name": "目标高度"
-      },
-      "multiple": {
-        "name": "倍数"
-      },
-      "upscale_method": {
-        "name": "放大方法"
-      },
-      "adjustment_method": {
-        "name": "调整方法"
-      },
-      "region_position": {
-        "name": "区域位置"
-      },
-      "pad_background": {
-        "name": "填充背景"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "输出0"
-      }
-    }
-  },
+  
   "Image_Resize_longsize": {
     "display_name": "Image_长边缩放",
     "inputs": {
@@ -7863,7 +7507,7 @@
   },
 
   "lay_edge_cut": {
-    "display_name": "lay_边缘分割",
+    "display_name": "lay_单图_分割多图",
     "inputs": {
       "image": {
         "name": "图像"
@@ -7894,7 +7538,7 @@
 
 
   "lay_text_sum": {
-    "display_name": "lay_文本总排版",
+    "display_name": "lay_单文本排版",
     "inputs": {
       "image": {
         "name": "图像"
@@ -7943,7 +7587,7 @@
     }
   },
   "lay_text_sum_mul": {
-    "display_name": "lay_多文本总排版",
+    "display_name": "lay_多文本排版",
     "inputs": {
       "image": {
         "name": "图像"
@@ -7988,51 +7632,14 @@
       }
     }
   },
-  "lay_images_free_layout": {
-    "display_name": "lay_图像自由排版",
-    "inputs": {
-      "page_width": {
-        "name": "页面宽度"
-      },
-      "page_height": {
-        "name": "页面高度"
-      },
-      "template": {
-        "name": "模板"
-      },
-      "border_thickness": {
-        "name": "边框厚度"
-      },
-      "outline_thickness": {
-        "name": "轮廓厚度"
-      },
-      "outline_color": {
-        "name": "轮廓颜色"
-      },
-      "panel_color": {
-        "name": "面板颜色"
-      },
-      "bg_color": {
-        "name": "背景颜色"
-      },
-      "images": {
-        "name": "图像"
-      },
-      "custom_panel_layout": {
-        "name": "自定义面板布局"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "图像"
-      }
-    }
-  },
+
+
+
   "lay_image_grid_note": {
-    "display_name": "lay_图片网格注释",
+    "display_name": "lay_多图_网格排版",
     "inputs": {
       "images": {
-        "name": "图像"
+        "name": "批次图像"
       },
       "rows": {
         "name": "行数"
@@ -8062,8 +7669,11 @@
       }
     }
   },
+
+
+
   "lay_mul_image": {
-    "display_name": "lay_多图像布局",
+    "display_name": "lay_多图_合并排版",
     "inputs": {
       "sub_team_direction": {
         "name": "子团队方向"
@@ -8118,25 +7728,6 @@
       },
       "border": {
         "name": "边框"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "图像"
-      }
-    }
-  },
-  "lay_ImageGrid": {
-    "display_name": "lay_图像网格",
-    "inputs": {
-      "batch_img": {
-        "name": "批次图像"
-      },
-      "rows": {
-        "name": "行数"
-      },
-      "cols": {
-        "name": "列数"
       }
     },
     "outputs": {
@@ -11311,42 +10902,7 @@
     },
     "outputs": {}
   },
-  "type_Image_List2Batch_adv": {
-    "display_name": "type_图像列表转批次adv",
-    "inputs": {
-      "image_list": {
-        "name": "图像列表"
-      },
-      "mode": {
-        "name": "尺寸模式"
-      },
-      "alignment": {
-        "name": "对齐方式"
-      },
-      "width": {
-        "name": "宽度"
-      },
-      "height": {
-        "name": "高度"
-      },
-      "background_color": {
-        "name": "背景颜色"
-      }
-    },
-    "outputs": {
-      "0": {
-        "name": "图像批次"
-      },
-      "1": {
-        "name": "新图像列表"
-      }
-    }
-  },
-  "IO_EasyMark": {
-    "display_name": "IO_简易打标记",
-    "inputs": {},
-    "outputs": {}
-  },
+
 
 
   "IO_LoadTextBatch": {
@@ -11643,20 +11199,8 @@
       "preset": {
         "name": "预设表达式"
       },
-      "custom_regex": {
-        "name": "自定义表达式"
-      },
-      "preview_test_text": {
-        "name": "预测试文本"
-      },
-      "keyword": {
-        "name": "关键词"
-      },
       "ignore_case": {
         "name": "忽略大小写"
-      },
-      "escape_special_chars": {
-        "name": "转义特殊字符"
       }
     },
     "outputs": {
@@ -11664,7 +11208,7 @@
         "name": "正则表达式"
       },
       "1": {
-        "name": "规则测试"
+        "name": "规则说明"
       }
     }
   },
@@ -12148,7 +11692,7 @@
     }
 },
 
-"basicIn_Vedio": {
+"basicIn_Vedio_Params": {
     "display_name": "basicIn_视频",
     "inputs": {
         "width": {
@@ -12890,20 +12434,38 @@
   },
 
 
-"sum_QwenImage2": {
-    "display_name": "sum_QwenImage2",
+"sum_qwenImage21": {
+    "display_name": "sum_qwenImage21",
     "inputs": {
-        "ref_size_mode": {
-            "name": "参考图尺寸"
-        },
         "resolution": {
-            "name": "基准分辨率"
+            "name": "分辨率"
         },
         "prompt_enhance": {
             "name": "提示词增强"
         },
-        "output_size": {
-            "name": "输出尺寸"
+        "negative_prompt": {
+            "name": "负面词"
+        }
+
+    },
+    "outputs": {
+      
+    }
+},
+
+
+
+"sum_Flux3_Image": {
+    "display_name": "sum_Flux3_Image",
+    "inputs": {
+        "resolution": {
+            "name": "分辨率"
+        },
+        "prompt_enhance": {
+            "name": "提示词增强"
+        },       
+        "negative_prompt": {
+            "name": "负面词"
         }
 
     },

@@ -22,7 +22,8 @@ class NativeProgressiveMaskContract:
 
         base = model.model
         if type(base) is not comfy.model_base.MiniMaxH3:
-            raise ValueError('Initialized EAV mask contract requires native H3')
+            from .patch_stack_policy import warn_patch_stack
+            warn_patch_stack('EAV mask keeps the selected MODEL; checking its actual AV shapes')
         self._shapes = (tuple(video_shape), tuple(audio_shape))
         self._long_video = None
         if continuation is not None and accepted_source is not None:

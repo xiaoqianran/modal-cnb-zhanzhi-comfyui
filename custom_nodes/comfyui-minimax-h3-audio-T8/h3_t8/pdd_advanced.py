@@ -794,14 +794,9 @@ def build_pdd_8step_setup(
     contract = inspect_pdd_adapter(pdd_lora_path, base_variant)
     diffusion = model.get_model_object("diffusion_model")
     if diffusion.__class__.__name__ != "MiniMaxH3Model":
-        raise TypeError(
-            "MiniMax H3 PDD requires ComfyUI's native MiniMaxH3Model MODEL."
-        )
+        warn_patch_stack("PDD received another MODEL class; checking actual adapter dimensions")
     if hasattr(diffusion, "adaln_t_table"):
-        raise ValueError(
-            "MiniMax H3 PDD does not support pruned/AdaLN-curve bases. Select "
-            "the matching full non-pruned FL2VA or Ref2VA model."
-        )
+        warn_patch_stack("PDD on an AdaLN-curve base is unverified; retaining the selected base")
     adaln = diffusion.blocks[0].adaln_proj.linear.weight
     if int(adaln.shape[1]) != 2688:
         raise ValueError(

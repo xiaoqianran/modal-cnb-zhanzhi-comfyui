@@ -50,7 +50,7 @@ const dynamic_connection = (node, index, event, prefix = 'in_', type = '*', name
     }
 }
 
-const registerDynamicValueInputs = (nodeType, { fixedInputs = 0, lockType = false, syncOutput = false } = {}) => {
+const registerDynamicValueInputs = (nodeType, { fixedInputs = 0, lockType = false, syncOutput = false, allowMixed = false } = {}) => {
     const updateType = (node, connectedType = null) => {
         if (!lockType) {
             return
@@ -102,7 +102,7 @@ const registerDynamicValueInputs = (nodeType, { fixedInputs = 0, lockType = fals
             this.inputs[slot].type = connectedType
         }
 
-        dynamic_connection(this, slot, event, `${_prefix}_`, connectedType || '*', [], fixedInputs)
+        dynamic_connection(this, slot, event, `${_prefix}_`, allowMixed ? '*' : connectedType || '*', [], fixedInputs)
         updateType(this, connectedType)
 
         if (!lockType && event === TypeSlotEvent.Disconnect && this.inputs[slot]) {
@@ -118,7 +118,7 @@ const renamedPorts = {
     create_array: { outputs: ['array'] },
     type_ListToArray: { inputs: ['list'], outputs: ['array'] },
     type_ArrayToList: { inputs: ['array'], outputs: ['list'] },
-    array_Slice: { inputs: ['array', 'start', 'end'], outputs: ['array'] },
+    array_Slice: { inputs: ['array', 'start', 'end'], outputs: ['data'] },
     array_Merge: { outputs: ['array'] },
     flow_stage_list: { outputs: ['list', 'array'] },
 }
@@ -185,7 +185,7 @@ app.registerExtension({
             registerRenamedPorts(nodeType, renamedPorts[nodeData.name])
         }
         if (nodeData.name === "pack_Pack" || nodeData.name === "create_array" || nodeData.name === "create_image_batch" || nodeData.name === "create_mask_batch") {
-            registerDynamicValueInputs(nodeType)
+            registerDynamicValueInputs(nodeType, { allowMixed: nodeData.name === "create_array" })
         } else if (nodeData.name === "flow_stage_list" || nodeData.name === "flow_stage_collect_multi") {
             registerDynamicValueInputs(nodeType, { fixedInputs: 1, lockType: true })
         } else if (nodeData.name === "math_Exec") {
@@ -267,6 +267,7 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function () {
                 // 调用原始的onNodeCreated方法
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined
+                if (nodeData.name === "create_list") this.outputs[0].type = '*'
                 // 添加一个输入
                 this.addInput(`${_prefix}_1`, '*')
                 return r
@@ -280,6 +281,7 @@ app.registerExtension({
             nodeType.prototype.onConfigure = function () {
                 // 调用原始的onConfigure方法
                 const r = onConfigure ? onConfigure.apply(this, arguments) : undefined
+                if (nodeData.name === "create_list") this.outputs[0].type = '*'
                 // 如果不是正在配置图形，并且有输入
                 if (!app.configuringGraph && this.inputs) {
                     // 获取输入的长度
@@ -318,10 +320,11 @@ app.registerExtension({
                             const origin_type = node.outputs[link_info.origin_slot].type
                             // 设置输入和输出的类型
                             this.inputs[0].type = origin_type
-                            this.outputs[0].type = origin_type
-                            // 设置输出的标签和名称
-                            this.outputs[0].label = origin_type
-                            this.outputs[0].name = origin_type
+                            if (nodeData.name === "list_MergeList") {
+                                this.outputs[0].type = origin_type
+                                this.outputs[0].label = origin_type
+                                this.outputs[0].name = origin_type
+                            }
                         }
                     }
 
@@ -352,7 +355,7 @@ app.registerExtension({
                         // 获取下一个索引
                         const nextIndex = this.inputs.length
                         // 添加一个输入
-                        this.addInput(`${_prefix}_${nextIndex + 1}`, this.inputs[0].type)
+                        this.addInput(`${_prefix}_${nextIndex + 1}`, nodeData.name === "create_list" ? '*' : this.inputs[0].type)
                     }
                 }
                 return me
@@ -674,10 +677,67 @@ app.registerExtension({
                 this.showValueWidget.value = message.text[0]
             }
         } else if (nodeData.name === "sum_TextEncode") {
+            const setVisible = (widget, visible) => {
+                if (!widget) return
+                if (!widget._originalDisplay) {
+                    widget._originalDisplay = {
+                        type: widget.type,
+                        computeSize: widget.computeSize,
+                        hidden: widget.hidden,
+                        optionsHidden: widget.options?.hidden,
+                        optionsCanvasOnly: widget.options?.canvasOnly,
+                    }
+                }
+                const original = widget._originalDisplay
+                widget.options ||= {}
+                widget.type = visible ? original.type : "hidden"
+                widget.hidden = visible ? original.hidden ?? false : true
+                if (visible) {
+                    if (original.computeSize === undefined) delete widget.computeSize
+                    else widget.computeSize = original.computeSize
+                    if (original.optionsHidden === undefined) delete widget.options.hidden
+                    else widget.options.hidden = original.optionsHidden
+                    if (original.optionsCanvasOnly === undefined) delete widget.options.canvasOnly
+                    else widget.options.canvasOnly = original.optionsCanvasOnly
+                } else {
+                    widget.computeSize = () => [0, -4]
+                    widget.options.hidden = true
+                    widget.options.canvasOnly = true
+                }
+                if (widget.inputEl) widget.inputEl.style.display = visible ? "" : "none"
+                if (widget.element) widget.element.style.display = visible ? "" : "none"
+                if (widget._state) {
+                    widget._state.type = widget.type
+                    widget._state.hidden = widget.hidden
+                }
+            }
+            const updateModeWidgets = (node) => {
+                const normal = node.widgets?.find(w => w.name === "mode")?.value === "normal"
+                setVisible(node.widgets?.find(w => w.name === "main_prompt_ratio"), !normal)
+                setVisible(node.showValueWidget, !normal)
+                const size = node.computeSize?.()
+                if (size) node.setSize?.([Math.max(node.size?.[0] || 0, size[0]), size[1]])
+                node.setDirtyCanvas?.(true, true)
+            }
             const onNodeCreated = nodeType.prototype.onNodeCreated
             nodeType.prototype.onNodeCreated = function () {
                 onNodeCreated ? onNodeCreated.apply(this, []) : undefined
                 this.showValueWidget = ComfyWidgets["STRING"](this, "prompt_info", ["STRING", { multiline: true }], app).widget
+                const modeWidget = this.widgets?.find(w => w.name === "mode")
+                if (modeWidget) {
+                    const callback = modeWidget.callback
+                    modeWidget.callback = (...args) => {
+                        callback?.apply(modeWidget, args)
+                        updateModeWidgets(this)
+                    }
+                }
+                updateModeWidgets(this)
+            }
+            const onConfigure = nodeType.prototype.onConfigure
+            nodeType.prototype.onConfigure = function () {
+                const result = onConfigure?.apply(this, arguments)
+                updateModeWidgets(this)
+                return result
             }
             const onExecuted = nodeType.prototype.onExecuted
             nodeType.prototype.onExecuted = function (message) {
@@ -685,6 +745,7 @@ app.registerExtension({
                 if (message.text && message.text.length > 0) {
                     this.showValueWidget.value = message.text[0]
                 }
+                updateModeWidgets(this)
             }
         } else if (nodeData.name === "view_node_Script") {
             const onNodeCreated = nodeType.prototype.onNodeCreated

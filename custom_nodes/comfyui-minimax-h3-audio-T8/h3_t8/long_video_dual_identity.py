@@ -475,7 +475,7 @@ def stage_model_identity(model, *, _omit_dormant_sampling=False):
 def _audited_stage_model_identity(model, *, _omit_dormant_sampling=False):
     from comfy.model_base import MiniMaxH3
     if not isinstance(model.model, MiniMaxH3):
-        raise ValueError("Dual-model native4+4 loop requires native H3 MODELs; VDN uses a separate8+4 contract")
+        raise UnverifiedModelStack("Selected MODEL class has no portable dual-stage identity adapter")
     if "apply_model" in vars(model.model):
         selected_apply = model.model.apply_model
         if (getattr(selected_apply, "__self__", None) is not model.model

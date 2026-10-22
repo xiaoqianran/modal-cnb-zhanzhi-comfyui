@@ -88,16 +88,13 @@ def test_unknown_owners_are_not_silently_hashed(fault):
         value.patcher.add_patches({'probe': ('diff', (torch.ones(4),))})
     elif fault == 'unknown':
         value.unknown_execution = object()
-    if fault == 'wrong_role':
-        with pytest.raises(ValueError):
-            native_producer_identity(value, 'audio_vae')
-    else:
-        from h3_audio_t8_pkg.patch_stack_policy import model_identity_matches
-        first = native_producer_identity(value, 'video_vae')
-        second = native_producer_identity(value, 'video_vae')
-        assert first['portable_cache_reuse'] is False
-        assert first['sha256'] != second['sha256']
-        assert model_identity_matches(first, second)
+    from h3_audio_t8_pkg.patch_stack_policy import model_identity_matches
+    role = 'audio_vae' if fault == 'wrong_role' else 'video_vae'
+    first = native_producer_identity(value, role)
+    second = native_producer_identity(value, role)
+    assert first['portable_cache_reuse'] is False
+    assert first['sha256'] != second['sha256']
+    assert model_identity_matches(first, second)
 
 
 def test_bound_producers_revalidate_objects_and_contents():

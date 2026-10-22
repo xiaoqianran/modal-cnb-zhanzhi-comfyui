@@ -21,6 +21,8 @@ Windows update reports `Filename too long`? See [path limits and recovery](docs/
 
 Replace placeholder models and media with your own before running.
 
+Use a single complete prompt: [ordinary-prompt workflow index](examples/workflows/PLAIN_PROMPTS.md), including two-pass, chunked and resume variants.
+
 |Goal|Start here|
 |---|---|
 |Same-condition AudioFirst / ordinary Wuli Hybrid (EXP)|[Two reviewed H13 workflows](examples/workflows/88-h13-reviewed/README.md) · [Wiring and limits](docs/H13_AUDIO_FIRST_HYBRID.md)|

@@ -1,5 +1,7 @@
 # Kijai 九原件分离工作流（v1.90.0 EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#71-kijai-experimental-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 九个家族，每个都有完整生成／保存 LOW 的 `Full_Save` 和只执行 HIGH 的 `Cold_HIGH`，共18张。详细模型配对、下载来源、音频策略与限制见[使用说明](../../../docs/KIJAI_EXPERIMENTAL_LORAS_EXP.md)。旧图不覆盖。
 
 | 家族 | 完整生成／保存 | 冻结 LOW／只跑 HIGH |

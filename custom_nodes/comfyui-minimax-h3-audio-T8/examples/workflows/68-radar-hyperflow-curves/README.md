@@ -1,5 +1,7 @@
 # HyperFlow pruned 曲线近似：独立阶段 EXP
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#68-radar-hyperflow-curves)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 先看 [操作说明](../../../docs/HYPERFLOW_CURVE_EXP.md)。这是近似路线，不替代完整时间 HyperFlow；需要匹配的 pruned 底模、原 HyperFlow adapter 和已经单独生成的精确 fit。
 
 | 工作流 | 用途 |

@@ -108,9 +108,7 @@ def _diffusion_model(model: Any):
             f"MODEL does not expose diffusion_model: {type(error).__name__}: {error}"
         ) from error
     if not isinstance(diffusion, core_h3.MiniMaxH3Model):
-        raise ValueError(
-            "MiniMax H3 memory nodes require the current native ComfyUI MiniMaxH3Model"
-        )
+        warn_patch_stack("H3 memory nodes received another MODEL class; checking actual block APIs")
     blocks = getattr(diffusion, "blocks", None)
     if blocks is None or len(blocks) < 1:
         raise ValueError("MiniMax H3 diffusion model does not expose any DiT blocks")
@@ -150,11 +148,11 @@ def _core_contract(blocks: tuple[Any, ...]) -> dict[str, Any]:
     # must not require that legacy-only name during capability validation.
     for index, block in enumerate(blocks):
         if not isinstance(block, core_h3.DiTBlock):
-            raise ValueError(f"H3 block {index} is not a native DiTBlock")
+            warn_patch_stack(f"H3 block {index} uses a user-selected DiT implementation")
         if not isinstance(getattr(block, "attn", None), core_h3.Attention):
-            raise ValueError(f"H3 block {index} does not expose native Attention")
+            warn_patch_stack(f"H3 block {index} uses a user-selected attention implementation")
         if not isinstance(getattr(block, "mlp", None), core_h3.MLP):
-            raise ValueError(f"H3 block {index} does not expose native MLP")
+            warn_patch_stack(f"H3 block {index} uses a user-selected MLP implementation")
         attention = block.attn
         if (
             int(getattr(attention, "heads", 0)) < 1

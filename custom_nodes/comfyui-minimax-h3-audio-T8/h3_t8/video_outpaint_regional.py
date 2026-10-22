@@ -273,8 +273,10 @@ def patch_outpaint_regional_model(model, conditioning, query_chunk_rows=256):
 
     if not isinstance(conditioning, OutpaintRegionalConditioningProvider):
         raise ValueError("regional MODEL composer requires a prepared regional conditioning provider")
-    if not hasattr(model, "clone") or not isinstance(getattr(model, "model", None), MiniMaxH3):
-        raise ValueError("regional outpaint requires a native MiniMax H3 MODEL")
+    if not hasattr(model, "clone"):
+        raise ValueError("regional outpaint requires a MODEL patcher with clone()")
+    if not isinstance(getattr(model, "model", None), MiniMaxH3):
+        warn_patch_stack("Regional outpaint received another MODEL class; attempting its actual conditioning API")
     if isinstance(query_chunk_rows, bool) or not isinstance(query_chunk_rows, int) or not 32 <= query_chunk_rows <= 2048:
         raise ValueError("query_chunk_rows must be an integer in [32, 2048]")
     if regional_model_contract(model) is not None:

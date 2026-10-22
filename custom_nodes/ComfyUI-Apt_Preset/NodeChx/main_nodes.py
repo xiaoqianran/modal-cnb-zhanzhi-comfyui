@@ -1113,61 +1113,43 @@ class pre_controlnet:
 
 class sum_lora:
     @classmethod
-    def INPUT_TYPES(cls):  
-        return {
-            "required": {
-                "context": ("RUN_CONTEXT",),
-                "lora_01": (['None'] + folder_paths.get_filename_list("loras"), ),
-                "strength_01":("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
-                "lora_02": (['None'] + folder_paths.get_filename_list("loras"), ),
-                "strength_02":("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
-                "lora_03": (['None'] + folder_paths.get_filename_list("loras"), ),
-                "strength_03":("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
-            },
-            "optional": {
-
-                "model": ("MODEL",),
-                "clip": ("CLIP",),
-                "pos": ("STRING", {"default": "", "multiline": True}),
-                "neg": ("STRING", {"default": "", "multiline": False}),
-                "style": (["None"] + style_list()[0],{"default": "None"}),
-            }
+    def INPUT_TYPES(cls):
+        loras = ["None"] + folder_paths.get_filename_list("loras")
+        required = {
+            "context": ("RUN_CONTEXT",),
+            "lora_name_1": (loras,),
+            "strength_1": ("FLOAT", {"default": 1.0, "min": -100.0, "max": 100.0, "step": 0.01}),
+            "enabled_1": ("BOOLEAN", {"default": True}),
         }
+        optional = {"model": ("MODEL",), "clip": ("CLIP",)}
+        for i in range(2, 21):
+            optional[f"lora_name_{i}"] = (loras,)
+            optional[f"strength_{i}"] = ("FLOAT", {"default": 1.0, "min": -100.0, "max": 100.0, "step": 0.01})
+            optional[f"enabled_{i}"] = ("BOOLEAN", {"default": True})
+        return {"required": required, "optional": optional}
 
-    RETURN_TYPES = ("RUN_CONTEXT", "CONDITIONING", "CONDITIONING", )
-    RETURN_NAMES = ("context",  "positive", "negative",)
+    RETURN_TYPES = ("RUN_CONTEXT", "MODEL", "CLIP")
+    RETURN_NAMES = ("context", "model", "clip")
     CATEGORY = "Apt_Preset/chx_tool"
     FUNCTION = "load_lora"
 
-    def load_lora(self, style, lora_01, strength_01, lora_02, strength_02, lora_03, strength_03, context=None, clip=None, model=None,  pos="", neg=""):
-
+    def load_lora(self, context, lora_name_1, strength_1, enabled_1, model=None, clip=None, **kwargs):
         if model is None:
-            model=  context.get("model",None)
-        
+            model = context.get("model")
         if clip is None:
-            clip=  context.get("clip",None)
+            clip = context.get("clip")
 
-        positive = context.get("positive")
-        negative = context.get("negative") 
+        loader = LoraLoader()
+        for i in range(1, 21):
+            lora_name = lora_name_1 if i == 1 else kwargs.get(f"lora_name_{i}")
+            strength = strength_1 if i == 1 else kwargs.get(f"strength_{i}", 1.0)
+            enabled = enabled_1 if i == 1 else kwargs.get(f"enabled_{i}", True)
+            if not lora_name or lora_name == "None" or not enabled or strength == 0:
+                continue
+            model, clip = loader.load_lora(model, clip, lora_name, strength, strength)
 
-        if style != "None":
-            pos += f"{pos}, {style_list()[1][style_list()[0].index(style)][1]}"
-            neg += f"{neg}, {style_list()[1][style_list()[0].index(style)][2]}" if len(style_list()[1][style_list()[0].index(style)]) > 2 else ""
-
-        if lora_01!= "None" and strength_01!= 0:
-            model, clip = LoraLoader().load_lora(model, clip, lora_01, strength_01, strength_01)
-        if lora_02!= "None" and strength_02!= 0:
-            model, clip = LoraLoader().load_lora(model, clip, lora_02, strength_02, strength_02)
-        if lora_03!= "None" and strength_03!= 0:
-            model, clip = LoraLoader().load_lora(model, clip, lora_03, strength_03, strength_03)
-
-        if pos != None and pos != '':          
-            positive, = CLIPTextEncode().encode(clip, pos)
-        if neg!= None and pos != '':  
-            negative, = CLIPTextEncode().encode(clip, neg)
-            
-        context = new_context(context, model=model, clip=clip, positive=positive, negative=negative, )
-        return (context, positive, negative,)
+        context = new_context(context, model=model, clip=clip)
+        return (context, model, clip)
 
 
 
@@ -1180,9 +1162,10 @@ class sum_TextEncode:
                 "context": ("RUN_CONTEXT",),
             },
             "optional": {
+                "clip": ("CLIP",),
                 "pos": ("STRING", {"default": "", "multiline": True}),
                 "neg": ("STRING", {"default": "", "multiline": False}),
-                "mode": (["normal", "flux2.klein", "z-image", "qwen-image", "ernie-image-turbo"], {"default": "normal"}),
+                "mode": (["normal", "flux2.klein", "z-image", "qwen-image2.1", "ernie-image-turbo"], {"default": "normal"}),
                 "main_prompt_ratio": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
@@ -1201,28 +1184,33 @@ class sum_TextEncode:
     """
 
     
-    def sum_text_encode(self, context=None, main_prompt_ratio=0.5, pos="", neg="", mode="normal"):
+    def sum_text_encode(self, context=None, main_prompt_ratio=0.5, pos="", neg="", mode="normal", clip=None):
         prompt_info = "默认：无提示词处理"
-        clip = context.get("clip", None)
+        if clip is None:
+            clip = context.get("clip", None)
         
         empty_cond = [[torch.tensor([]), {"pooled_output": torch.tensor([])}]]
         positive = context.get("positive", empty_cond)
         negative = context.get("negative", empty_cond) 
       
-        if clip is not None and neg is not None and neg.strip() != '':  
+        if clip is not None and mode == "qwen-image2.1":
+            negative = clip.encode_from_tokens_scheduled(
+                clip.tokenize(neg or "", images=[], keep_vision=True, prevent_empty_text=True)
+            )
+        elif clip is not None and neg is not None and neg.strip() != '':
             negative = CLIPTextEncode().encode(clip, neg)[0]
             prompt_info += f" | 负提示词：{neg[:20]}..."
         
-        if clip is not None and pos is not None and pos.strip() != '': 
+        if clip is not None and (mode == "qwen-image2.1" or pos is not None and pos.strip() != ''):
             if mode == "flux2.klein":                
                 prompt_weight_processor = pre_Unit_PromptWeight()
                 positive, prompt_info = prompt_weight_processor.process(clip, pos, main_prompt_ratio)
             elif mode == "z-image":
                 prompt_weight_processor = pre_zimage_PromptWeight()
                 positive, prompt_info = prompt_weight_processor.process(clip, pos, main_prompt_ratio)
-            elif mode == "qwen-image":
+            elif mode == "qwen-image2.1":
                 prompt_weight_processor = pre_qwenimage_PromptWeight()
-                positive, prompt_info = prompt_weight_processor.process(clip, pos, main_prompt_ratio)
+                positive, prompt_info = prompt_weight_processor.process(clip, pos or "", main_prompt_ratio)
             elif mode == "ernie-image-turbo":
                 prompt_weight_processor = pre_ERNIE_image_PromptWeight()
                 positive, prompt_info = prompt_weight_processor.process(clip, pos, main_prompt_ratio)
@@ -1231,7 +1219,7 @@ class sum_TextEncode:
                 positive = CLIPTextEncode().encode(clip, pos)[0]
                 prompt_info = f"原生编码：{pos[:20]}... | 模式：{mode}"
 
-        context = new_context(context, positive=positive, negative=negative)
+        context = new_context(context, clip=clip, positive=positive, negative=negative)
         return { "ui": {"text": (prompt_info,)}, "result": (context, positive, negative, ) }
 
 
@@ -1260,7 +1248,7 @@ class sum_latent:
     RETURN_TYPES = ("RUN_CONTEXT","LATENT","MASK")
     RETURN_NAMES = ("context","latent","mask")
     FUNCTION = "process"
-    CATEGORY = "Apt_Preset/chx_tool"
+    CATEGORY = "Apt_Preset/chx_load/😺backup" 
 
     def process(self, ratio_selected, smoothness=1, batch_size=1, context=None, latent=None, pixels=None, mask=None, diff_difusion=True, width=None, height=None):
         noise_mask = True
@@ -1356,7 +1344,7 @@ class sum_editor:
     RETURN_TYPES = ("RUN_CONTEXT", "MODEL", "CONDITIONING", "CONDITIONING", "LATENT", "VAE","CLIP", "IMAGE", "MASK",)
     RETURN_NAMES = ("context", "model","positive", "negative", "latent", "vae","clip", "image", "latent_mask",)
     FUNCTION = "text"
-    CATEGORY = "Apt_Preset/chx_load"
+    CATEGORY = "Apt_Preset/chx_load/😺backup"   
     NAME = "sum_editor"
     
     def set_latent_mask2(self, latent, mask):
@@ -1476,7 +1464,7 @@ class sum_create_chx:
     RETURN_TYPES = ("RUN_CONTEXT", "MODEL", "CONDITIONING", "CONDITIONING", "LATENT", "VAE", "CLIP", ANY_TYPE)
     RETURN_NAMES = ("context", "model", "positive", "negative", "latent", "vae", "clip", "data")
     FUNCTION = "process_settings"
-    CATEGORY = "Apt_Preset/chx_load"
+    CATEGORY = "Apt_Preset/chx_load/😺backup"
 
     def process_settings(self, width, height, batch, steps, cfg, sampler, scheduler, data=None, guidance=3.5, lora_stack=None,over_latent=None,vae=None, over_vae=None, clip=None, model=None, over_positive=None, over_negative=None, pos="default", neg="default"):
 
@@ -2353,7 +2341,7 @@ class basic_Ksampler_low_gpu:
     RETURN_NAMES = ("context",  "image", )
     OUTPUT_NODE = True
     FUNCTION = "run"
-    CATEGORY = "Apt_Preset/chx_ksample/ksample"
+    CATEGORY = "Apt_Preset/chx_ksample"
 
 
     def run(self,context, seed, denoise, image=None,  prompt=None, image_output=None, extra_pnginfo=None,sampler=None,tile_size=512, overlap=64, temporal_size=64, temporal_overlap=8):
@@ -2711,294 +2699,6 @@ class chx_ksampler_tile:
 
 
 
-class chx_YC_LG_Redux:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {"required": {
-            
-            "context": ("RUN_CONTEXT",),
-            "style_model": (folder_paths.get_filename_list("style_models"), {"default": "flux1-redux-dev.safetensors"}),
-            "clip_vision": (folder_paths.get_filename_list("clip_vision"), {"default": "sigclip_vision_patch14_384.safetensors"}),
-
-            "crop": (["center", "mask_area", "none"], {
-                "default": "none",
-                "tooltip": "裁剪模式：center-中心裁剪, mask_area-遮罩区域裁剪, none-不裁剪"
-            }),
-            "sharpen": ("FLOAT", {
-                "default": 0.0,
-                "min": -5.0,
-                "max": 5.0,
-                "step": 0.1,
-                "tooltip": "锐化强度：负值为模糊，正值为锐化，0为不处理"
-            }),
-            "patch_res": ("INT", {
-                "default": 16,
-                "min": 1,
-                "max": 64,
-                "step": 1,
-                "tooltip": "patch分辨率，数值越大分块越细致"
-            }),
-            "style_strength": ("FLOAT", {
-                "default": 1.0,
-                "min": 0.0,
-                "max": 2.0,
-                "step": 0.01,
-                "tooltip": "风格强度，越高越偏向参考图片"
-            }),
-            "prompt_strength": ("FLOAT", { 
-                "default": 1.0,
-                "min": 0.0,
-                "max": 2.0,
-                "step": 0.01,
-                "tooltip": "文本提示词强度，越高文本特征越强"
-            }),
-            "blend_mode": (["lerp", "feature_boost", "frequency"], {
-                "default": "lerp",
-                "tooltip": "风格强度的计算方式：\n" +
-                        "lerp - 线性混合 - 高度参考原图\n" +
-                        "feature_boost - 特征增强 - 增强真实感\n" +
-                        "frequency - 频率增强 - 增强高频细节"
-            }),
-            "noise_level": ("FLOAT", { 
-                "default": 0.0,
-                "min": 0.0,
-                "max": 1.0,
-                "step": 0.01,
-                "tooltip": "添加随机噪声的强度，可用于修复错误细节"
-            }),
-        },
-        "optional": { 
-            "image": ("IMAGE",),
-            "mask": ("MASK", ), 
-            "guidance": ("FLOAT", {"default": 30, "min": 0.0, "max": 100.0, "step": 0.1}),
-        }}
-        
-    RETURN_TYPES = ("RUN_CONTEXT", "CONDITIONING",)
-    RETURN_NAMES = ("context", "positive",)
-    
-    FUNCTION = "apply_stylemodel"
-    CATEGORY = "Apt_Preset/🚫Deprecated/🚫"
-
-    def crop_to_mask_area(self, image, mask):
-        if len(image.shape) == 4:
-            B, H, W, C = image.shape
-            image = image.squeeze(0)
-        else:
-            H, W, C = image.shape
-        
-        if len(mask.shape) == 3:
-            mask = mask.squeeze(0)
-        
-        nonzero_coords = torch.nonzero(mask)
-        if len(nonzero_coords) == 0:
-            return image, mask
-        
-        top = nonzero_coords[:, 0].min().item()
-        bottom = nonzero_coords[:, 0].max().item()
-        left = nonzero_coords[:, 1].min().item()
-        right = nonzero_coords[:, 1].max().item()
-        
-        width = right - left
-        height = bottom - top
-        size = max(width, height)
-        
-        center_y = (top + bottom) // 2
-        center_x = (left + right) // 2
-        
-        half_size = size // 2
-        new_top = max(0, center_y - half_size)
-        new_bottom = min(H, center_y + half_size)
-        new_left = max(0, center_x - half_size)
-        new_right = min(W, center_x + half_size)
-        
-        cropped_image = image[new_top:new_bottom, new_left:new_right]
-        cropped_mask = mask[new_top:new_bottom, new_left:new_right]
-        
-        cropped_image = cropped_image.unsqueeze(0)
-        cropped_mask = cropped_mask.unsqueeze(0)
-        
-        return cropped_image, cropped_mask
-    
-    def apply_image_preprocess(self, image, strength):
-        original_shape = image.shape
-        original_device = image.device
-        
-        if torch.is_tensor(image):
-            if len(image.shape) == 4:
-                image_np = (image[0].cpu().numpy() * 255).astype(np.uint8)
-            else:
-                image_np = (image.cpu().numpy() * 255).astype(np.uint8)
-        
-        if strength < 0:
-            abs_strength = abs(strength)
-            kernel_size = int(3 + abs_strength * 12) // 2 * 2 + 1
-            sigma = 0.3 + abs_strength * 2.7
-            processed = cv2.GaussianBlur(image_np, (kernel_size, kernel_size), sigma)
-        elif strength > 0:
-            kernel = np.array([[-1,-1,-1],
-                             [-1, 9,-1],
-                             [-1,-1,-1]]) * strength + np.array([[0,0,0],
-                                                               [0,1,0],
-                                                               [0,0,0]]) * (1 - strength)
-            processed = cv2.filter2D(image_np, -1, kernel)
-            processed = np.clip(processed, 0, 255)
-        else:
-            processed = image_np
-        
-        processed_tensor = torch.from_numpy(processed.astype(np.float32) / 255.0).to(original_device)
-        if len(original_shape) == 4:
-            processed_tensor = processed_tensor.unsqueeze(0)
-        
-        return processed_tensor
-    
-    def apply_style_strength(self, cond, txt, strength, mode="lerp"):
-        if mode == "lerp":
-            if txt.shape[1] != cond.shape[1]:
-                txt_mean = txt.mean(dim=1, keepdim=True)
-                txt_expanded = txt_mean.expand(-1, cond.shape[1], -1)
-                return torch.lerp(txt_expanded, cond, strength)
-            return torch.lerp(txt, cond, strength)
-        
-        elif mode == "feature_boost":
-            mean = torch.mean(cond, dim=-1, keepdim=True)
-            std = torch.std(cond, dim=-1, keepdim=True)
-            normalized = (cond - mean) / (std + 1e-6)
-            boost = torch.tanh(normalized * (strength * 2.0))
-            return cond * (1 + boost * 2.0)
-    
-        elif mode == "frequency":
-            try:
-                B, N, C = cond.shape
-                x = cond.float()
-                fft = torch.fft.rfft(x, dim=-1)
-                magnitudes = torch.abs(fft)
-                phases = torch.angle(fft)
-                freq_dim = fft.shape[-1]
-                freq_range = torch.linspace(0, 1, freq_dim, device=cond.device)
-                alpha = 2.0 * strength
-                beta = 0.5
-                filter_response = 1.0 + alpha * torch.pow(freq_range, beta)
-                filter_response = filter_response.view(1, 1, -1)
-                enhanced_magnitudes = magnitudes * filter_response
-                enhanced_fft = enhanced_magnitudes * torch.exp(1j * phases)
-                enhanced = torch.fft.irfft(enhanced_fft, n=C, dim=-1)
-                mean = enhanced.mean(dim=-1, keepdim=True)
-                std = enhanced.std(dim=-1, keepdim=True)
-                enhanced_norm = (enhanced - mean) / (std + 1e-6)
-                mix_ratio = torch.sigmoid(torch.tensor(strength * 2 - 1))
-                result = torch.lerp(cond, enhanced_norm.to(cond.dtype), mix_ratio)
-                residual = (result - cond) * strength
-                final = cond + residual
-                return final
-            except Exception as e:
-                print(f"频率处理出错: {e}")
-                print(f"输入张量形状: {cond.shape}")
-                return cond
-                
-        return cond
-    
-    def apply_stylemodel(self, style_model, clip_vision,
-                        patch_res=16, style_strength=1.0, prompt_strength=1.0, 
-                        noise_level=0.0, crop="none", sharpen=0.0, guidance=30,
-                        blend_mode="lerp", image=None,  mask=None, context=None):
-        
-        
-        conditioning = context.get("positive", None)  
-        if image is None:
-            return (context,positive,)
-
-        style_model_path = folder_paths.get_full_path_or_raise("style_models", style_model)
-        style_model = comfy.sd.load_style_model(style_model_path)
-
-        clip_path = folder_paths.get_full_path_or_raise("clip_vision", clip_vision)
-        clip_vision = comfy.clip_vision.load(clip_path)
-
-
-        
-        processed_image = image.clone()
-        if sharpen != 0:
-            processed_image = self.apply_image_preprocess(processed_image, sharpen)
-        if crop == "mask_area" and mask is not None:
-            processed_image, mask = self.crop_to_mask_area(processed_image, mask)
-            clip_vision_output = clip_vision.encode_image(processed_image, crop=False)
-        else:
-            crop_image = True if crop == "center" else False
-            clip_vision_output = clip_vision.encode_image(processed_image, crop=crop_image)
-        
-        cond = style_model.get_cond(clip_vision_output)
-        
-        B = cond.shape[0]
-        H = W = int(math.sqrt(cond.shape[1]))
-        C = cond.shape[2]
-        cond = cond.reshape(B, H, W, C)
-        
-        new_H = H * patch_res // 16
-        new_W = W * patch_res // 16
-        
-        cond = torch.nn.functional.interpolate(
-            cond.permute(0, 3, 1, 2),
-            size=(new_H, new_W),
-            mode='bilinear',
-            align_corners=False
-        )
-        
-        cond = cond.permute(0, 2, 3, 1)
-        cond = cond.reshape(B, -1, C)
-        cond = cond.flatten(start_dim=0, end_dim=1).unsqueeze(dim=0)
-        
-        c_out = []
-        for t in conditioning:
-            txt, keys = t
-            keys = keys.copy()
-            
-            if prompt_strength != 1.0:
-                txt_enhanced = txt * (prompt_strength ** 3)
-                txt_repeated = txt_enhanced.repeat(1, 2, 1)
-                txt = txt_repeated
-            
-            if style_strength != 1.0:
-                processed_cond = self.apply_style_strength(
-                    cond, txt, style_strength, blend_mode
-                )
-            else:
-                processed_cond = cond
-    
-            if mask is not None:
-                feature_size = int(math.sqrt(processed_cond.shape[1]))
-                processed_mask = torch.nn.functional.interpolate(
-                    mask.unsqueeze(1) if mask.dim() == 3 else mask,
-                    size=(feature_size, feature_size),
-                    mode='bilinear',
-                    align_corners=False
-                ).flatten(1).unsqueeze(-1)
-                
-                if txt.shape[1] != processed_cond.shape[1]:
-                    txt_mean = txt.mean(dim=1, keepdim=True)
-                    txt_expanded = txt_mean.expand(-1, processed_cond.shape[1], -1)
-                else:
-                    txt_expanded = txt
-                
-                processed_cond = processed_cond * processed_mask + \
-                               txt_expanded * (1 - processed_mask)
-    
-            if noise_level > 0:
-                noise = torch.randn_like(processed_cond)
-                noise = (noise - noise.mean()) / (noise.std() + 1e-8)
-                processed_cond = torch.lerp(processed_cond, noise, noise_level)
-                processed_cond = processed_cond * (1.0 + noise_level)
-                
-            c_out.append([torch.cat((txt, processed_cond), dim=1), keys])
-        
-        
-        
-        positive = node_helpers.conditioning_set_values(c_out, {"guidance": guidance})
-
-        context = new_context(context, positive=positive,)
-        
-        return (context,positive,)
-
-
-
 
 #region------------nanchaku--------------------------
 import sys
@@ -3349,7 +3049,7 @@ class Data_preset_save:
     RETURN_TYPES = ()
     OUTPUT_NODE = True
     FUNCTION = "saveparam"
-    CATEGORY = "Apt_Preset/chx_load"
+    CATEGORY = "Apt_Preset/chx_load/😺backup"
 
     def saveparam(self, param, tomlname, savetype):
         # 初始化 tomltext 为一个空字符串
@@ -3825,8 +3525,7 @@ class sum_Ksampler:
     RETURN_NAMES = ("context", "image","resample"  )
     OUTPUT_NODE = True
     FUNCTION = "run"
-    CATEGORY = "Apt_Preset/chx_ksample"
-
+    CATEGORY = "Apt_Preset/chx_ksample/ksample"
 
     def run(self,context, seed, denoise, positive=None, negative=None, model=None, prompt=None, image_output=None, extra_pnginfo=None, 
             ksample_type=None,lowCpu=None,latent_stack=None,funtion=None):
@@ -4032,7 +3731,7 @@ class AD_CreateVideo(comfy_io.ComfyNode):
         return comfy_io.Schema(
             node_id="AD_CreateVideo",
             search_aliases=["images to video", "latent to video"],
-            display_name="AD Create Video",
+            display_name="AD_CreateVideo",
             category="Apt_Preset/AD",
             essentials_category="Video Tools",
 

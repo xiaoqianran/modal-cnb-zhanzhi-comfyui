@@ -1,0 +1,2729 @@
+{
+  "id": "706054bb-c3cd-5414-97b9-092426b9e1cf",
+  "revision": 0,
+  "last_node_id": 38,
+  "last_link_id": 90,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        -980,
+        100
+      ],
+      "size": [
+        320,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            4,
+            29
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "default"
+      ],
+      "title": "H3 FL2VA Stock20 model"
+    },
+    {
+      "id": 2,
+      "type": "CLIPLoader",
+      "pos": [
+        -980,
+        430
+      ],
+      "size": [
+        320,
+        106
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            1,
+            85
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "minimax",
+        "default"
+      ],
+      "title": "H3 CLIP"
+    },
+    {
+      "id": 3,
+      "type": "VAELoader",
+      "pos": [
+        -980,
+        720
+      ],
+      "size": [
+        320,
+        58
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            2,
+            14,
+            23,
+            40,
+            86
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_video_vae_fp16.safetensors"
+      ],
+      "title": "H3 video VAE"
+    },
+    {
+      "id": 4,
+      "type": "VAELoader",
+      "pos": [
+        -980,
+        940
+      ],
+      "size": [
+        320,
+        58
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            3,
+            15,
+            24,
+            41,
+            87
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_audio_vae_fp32.safetensors"
+      ],
+      "title": "H3 audio VAE"
+    },
+    {
+      "id": 5,
+      "type": "MiniMaxH3AudioConditioningT8",
+      "pos": [
+        -300,
+        120
+      ],
+      "size": [
+        520,
+        560
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 1
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 2
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 3
+        },
+        {
+          "name": "drive_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "final_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "first_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "last_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            5,
+            12
+          ]
+        },
+        {
+          "name": "mux_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "conditioned_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "media_map_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3AudioConditioningT8"
+      },
+      "widgets_values": [
+        "A single adult cyclist rides the same bicycle along a quiet city street at dusk. Maintain the rider, clothing, bicycle, direction, camera and ambient sound.",
+        1152,
+        640,
+        124,
+        "T2VA",
+        "native",
+        1.0,
+        false,
+        0,
+        true,
+        "match",
+        "official_2_to_15s"
+      ],
+      "title": "Pass 1 T2VA conditioning / 原始基线"
+    },
+    {
+      "id": 6,
+      "type": "MiniMaxH3DualClockSamplerT8",
+      "title": "Native Stock20 dual clock · 20 calls",
+      "pos": [
+        500,
+        120
+      ],
+      "size": [
+        390,
+        190
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 4
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            6
+          ]
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "links": [
+            10
+          ]
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3DualClockSamplerT8"
+      },
+      "widgets_values": [
+        20,
+        12.0,
+        3.0,
+        "dual_clock_euler",
+        "native_flow"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "BasicGuider",
+      "pos": [
+        1040,
+        80
+      ],
+      "size": [
+        230,
+        70
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 6
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BasicGuider"
+      },
+      "widgets_values": [],
+      "title": "Shared guider"
+    },
+    {
+      "id": 8,
+      "type": "RandomNoise",
+      "pos": [
+        1040,
+        300
+      ],
+      "size": [
+        230,
+        82
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        2608222201,
+        "fixed"
+      ],
+      "title": "Pass 1 noise"
+    },
+    {
+      "id": 9,
+      "type": "SamplerCustomAdvanced",
+      "pos": [
+        1460,
+        100
+      ],
+      "size": [
+        290,
+        170
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 8
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 9
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 10
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 11
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            90
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "title": "PASS 1 · baseline generation"
+    },
+    {
+      "id": 10,
+      "type": "MiniMaxH3AVDecodeT8",
+      "pos": [
+        2050,
+        100
+      ],
+      "size": [
+        280,
+        120
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 13
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 14
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            17,
+            18,
+            46,
+            52,
+            70,
+            81
+          ]
+        },
+        {
+          "name": "generated_audio",
+          "type": "AUDIO",
+          "links": [
+            19,
+            47,
+            53,
+            71,
+            82
+          ]
+        },
+        {
+          "name": "video_latent",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "name": "audio_latent",
+          "type": "LATENT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3AVDecodeT8"
+      },
+      "widgets_values": [],
+      "title": "Decode pass 1 for analysis"
+    },
+    {
+      "id": 12,
+      "type": "MiniMaxH3MotionOverloadAnalyzePassThroughEXPT8",
+      "title": "P0 · Analyze pass-1 motion / 分析动作过载",
+      "pos": [
+        3300,
+        100
+      ],
+      "size": [
+        540,
+        510
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 16
+        },
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "links": [
+            20,
+            54,
+            69,
+            80
+          ]
+        },
+        {
+          "name": "heat_preview",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "should_repair",
+          "type": "BOOLEAN",
+          "links": [
+            51
+          ]
+        },
+        {
+          "name": "expanded_frames",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionOverloadAnalyzePassThroughEXPT8"
+      },
+      "widgets_values": [
+        "auto_conservative_exp",
+        "",
+        3.5,
+        2.0,
+        0.01,
+        3,
+        2,
+        5,
+        24.0
+      ]
+    },
+    {
+      "id": 13,
+      "type": "MiniMaxH3MotionSegmentPlanT8Advanced",
+      "title": "P2 · Select one budgeted window / 选择一个预算窗口",
+      "pos": [
+        4000,
+        80
+      ],
+      "size": [
+        560,
+        430
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "link": 18
+        },
+        {
+          "name": "baseline_audio",
+          "type": "AUDIO",
+          "link": 19
+        },
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "segment_frames",
+          "type": "IMAGE",
+          "links": [
+            21,
+            60,
+            74
+          ]
+        },
+        {
+          "name": "window_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "links": [
+            22
+          ]
+        },
+        {
+          "name": "first_frame",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "last_frame",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "segment_audio",
+          "type": "AUDIO",
+          "links": [
+            25,
+            44,
+            61,
+            75
+          ]
+        },
+        {
+          "name": "window_count",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "window_index",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionSegmentPlanT8Advanced"
+      },
+      "widgets_values": [
+        209,
+        0,
+        "fixed",
+        12,
+        "hot_ranges_only"
+      ]
+    },
+    {
+      "id": 14,
+      "type": "MiniMaxH3MotionRetimingPrepareT8Advanced",
+      "title": "P1 · Expand selected time / 扩时并编码二采初值",
+      "pos": [
+        4700,
+        80
+      ],
+      "size": [
+        540,
+        330
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "link": 21
+        },
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 22
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 23
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 24
+        },
+        {
+          "name": "source_audio",
+          "type": "AUDIO",
+          "link": 25
+        }
+      ],
+      "outputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            26,
+            30
+          ]
+        },
+        {
+          "name": "smeared_frames",
+          "type": "IMAGE",
+          "links": [
+            62,
+            76
+          ]
+        },
+        {
+          "name": "smeared_audio_seed",
+          "type": "AUDIO",
+          "links": [
+            63,
+            77
+          ]
+        },
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "links": [
+            28
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": [
+            64,
+            78
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionRetimingPrepareT8Advanced"
+      },
+      "widgets_values": [
+        "follow_original_0p5"
+      ]
+    },
+    {
+      "id": 15,
+      "type": "MiniMaxH3MotionRecoveryComposerT8Advanced",
+      "title": "P1 · Partial second-pass schedule / 二采后段Sigma",
+      "pos": [
+        5340,
+        100
+      ],
+      "size": [
+        500,
+        300
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 26
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 27
+        },
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 28
+        }
+      ],
+      "outputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            37,
+            68,
+            79
+          ]
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "links": [
+            67
+          ]
+        },
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "links": [
+            45,
+            50,
+            59,
+            73,
+            83
+          ]
+        },
+        {
+          "name": "actual_second_pass_nfe",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionRecoveryComposerT8Advanced"
+      },
+      "widgets_values": [
+        "apply_exp",
+        0.48,
+        2
+      ]
+    },
+    {
+      "id": 16,
+      "type": "MiniMaxH3DualClockSamplerT8",
+      "title": "Pass 2 DualClock · rebuild for expanded latent",
+      "pos": [
+        5360,
+        420
+      ],
+      "size": [
+        390,
+        190
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 29
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 30
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            65
+          ]
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "links": [
+            66
+          ]
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "links": [
+            27
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3DualClockSamplerT8"
+      },
+      "widgets_values": [
+        20,
+        12.0,
+        3.0,
+        "dual_clock_euler",
+        "native_flow"
+      ]
+    },
+    {
+      "id": 17,
+      "type": "BasicGuider",
+      "pos": [
+        5900,
+        400
+      ],
+      "size": [
+        230,
+        70
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 31
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 32
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            34
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BasicGuider"
+      },
+      "widgets_values": [],
+      "title": "Pass 2 guider · bound to expanded clock"
+    },
+    {
+      "id": 18,
+      "type": "RandomNoise",
+      "pos": [
+        6300,
+        420
+      ],
+      "size": [
+        230,
+        82
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            33
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        2608222201,
+        "fixed"
+      ],
+      "title": "Pass 2 fresh noise"
+    },
+    {
+      "id": 19,
+      "type": "MiniMaxH3StageSamplerEXPT8",
+      "pos": [
+        6000,
+        80
+      ],
+      "size": [
+        290,
+        170
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 33
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 34
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 35
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 36
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 37
+        },
+        {
+          "name": "stage_context",
+          "type": "T8_STAGE_CONTEXT",
+          "link": 38
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "name": "stage_result",
+          "type": "T8_STAGE_RESULT",
+          "links": [
+            72
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3StageSamplerEXPT8",
+        "cnr_id": "minimax-h3-audio-T8"
+      },
+      "widgets_values": [],
+      "title": "One explicit source-bound motion refinement stage"
+    },
+    {
+      "id": 20,
+      "type": "MiniMaxH3AVDecodeT8",
+      "pos": [
+        6700,
+        80
+      ],
+      "size": [
+        280,
+        120
+      ],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 39
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 40
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 41
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            42
+          ]
+        },
+        {
+          "name": "generated_audio",
+          "type": "AUDIO",
+          "links": [
+            43
+          ]
+        },
+        {
+          "name": "video_latent",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "name": "audio_latent",
+          "type": "LATENT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3AVDecodeT8"
+      },
+      "widgets_values": [],
+      "title": "Decode expanded pass 2"
+    },
+    {
+      "id": 21,
+      "type": "MiniMaxH3MotionRecoverAVT8Advanced",
+      "title": "P1 · Recover original clock / 回到原始音画时钟",
+      "pos": [
+        7350,
+        80
+      ],
+      "size": [
+        520,
+        330
+      ],
+      "flags": {},
+      "order": 25,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "generated_frames",
+          "type": "IMAGE",
+          "link": 42
+        },
+        {
+          "name": "generated_audio",
+          "type": "AUDIO",
+          "link": 43
+        },
+        {
+          "name": "pass1_audio",
+          "type": "AUDIO",
+          "link": 44
+        },
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 45
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            48
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            49
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionRecoverAVT8Advanced"
+      },
+      "widgets_values": [
+        "pass1_original",
+        0.8
+      ]
+    },
+    {
+      "id": 22,
+      "type": "MiniMaxH3MotionWindowCollectT8Advanced",
+      "title": "P2 · Save/collect signed windows / 保存与断点收集",
+      "pos": [
+        8000,
+        80
+      ],
+      "size": [
+        590,
+        430
+      ],
+      "flags": {},
+      "order": 26,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "baseline_frames",
+          "type": "IMAGE",
+          "link": 46
+        },
+        {
+          "name": "baseline_audio",
+          "type": "AUDIO",
+          "link": 47
+        },
+        {
+          "name": "recovered_segment",
+          "type": "IMAGE",
+          "link": 48
+        },
+        {
+          "name": "recovered_audio",
+          "type": "AUDIO",
+          "link": 49
+        },
+        {
+          "name": "window_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 50
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            55
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            56
+          ]
+        },
+        {
+          "name": "complete",
+          "type": "BOOLEAN",
+          "links": null
+        },
+        {
+          "name": "windows_on_disk",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionWindowCollectT8Advanced"
+      },
+      "widgets_values": [
+        "motion_recovery_stock20_demo",
+        "",
+        true,
+        "float32_exact",
+        6
+      ]
+    },
+    {
+      "id": 23,
+      "type": "MiniMaxH3MotionAutoGateT8Advanced",
+      "title": "AUTO · Skip pass 2 on ABSTAIN / 平静片自动旁路",
+      "pos": [
+        8720,
+        80
+      ],
+      "size": [
+        560,
+        350
+      ],
+      "flags": {},
+      "order": 27,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "should_repair",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "should_repair"
+          },
+          "link": 51
+        },
+        {
+          "name": "baseline_frames",
+          "type": "IMAGE",
+          "link": 52
+        },
+        {
+          "name": "baseline_audio",
+          "type": "AUDIO",
+          "link": 53
+        },
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 54
+        },
+        {
+          "name": "repaired_frames",
+          "type": "IMAGE",
+          "link": 55
+        },
+        {
+          "name": "repaired_audio",
+          "type": "AUDIO",
+          "link": 56
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            57
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            58
+          ]
+        },
+        {
+          "name": "did_repair",
+          "type": "BOOLEAN",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionAutoGateT8Advanced"
+      },
+      "widgets_values": [
+        false
+      ]
+    },
+    {
+      "id": 24,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        9380,
+        80
+      ],
+      "size": [
+        430,
+        500
+      ],
+      "flags": {},
+      "order": 28,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 57
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 58,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "MiniMaxH3_MotionRecovery/windowed_recovered_plain",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true
+      },
+      "title": "Save recovered synchronized MP4"
+    },
+    {
+      "id": 30,
+      "type": "MiniMaxH3MotionStageBindEXPT8",
+      "title": "Bind retimed pass-2 source and original audio",
+      "pos": [
+        2740,
+        600
+      ],
+      "size": [
+        470,
+        373
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 59
+        },
+        {
+          "name": "baseline_frames",
+          "type": "IMAGE",
+          "link": 60
+        },
+        {
+          "name": "baseline_audio",
+          "type": "AUDIO",
+          "link": 61
+        },
+        {
+          "name": "smeared_frames",
+          "type": "IMAGE",
+          "link": 62
+        },
+        {
+          "name": "smeared_audio",
+          "type": "AUDIO",
+          "link": 63
+        },
+        {
+          "name": "prepare_report_json",
+          "type": "STRING",
+          "link": 64
+        },
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 65
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 66
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 67
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 68
+        },
+        {
+          "name": "parent_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 69
+        },
+        {
+          "name": "parent_frames",
+          "type": "IMAGE",
+          "link": 70
+        },
+        {
+          "name": "parent_audio",
+          "type": "AUDIO",
+          "link": 71
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            31
+          ]
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "links": [
+            35
+          ]
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "links": [
+            36
+          ]
+        },
+        {
+          "name": "stage_context",
+          "type": "T8_STAGE_CONTEXT",
+          "links": [
+            38
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionStageBindEXPT8",
+        "cnr_id": "minimax-h3-audio-T8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 31,
+      "type": "MiniMaxH3MotionStageAuditPassThroughEXPT8",
+      "title": "Audit pass 2 before Recover AV",
+      "pos": [
+        3610,
+        620
+      ],
+      "size": [
+        470,
+        323
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "stage_result",
+          "type": "T8_STAGE_RESULT",
+          "link": 72
+        },
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 73
+        },
+        {
+          "name": "baseline_frames",
+          "type": "IMAGE",
+          "link": 74
+        },
+        {
+          "name": "baseline_audio",
+          "type": "AUDIO",
+          "link": 75
+        },
+        {
+          "name": "smeared_frames",
+          "type": "IMAGE",
+          "link": 76
+        },
+        {
+          "name": "smeared_audio",
+          "type": "AUDIO",
+          "link": 77
+        },
+        {
+          "name": "prepare_report_json",
+          "type": "STRING",
+          "link": 78
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 79
+        },
+        {
+          "name": "parent_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 80
+        },
+        {
+          "name": "parent_frames",
+          "type": "IMAGE",
+          "link": 81
+        },
+        {
+          "name": "parent_audio",
+          "type": "AUDIO",
+          "link": 82
+        }
+      ],
+      "outputs": [
+        {
+          "name": "candidate_av",
+          "type": "LATENT",
+          "links": [
+            39
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionStageAuditPassThroughEXPT8",
+        "cnr_id": "minimax-h3-audio-T8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 32,
+      "type": "MiniMaxH3MotionRelayLengthEXPT8",
+      "title": "整段帧数 · 读取动作计划",
+      "pos": [
+        840,
+        -400
+      ],
+      "size": [
+        470,
+        180
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "motion_plan",
+          "type": "H3_T8_MOTION_RECOVERY_PLAN",
+          "link": 83
+        }
+      ],
+      "outputs": [
+        {
+          "name": "length",
+          "type": "INT",
+          "links": [
+            84
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionRelayLengthEXPT8",
+        "cnr_id": "minimax-h3-audio-T8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 33,
+      "type": "MiniMaxH3PlainPromptRecipeEXPT8",
+      "title": "完整提示词 · 普通文本",
+      "pos": [
+        1310,
+        -400
+      ],
+      "size": [
+        480,
+        400
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 84,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prompt_recipe",
+          "type": "H3_T8_PROMPT_RELAY_PLAN",
+          "links": null
+        },
+        {
+          "name": "compiled_prompt",
+          "type": "STRING",
+          "links": [
+            88
+          ]
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "links": [
+            89
+          ]
+        },
+        {
+          "name": "timeline_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3PlainPromptRecipeEXPT8"
+      },
+      "widgets_values": [
+        "A single adult cyclist rides the same bicycle along a quiet city street at dusk. Maintain the rider, clothing, bicycle, direction, camera and ambient sound.\n\nThe cyclist begins pedaling past a row of streetlights.\nThe cyclist accelerates smoothly without changing identity or direction.",
+        124
+      ]
+    },
+    {
+      "id": 34,
+      "type": "MiniMaxH3AudioConditioningT8",
+      "title": "MiniMax H3 Audio Conditioning (T8)",
+      "pos": [
+        1790,
+        -400
+      ],
+      "size": [
+        480,
+        400
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 85
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 86
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 87
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 88,
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 89,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            32
+          ]
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "name": "mux_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "conditioned_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "media_map_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3AudioConditioningT8"
+      },
+      "widgets_values": [
+        "",
+        1152,
+        640,
+        124,
+        "T2VA",
+        "native",
+        1.0,
+        false,
+        0,
+        true,
+        "match",
+        "official_2_to_15s",
+        true
+      ]
+    },
+    {
+      "id": 36,
+      "type": "MiniMaxH3NativeLatentCheckpointPassThroughSaveEXPT8",
+      "title": "Freeze exact first-pass native AV (opt in)",
+      "pos": [
+        2900,
+        -350
+      ],
+      "size": [
+        470,
+        180
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 90
+        }
+      ],
+      "outputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            13,
+            16
+          ]
+        },
+        {
+          "name": "status",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "checkpoint_path",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "file_sha256",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "manifest_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3NativeLatentCheckpointPassThroughSaveEXPT8",
+        "cnr_id": "minimax-h3-audio-T8"
+      },
+      "widgets_values": [
+        "s25_motion_windowed_first_plain",
+        "motion_recovery_firstpass",
+        false,
+        true,
+        8
+      ]
+    },
+    {
+      "id": 37,
+      "type": "MarkdownNote",
+      "title": "S25 separated Motion Recovery · read before queue",
+      "pos": [
+        -600,
+        -650
+      ],
+      "size": [
+        470,
+        180
+      ],
+      "flags": {},
+      "order": 29,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "MarkdownNote",
+        "cnr_id": "minimax-h3-audio-T8"
+      },
+      "widgets_values": [
+        "S25 Motion Recovery separate-stage EXP example; not quality accepted. Pass 1 remains the old Stock20 source generation. Pass 2 independently binds the retimed motion source and uses only the selected external Relay/EAV branches. The original Motion Recover, AutoGate and pass-1 audio default remain in place. Full-save and Freeze-first require an explicit confirm_save before a native checkpoint is written. Cold-second requires the exact checkpoint path, manifest and whole-file SHA; it has no first-pass sampler. Replace example prompt and verify local model assets. A cold graph does not auto-accept generated quality."
+      ]
+    },
+    {
+      "id": 38,
+      "type": "MarkdownNote",
+      "title": "普通提示词 · 从这里开始",
+      "pos": [
+        -900,
+        -1150
+      ],
+      "size": [
+        800,
+        400
+      ],
+      "flags": {},
+      "order": 30,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "普通提示词副本\n\n来源：examples/workflows/57-motion-recovery-split/S25_Motion_Windowed_relay_full_save_Separate_Stage_EXP.json\n\n在“完整提示词”框一次填写整段画面、动作与对白。两采／各阶段的文字框可分别编辑；原图的全局与局部文字已合并，不再按事件时间段路由。\n原采样次数、LoRA、底模、放大、音频和阶段接线保留。\n恢复版请先使用对应普通版 Full 保存新缓存，再填入新的文件路径和 SHA。Prepared LTX 的普通文字仍由准备包的 prompt／文本缓存提供。\n旧 NOTE 中的 Relay 操作属于原版；本副本按上述普通入口编辑。"
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      5,
+      0,
+      "CLIP"
+    ],
+    [
+      2,
+      3,
+      0,
+      5,
+      1,
+      "VAE"
+    ],
+    [
+      3,
+      4,
+      0,
+      5,
+      2,
+      "VAE"
+    ],
+    [
+      4,
+      1,
+      0,
+      6,
+      0,
+      "MODEL"
+    ],
+    [
+      5,
+      5,
+      1,
+      6,
+      1,
+      "LATENT"
+    ],
+    [
+      6,
+      6,
+      0,
+      7,
+      0,
+      "MODEL"
+    ],
+    [
+      7,
+      5,
+      0,
+      7,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      8,
+      8,
+      0,
+      9,
+      0,
+      "NOISE"
+    ],
+    [
+      9,
+      7,
+      0,
+      9,
+      1,
+      "GUIDER"
+    ],
+    [
+      10,
+      6,
+      1,
+      9,
+      2,
+      "SAMPLER"
+    ],
+    [
+      11,
+      6,
+      2,
+      9,
+      3,
+      "SIGMAS"
+    ],
+    [
+      12,
+      5,
+      1,
+      9,
+      4,
+      "LATENT"
+    ],
+    [
+      13,
+      36,
+      0,
+      10,
+      0,
+      "LATENT"
+    ],
+    [
+      14,
+      3,
+      0,
+      10,
+      1,
+      "VAE"
+    ],
+    [
+      15,
+      4,
+      0,
+      10,
+      2,
+      "VAE"
+    ],
+    [
+      16,
+      36,
+      0,
+      12,
+      0,
+      "LATENT"
+    ],
+    [
+      17,
+      10,
+      0,
+      12,
+      1,
+      "IMAGE"
+    ],
+    [
+      18,
+      10,
+      0,
+      13,
+      0,
+      "IMAGE"
+    ],
+    [
+      19,
+      10,
+      1,
+      13,
+      1,
+      "AUDIO"
+    ],
+    [
+      20,
+      12,
+      0,
+      13,
+      2,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      21,
+      13,
+      0,
+      14,
+      0,
+      "IMAGE"
+    ],
+    [
+      22,
+      13,
+      1,
+      14,
+      1,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      23,
+      3,
+      0,
+      14,
+      2,
+      "VAE"
+    ],
+    [
+      24,
+      4,
+      0,
+      14,
+      3,
+      "VAE"
+    ],
+    [
+      25,
+      13,
+      4,
+      14,
+      4,
+      "AUDIO"
+    ],
+    [
+      26,
+      14,
+      0,
+      15,
+      0,
+      "LATENT"
+    ],
+    [
+      27,
+      16,
+      2,
+      15,
+      1,
+      "SIGMAS"
+    ],
+    [
+      28,
+      14,
+      3,
+      15,
+      2,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      29,
+      1,
+      0,
+      16,
+      0,
+      "MODEL"
+    ],
+    [
+      30,
+      14,
+      0,
+      16,
+      1,
+      "LATENT"
+    ],
+    [
+      31,
+      30,
+      0,
+      17,
+      0,
+      "MODEL"
+    ],
+    [
+      32,
+      34,
+      0,
+      17,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      33,
+      18,
+      0,
+      19,
+      0,
+      "NOISE"
+    ],
+    [
+      34,
+      17,
+      0,
+      19,
+      1,
+      "GUIDER"
+    ],
+    [
+      35,
+      30,
+      1,
+      19,
+      2,
+      "SAMPLER"
+    ],
+    [
+      36,
+      30,
+      2,
+      19,
+      3,
+      "SIGMAS"
+    ],
+    [
+      37,
+      15,
+      0,
+      19,
+      4,
+      "LATENT"
+    ],
+    [
+      38,
+      30,
+      3,
+      19,
+      5,
+      "T8_STAGE_CONTEXT"
+    ],
+    [
+      39,
+      31,
+      0,
+      20,
+      0,
+      "LATENT"
+    ],
+    [
+      40,
+      3,
+      0,
+      20,
+      1,
+      "VAE"
+    ],
+    [
+      41,
+      4,
+      0,
+      20,
+      2,
+      "VAE"
+    ],
+    [
+      42,
+      20,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      43,
+      20,
+      1,
+      21,
+      1,
+      "AUDIO"
+    ],
+    [
+      44,
+      13,
+      4,
+      21,
+      2,
+      "AUDIO"
+    ],
+    [
+      45,
+      15,
+      2,
+      21,
+      3,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      46,
+      10,
+      0,
+      22,
+      0,
+      "IMAGE"
+    ],
+    [
+      47,
+      10,
+      1,
+      22,
+      1,
+      "AUDIO"
+    ],
+    [
+      48,
+      21,
+      0,
+      22,
+      2,
+      "IMAGE"
+    ],
+    [
+      49,
+      21,
+      1,
+      22,
+      3,
+      "AUDIO"
+    ],
+    [
+      50,
+      15,
+      2,
+      22,
+      4,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      51,
+      12,
+      2,
+      23,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      52,
+      10,
+      0,
+      23,
+      1,
+      "IMAGE"
+    ],
+    [
+      53,
+      10,
+      1,
+      23,
+      2,
+      "AUDIO"
+    ],
+    [
+      54,
+      12,
+      0,
+      23,
+      3,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      55,
+      22,
+      0,
+      23,
+      4,
+      "IMAGE"
+    ],
+    [
+      56,
+      22,
+      1,
+      23,
+      5,
+      "AUDIO"
+    ],
+    [
+      57,
+      23,
+      0,
+      24,
+      0,
+      "IMAGE"
+    ],
+    [
+      58,
+      23,
+      1,
+      24,
+      1,
+      "AUDIO"
+    ],
+    [
+      59,
+      15,
+      2,
+      30,
+      0,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      60,
+      13,
+      0,
+      30,
+      1,
+      "IMAGE"
+    ],
+    [
+      61,
+      13,
+      4,
+      30,
+      2,
+      "AUDIO"
+    ],
+    [
+      62,
+      14,
+      1,
+      30,
+      3,
+      "IMAGE"
+    ],
+    [
+      63,
+      14,
+      2,
+      30,
+      4,
+      "AUDIO"
+    ],
+    [
+      64,
+      14,
+      4,
+      30,
+      5,
+      "STRING"
+    ],
+    [
+      65,
+      16,
+      0,
+      30,
+      6,
+      "MODEL"
+    ],
+    [
+      66,
+      16,
+      1,
+      30,
+      7,
+      "SAMPLER"
+    ],
+    [
+      67,
+      15,
+      1,
+      30,
+      8,
+      "SIGMAS"
+    ],
+    [
+      68,
+      15,
+      0,
+      30,
+      9,
+      "LATENT"
+    ],
+    [
+      69,
+      12,
+      0,
+      30,
+      10,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      70,
+      10,
+      0,
+      30,
+      11,
+      "IMAGE"
+    ],
+    [
+      71,
+      10,
+      1,
+      30,
+      12,
+      "AUDIO"
+    ],
+    [
+      72,
+      19,
+      2,
+      31,
+      0,
+      "T8_STAGE_RESULT"
+    ],
+    [
+      73,
+      15,
+      2,
+      31,
+      1,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      74,
+      13,
+      0,
+      31,
+      2,
+      "IMAGE"
+    ],
+    [
+      75,
+      13,
+      4,
+      31,
+      3,
+      "AUDIO"
+    ],
+    [
+      76,
+      14,
+      1,
+      31,
+      4,
+      "IMAGE"
+    ],
+    [
+      77,
+      14,
+      2,
+      31,
+      5,
+      "AUDIO"
+    ],
+    [
+      78,
+      14,
+      4,
+      31,
+      6,
+      "STRING"
+    ],
+    [
+      79,
+      15,
+      0,
+      31,
+      7,
+      "LATENT"
+    ],
+    [
+      80,
+      12,
+      0,
+      31,
+      8,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      81,
+      10,
+      0,
+      31,
+      9,
+      "IMAGE"
+    ],
+    [
+      82,
+      10,
+      1,
+      31,
+      10,
+      "AUDIO"
+    ],
+    [
+      83,
+      15,
+      2,
+      32,
+      0,
+      "H3_T8_MOTION_RECOVERY_PLAN"
+    ],
+    [
+      84,
+      32,
+      0,
+      33,
+      0,
+      "INT"
+    ],
+    [
+      85,
+      2,
+      0,
+      34,
+      0,
+      "CLIP"
+    ],
+    [
+      86,
+      3,
+      0,
+      34,
+      1,
+      "VAE"
+    ],
+    [
+      87,
+      4,
+      0,
+      34,
+      2,
+      "VAE"
+    ],
+    [
+      88,
+      33,
+      1,
+      34,
+      3,
+      "STRING"
+    ],
+    [
+      89,
+      33,
+      2,
+      34,
+      4,
+      "INT"
+    ],
+    [
+      90,
+      9,
+      0,
+      36,
+      0,
+      "LATENT"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.55,
+      "offset": [
+        90,
+        500
+      ]
+    },
+    "ue_links": [],
+    "t8_motion_recovery": {
+      "scope": "windowed Stock20 T2VA Advanced EXP",
+      "reference": "matlowai/ComfyUI-MAINodes@aadd17764007122700738095d71a3a4e8108c866",
+      "quality_status": "mechanical_contract_only_real_quality_pending",
+      "audio_default": "pass1_original",
+      "audio_validation": "pass2_failed_midwindow_distance_jump; blend_0p8_single_clip_pass"
+    },
+    "t8_split_example": {
+      "schema": "t8.motion-recovery.split-example.v1",
+      "variant": "Windowed",
+      "effect": "relay",
+      "mode": "full_save",
+      "status": "experimental_importable_not_quality_accepted"
+    },
+    "t8_plain_source": "examples/workflows/57-motion-recovery-split/S25_Motion_Windowed_relay_full_save_Separate_Stage_EXP.json"
+  },
+  "version": 0.4
+}

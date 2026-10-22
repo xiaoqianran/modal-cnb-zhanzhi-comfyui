@@ -42,6 +42,7 @@ const DIALOGUE_CLASS = "h3-dialogue-block";
 const PROMPT_VIEW_STRUCTURED = "structured";
 const PROMPT_VIEW_RAW = "raw";
 const PROMPT_GUIDES = [
+    { value: "refmod", zh: "RefMod", en: "RefMod" },
     { value: "none", zh: "\u4ec5\u901a\u7528\u65b9\u6848", en: "General only" },
     { value: "r2va_enhanced", zh: "R2VA \u52a0\u5f3a\u7248", en: "R2VA Enhanced" },
     { value: "3d_animation_short", zh: "3D \u52a8\u753b\u77ed\u7247", en: "3D Animation Short" },
@@ -167,7 +168,7 @@ const TEXT = {
     outputClip: "CLIP",
     outputVideoVae: "Video VAE",
     outputAudioVae: "Audio VAE",
-    outputAudio1: ZH_BROWSER ? "Audio 1 \u97f3\u9891" : "Audio 1",
+    outputAudio1: ZH_BROWSER ? "\u97f3\u9891\u8f93\u51fa" : "Audio output",
     outputFps: "FPS",
     outputPromptPreview: ZH_BROWSER ? "\u63d0\u793a\u8bcd\u53cd\u63a8\u8f93\u51fa" : "Prompt inference output",
     outputContext: "H3 Context",
@@ -189,8 +190,12 @@ const TEXT = {
 const OPTION_DEFS = {
     audio_duration_auto: {
         off: ZH_BROWSER ? "关闭" : "Off",
-        audio: ZH_BROWSER ? "参考音频对齐" : "Reference audio",
-        video: ZH_BROWSER ? "参考视频对齐" : "Reference video",
+        video1: ZH_BROWSER ? "对齐Video1" : "Align Video 1",
+        video2: ZH_BROWSER ? "对齐Video2" : "Align Video 2",
+        video3: ZH_BROWSER ? "对齐Video3" : "Align Video 3",
+        audio1: ZH_BROWSER ? "对齐Audio1" : "Align Audio 1",
+        audio2: ZH_BROWSER ? "对齐Audio2" : "Align Audio 2",
+        audio3: ZH_BROWSER ? "对齐Audio3" : "Align Audio 3",
     },
     mode: {
         [MODE_IMAGE]: ZH_BROWSER ? "\u56fe\u751f\u6216\u9996\u5c3e\u5e27" : "I2V or First/Last Frame",
@@ -539,10 +544,13 @@ function localizeNodeInstance(node) {
     }
     if (isOutput(node)) {
         node.title = TEXT.outputTitle;
+        if (!(node.outputs || []).some((output) => output.name === "reference_map")) {
+            node.addOutput?.("reference_map", "STRING");
+        }
         for (const input of node.inputs || []) {
             if (input.name === "h3_context") setLocalizedSlotLabel(input, TEXT.outputContext);
         }
-        const outputLabels = { positive: TEXT.outputConditioning, latent: TEXT.outputLatent, clip: TEXT.outputClip, video_vae: TEXT.outputVideoVae, audio_vae: TEXT.outputAudioVae, audio_1: TEXT.outputAudio1, fps: TEXT.outputFps, prompt_preview: TEXT.outputPromptPreview };
+        const outputLabels = { positive: TEXT.outputConditioning, latent: TEXT.outputLatent, clip: TEXT.outputClip, video_vae: TEXT.outputVideoVae, audio_vae: TEXT.outputAudioVae, audio_1: TEXT.outputAudio1, fps: TEXT.outputFps, prompt_preview: TEXT.outputPromptPreview, reference_map: isChineseComfyLocale() ? "RefMod 编号对应表" : "RefMod reference map" };
         for (const output of node.outputs || []) {
             const key = String(output.name || "").toLowerCase();
             if (outputLabels[key]) setLocalizedSlotLabel(output, outputLabels[key]);
@@ -558,6 +566,9 @@ function localizeNodeInstance(node) {
     if (!(node.inputs || []).some((input) => input.name === "prompt")) {
         node.addInput?.("prompt", "STRING", { widget: { name: "prompt" } });
     }
+    if (!(node.inputs || []).some((input) => input.name === "refmods")) {
+        node.addInput?.("refmods", "H3_REF_MODS");
+    }
     node.title = isCoreNode(node) ? CORE_TITLE : TEXT.mainTitle;
     const labels = { mode: TEXT.mode, prompt: TEXT.prompt, resolution: TEXT.resolution, aspect_ratio: TEXT.aspectRatio, width: TEXT.width, height: TEXT.height, audio_duration_auto: TEXT.audioDurationAuto, seconds: TEXT.seconds, advanced: TEXT.advanced, force_offload: TEXT.forceOffload, low_vram_streamed_attention: TEXT.lowVramStreamedAttention, reference_text_only: TEXT.referenceTextOnly, prompt_optimizer_enabled: TEXT.promptOptimizerEnabled, prompt_optimizer_provider: TEXT.promptOptimizerProvider, prompt_optimizer_scene_guide: TEXT.promptOptimizerSceneGuide, fps: TEXT.fps, keyframe_role: TEXT.keyframeRole, ref_image_size: TEXT.refImageSize, reference_mention_mode: TEXT.referenceMentionMode };
     for (const widget of node.widgets || []) {
@@ -567,6 +578,7 @@ function localizeNodeInstance(node) {
     for (const input of node.inputs || []) {
         if (input.name === "h3_bundle") setLocalizedSlotLabel(input, TEXT.bundle);
         if (input.name === "production_shot") setLocalizedSlotLabel(input, isChineseComfyLocale() ? "制作包分镜" : "Production shot");
+        if (input.name === "refmods") setLocalizedSlotLabel(input, "RefMod");
         if (input.name === "media") setLocalizedSlotLabel(input, TEXT.inputMedia);
     }
     const outputLabels = { model: TEXT.outputModel, second_sampling_model: TEXT.outputSecondSamplingModel, h3_context: TEXT.outputContext };
@@ -1857,17 +1869,90 @@ function promptInputIsConnected(node) {
     return promptInputSlot(node)?.link != null;
 }
 
+function refmodsInputIsConnected(node) {
+    return (node?.inputs || []).some((input) => input.name === "refmods" && input.link != null);
+}
+
+let refmodCatalog = new Map();
+let refmodCatalogRequest = null;
+let refmodCatalogUpdatedAt = 0;
+
+async function refreshRefmodCatalog(force = false) {
+    if (refmodCatalogRequest) return refmodCatalogRequest;
+    if (!force && Date.now() - refmodCatalogUpdatedAt < 5000) return;
+    refmodCatalogUpdatedAt = Date.now();
+    refmodCatalogRequest = (async () => {
+        const response = await api.fetchApi("/feihou_easy_h3/refmods");
+        if (!response.ok) throw new Error(`RefMod metadata: ${response.status}`);
+        const data = await response.json();
+        const next = new Map((data.references || []).map(entry => [entry.name, entry.members]));
+        const changed = JSON.stringify([...next]) !== JSON.stringify([...refmodCatalog]);
+        refmodCatalog = next;
+        if (changed) requestMentionPreviewRefresh();
+    })().catch(error => console.warn("Easy H3: could not refresh RefMod references", error))
+        .finally(() => { refmodCatalogRequest = null; });
+    return refmodCatalogRequest;
+}
+
+function refmodSourceNode(node, depth = 0) {
+    if (!node || depth > 16 || node.mode === 2 || node.mode === 4) return null;
+    const type = String(node.comfyClass || node.type || "");
+    if (["MiniMaxH3RefModsLoader", "MiniMaxH3RefModsAxis"].includes(type)) return node;
+    const graph = node.graph || app.graph;
+    if (type === "GetNode") {
+        const setter = (graph?._nodes || []).find(item => item.type === "SetNode" && item.widgets?.[0]?.value === node.widgets?.[0]?.value);
+        return refmodSourceNode(setter, depth + 1);
+    }
+    const input = isTarget(node) ? (node.inputs || []).find(item => item.name === "refmods")
+        : ["Reroute", "SetNode", "MiniMaxH3RefModSave", "MiniMaxH3RefModBundleSave"].includes(type) ? node.inputs?.[0] : null;
+    if (input?.link == null) return null;
+    const link = getNativeGraphLink(graph, input.link);
+    return refmodSourceNode(graph?.getNodeById?.(link?.origin_id ?? link?.originId), depth + 1);
+}
+
+function refmodReferences(node) {
+    const source = refmodSourceNode(node);
+    if (!source) return [];
+    const axis = String(source.comfyClass || source.type) === "MiniMaxH3RefModsAxis";
+    const refs = [];
+    for (let slot = 1; slot <= 8; slot++) {
+        const value = Number(getWidgetValue(source, axis ? `value_${slot}` : `strength_${slot}`, axis ? 0 : 1));
+        if (!Number.isFinite(value) || (axis ? Math.abs(value) < 1e-6 : value <= 0)) continue;
+        const name = String(getWidgetValue(source, axis ? `mod_${value > 0 ? "b" : "a"}_${slot}` : `mod_${slot}`, "(none)"));
+        const selection = String(getWidgetValue(source, `components_${slot}`, "All"));
+        const members = refmodCatalog.get(name) || [];
+        const copies = axis ? 1 : Number(getWidgetValue(source, `copies_${slot}`, 1));
+        for (const member of members) {
+            const component = member.kind === "audio" ? "Audio" : "Visual";
+            if (selection !== "All" && selection !== component) continue;
+            if (Number(getWidgetValue(source, `${component.toLowerCase()}_strength_${slot}`, 1)) <= 0) continue;
+            for (let copy = 0; copy < copies; copy++) refs.push({
+                type: member.kind, fullLabel: `${member.name} · RefMod`, source: `RefMod · ${name}`,
+                sourceId: source.id, sourceSlot: slot,
+                refmodKey: `${source.id}:${slot}:${name}:${member.index}:${copy}`, previewUrl: "",
+            });
+        }
+    }
+    return refs;
+}
+
 function buildRuntimePrompt(node, runtimeLinks) {
     const promptWidget = getWidget(node, "prompt");
     const fallback = String(promptWidget?.value || "");
     const doc = node?.properties?.[PROMPT_DOC_PROP];
     if (!Array.isArray(doc?.parts)) return fallback;
+    const options = mentionOptions(node);
     return doc.parts.map((part) => {
         if (part?.type === "dialogue") return `<d>${String(part.text || "")}</d>`;
         if (part?.type !== "mention") return String(part?.text || "");
         const mediaType = String(part.mediaType || "image").toLowerCase();
+        const option = findMentionOption(options, part, referenceMentionMode(node));
+        if (part.refmodKey || option?.refmodKey) {
+            return option ? option.tag : `${UNRESOLVED_REF_PREFIX}${mediaType}__`;
+        }
         const partSourceId = part.sourceId != null && Number.isFinite(Number(part.sourceId)) ? Number(part.sourceId) : null;
-        const partOrdinal = Number(part.ordinal);
+        const modCount = options.filter(item => item.refmodKey && item.type === mediaType).length;
+        const partOrdinal = Number(part.ordinal) - modCount;
         let index = -1;
         if ((referenceMentionMode(node) === "index" || partSourceId == null) && Number.isFinite(partOrdinal) && partOrdinal > 0) {
             let ordinal = 0;
@@ -1890,6 +1975,10 @@ function buildRuntimePrompt(node, runtimeLinks) {
         }
         if (index >= 0) return `${RUNTIME_REF_PREFIX}${index + 1}__`;
         if (!isReferenceMode(node)) return String(part.tag || part.token || "");
+        // Direct official tags can also come from connected Create/Master nodes.
+        if (refmodsInputIsConnected(node) && partSourceId == null && Number.isInteger(partOrdinal) && partOrdinal > 0) {
+            return promptMentionTag(mediaType, Number(part.ordinal));
+        }
         return `${UNRESOLVED_REF_PREFIX}${mediaType}__`;
     }).join("");
 }
@@ -1899,6 +1988,9 @@ function patchGraphToPrompt() {
     patchedPrompt = true;
     const original = app.graphToPrompt;
     app.graphToPrompt = async function graphToPromptWithOrderedMedia() {
+        if ((app.graph?._nodes || []).some(node => isTarget(node) && refmodsInputIsConnected(node))) {
+            await refreshRefmodCatalog(true);
+        }
         const promptData = await original.apply(this, arguments);
         const output = promptData?.output || {};
         for (const node of app.graph?._nodes || []) {
@@ -2066,10 +2158,17 @@ function truncateMentionLabel(value, maxLength = 22) {
 
 function mentionOptions(node) {
     if (!isReferenceMode(node)) return [];
+    if (refmodsInputIsConnected(node)) void refreshRefmodCatalog();
     const orderedLinks = embeddedMediaRecords(node);
     const counts = { image: 0, video: 0, audio: 0 };
     const mode = referenceMentionMode(node);
-    return orderedLinks.map((link) => {
+    const mods = refmodReferences(node).map(ref => {
+        const ordinal = ++counts[ref.type];
+        const label = mode === "index" ? `${LABELS[ref.type] || ref.type}${ordinal}` : truncateMentionLabel(ref.fullLabel);
+        return { ...ref, ordinal, label, tag: promptMentionTag(ref.type, ordinal),
+            token: `@${mode === "index" ? label : ref.fullLabel}`, referenceMode: mode };
+    });
+    return [...mods, ...orderedLinks.map((link) => {
         const type = String(link.media_type || "image");
         counts[type] = (counts[type] || 0) + 1;
         const ordinal = counts[type];
@@ -2090,19 +2189,23 @@ function mentionOptions(node) {
             sourceSlot: Number(link.source_slot) || 0,
             previewUrl: type === "image" ? viewUrl : type === "video" ? getVideoFrameThumbnail(viewUrl) : "",
         };
-    });
+    })];
 }
 
 function findMentionOption(options, reference, mode) {
+    if (reference?.refmodKey) return options.find(item => item.refmodKey === reference.refmodKey) || null;
     const type = String(reference?.mediaType || reference?.type || "image").toLowerCase();
     const ordinal = Number(reference?.ordinal);
     const rawSourceId = reference?.sourceId;
     const sourceId = rawSourceId == null || rawSourceId === "" ? Number.NaN : Number(rawSourceId);
     const sourceSlot = Number(reference?.sourceSlot) || 0;
     const findByOrdinal = () => Number.isFinite(ordinal) && ordinal > 0
-        ? options.find((item) => item.type === type && Number(item.ordinal) === ordinal)
+        ? options.find((item) => item.type === type && Number(item.ordinal) === ordinal
+            && (!Number.isFinite(sourceId) || !item.refmodKey))
         : null;
-    if (mode === "index") return findByOrdinal();
+    if (mode === "index") return findByOrdinal() || (Number.isFinite(sourceId)
+        ? options.find(item => !item.refmodKey && Number(item.sourceId) === sourceId
+            && Number(item.sourceSlot) === sourceSlot && item.type === type) || null : null);
     if (Number.isFinite(sourceId)) {
         return options.find((item) => Number(item.sourceId) === sourceId
             && Number(item.sourceSlot) === sourceSlot
@@ -2172,6 +2275,7 @@ function refreshMentionPreviews() {
                 ordinal,
                 sourceId,
                 sourceSlot: Number(chip.dataset.sourceSlot) || 0,
+                refmodKey: chip.dataset.refmodKey || "",
             }, currentMode);
             updateMentionChip(chip, option || {
                 type: chip.dataset.mediaType || "image",
@@ -2182,6 +2286,7 @@ function refreshMentionPreviews() {
                 ordinal,
                 sourceId,
                 sourceSlot: Number(chip.dataset.sourceSlot) || 0,
+                refmodKey: chip.dataset.refmodKey || "",
                 previewUrl: "",
                 unresolved: true,
                 pending: sourceId == null && ordinal != null,
@@ -2219,6 +2324,7 @@ function updateMentionChip(chip, option) {
     chip.dataset.pendingReference = option.pending ? "true" : "";
     if (option.sourceId != null) chip.dataset.sourceId = String(option.sourceId);
     if (option.sourceSlot != null) chip.dataset.sourceSlot = String(Number(option.sourceSlot) || 0);
+    chip.dataset.refmodKey = option.refmodKey || "";
     chip.dataset.previewUrl = nextPreviewUrl;
     chip.title = option.pending
         ? (ZH_BROWSER ? "\u7b49\u5f85\u8fde\u63a5\u5bf9\u5e94\u5e8f\u53f7\u7684\u5a92\u4f53\u7d20\u6750" : "Waiting for media with the matching index")
@@ -2485,6 +2591,7 @@ function makeMentionChip(option) {
     chip.dataset.ordinal = Number(option.ordinal) || "";
     chip.dataset.sourceId = option.sourceId != null ? String(option.sourceId) : "";
     chip.dataset.sourceSlot = String(option.sourceSlot || 0);
+    chip.dataset.refmodKey = option.refmodKey || "";
     chip.dataset.previewUrl = option.previewUrl || "";
     chip.dataset.pendingReference = option.pending ? "true" : "";
     chip.title = option.pending
@@ -2633,6 +2740,7 @@ function promptPartsFromText(node, value) {
             ordinal: Number(option.ordinal) || null,
             sourceId: option.sourceId != null ? Number(option.sourceId) : null,
             sourceSlot: Number(option.sourceSlot) || 0,
+            refmodKey: option.refmodKey || "",
             previewUrl: option.previewUrl || "",
             unresolved: Boolean(option.unresolved),
             pending: Boolean(option.pending),
@@ -2722,6 +2830,7 @@ function serializeEditorDoc(editor) {
                 ordinal: Number(item.dataset.ordinal) || null,
                 sourceId: item.dataset.sourceId ? Number(item.dataset.sourceId) : null,
                 sourceSlot: Number(item.dataset.sourceSlot) || 0,
+                refmodKey: item.dataset.refmodKey || "",
                 previewUrl: item.dataset.previewUrl || "",
             });
             return;
@@ -2785,6 +2894,7 @@ function renderEditorFromNode(node, force = false) {
             ordinal: partOrdinal,
             sourceId: partSourceId,
             sourceSlot: Number(part.sourceSlot) || 0,
+            refmodKey: part.refmodKey || "",
         }, currentMode);
         editor.append(makeMentionChip({
             type: part.mediaType || option?.type || "image",
@@ -2796,6 +2906,7 @@ function renderEditorFromNode(node, force = false) {
             ordinal: option?.ordinal ?? part.ordinal,
             sourceId: option?.sourceId ?? part.sourceId,
             sourceSlot: option?.sourceSlot ?? part.sourceSlot ?? 0,
+            refmodKey: option?.refmodKey || part.refmodKey || "",
             previewUrl: option?.previewUrl || "",
             unresolved: !option,
             pending: !option && partSourceId == null && partOrdinal != null,
@@ -3742,8 +3853,17 @@ function syncModeWidgets(node, { adjustHeight = true } = {}) {
 }
 
 function durationAlignment(value) {
-    if (value === true || ["true", "1", "audio", "参考音频对齐", "Reference audio"].includes(String(value))) return "audio";
-    if (["video", "参考视频对齐", "Reference video"].includes(String(value))) return "video";
+    if (value === true) return "audio1";
+    if (value === false || value == null) return "off";
+    const compact = String(value).trim().toLowerCase().replace(/[\s_-]+/g, "");
+    if (["", "off", "none", "false", "0", "关闭", "关闭对齐"].includes(compact)) return "off";
+    const legacy = {
+        "true": "audio1", "1": "audio1", audio: "audio1", "参考音频对齐": "audio1", referenceaudio: "audio1",
+        video: "video1", "参考视频对齐": "video1", referencevideo: "video1",
+    };
+    if (legacy[compact]) return legacy[compact];
+    const match = compact.match(/^(?:对齐|align)?(video|视频|audio|音频)([123])$/);
+    if (match) return `${["video", "视频"].includes(match[1]) ? "video" : "audio"}${match[2]}`;
     return "off";
 }
 
@@ -3765,16 +3885,18 @@ function syncAudioDurationAuto(node) {
     }
     let valueChanged = false;
     if (enabled) {
-        const [startRaw, endRaw] = normalizeAudioTrimRange(audioTrimForSlot(node, 1, alignment)).split("-", 2);
+        const sourceKind = alignment.startsWith("video") ? "video" : "audio";
+        const sourceOrdinal = Number(alignment.slice(-1)) || 1;
+        const [startRaw, endRaw] = normalizeAudioTrimRange(audioTrimForSlot(node, sourceOrdinal, sourceKind)).split("-", 2);
         const start = parseAudioTrimPart(startRaw);
         const end = parseAudioTrimPart(endRaw);
-        const record = ensureEmbeddedMedia(node).find(item => item.media_type === alignment && item.ordinal === 1);
+        const record = ensureEmbeddedMedia(node).find(item => item.media_type === sourceKind && item.ordinal === sourceOrdinal);
         if (record) {
             const url = embeddedMediaViewUrl(record);
             const cache = node.__h3MediaDurationCache ||= new Map();
             if (!cache.has(url)) {
                 cache.set(url, null);
-                const probe = document.createElement(alignment === "video" ? "video" : "audio");
+                const probe = document.createElement(sourceKind === "video" ? "video" : "audio");
                 const release = () => { probe.removeAttribute("src"); probe.load(); };
                 probe.addEventListener("loadedmetadata", () => {
                     cache.set(url, Number(probe.duration));
@@ -3937,6 +4059,16 @@ function updatePromptGuideCatalog(settings) {
         zh: String(item.name_zh || item.name || item.id),
         en: String(item.name || item.name_zh || item.id),
     }));
+    // Built-in names stay short; distinguish editable rules with the same name.
+    for (const locale of ["zh", "en"]) {
+        const used = new Set(next.filter((item) => !item.value.startsWith("custom_")).map((item) => item[locale]));
+        for (const item of next.filter((entry) => entry.value.startsWith("custom_"))) {
+            const base = item[locale];
+            if (used.has(item[locale])) item[locale] = `${base}${locale === "zh" ? "（自定义）" : " (Custom)"}`;
+            if (used.has(item[locale])) item[locale] = `${item[locale]} [${item.value}]`;
+            used.add(item[locale]);
+        }
+    }
     PROMPT_GUIDES.splice(0, PROMPT_GUIDES.length, ...next);
 }
 
@@ -4120,7 +4252,11 @@ function sourceAssetDescriptor(node, mediaType) {
 
 function promptOptimizerResources(node) {
     const counts = { image: 0, video: 0, audio: 0 };
-    return embeddedMediaRecords(node).map((link) => {
+    const mods = refmodReferences(node).map(ref => {
+        const ordinal = ++counts[ref.type];
+        return { type: ref.type, tag: promptMentionTag(ref.type, ordinal), name: ref.fullLabel };
+    });
+    return [...mods, ...embeddedMediaRecords(node).map((link) => {
         const type = String(link.media_type || "image").toLowerCase();
         counts[type] = (counts[type] || 0) + 1;
         const ordinal = counts[type];
@@ -4134,7 +4270,7 @@ function promptOptimizerResources(node) {
                 storage: link.storage || "input",
             },
         };
-    });
+    })];
 }
 
 function setPromptFromOptimizedText(node, value) {
@@ -4170,6 +4306,7 @@ async function optimizePromptFromEditor(node) {
         notifyPromptOptimizer(TEXT.optimizerDisabled, "warn");
         return;
     }
+    if (refmodsInputIsConnected(node)) await refreshRefmodCatalog(true);
     const resources = promptOptimizerResources(node);
     const model = state.requested_model;
     const local = state.api_format === "local";
@@ -4205,6 +4342,8 @@ async function optimizePromptFromEditor(node) {
                 scene_guide: canonicalPromptGuide(getWidgetValue(node, "prompt_optimizer_scene_guide", "none")),
                 media_counts: mediaCounts,
                 resources,
+                external_reference_map: mentionOptions(node).filter(option => option.refmodKey)
+                    .map(option => `${option.tag} = ${option.fullLabel}`).join("\n"),
             }),
         });
         const data = await response.json().catch(() => ({}));
@@ -5341,8 +5480,13 @@ function repairConfiguredWidgetValues(node, info) {
     if (values.length <= 14) values.splice(12, 0, false);
     // v1.4 adds an always-visible toggle immediately above Seconds. Old
     // workflows have a numeric Seconds value in slot 6, so insert the safe
-    // disabled default only when that slot is not already the new boolean.
-    if (typeof values[6] !== "boolean" && !["off", "audio", "video", "关闭", "参考音频对齐", "参考视频对齐", "Off", "Reference audio", "Reference video"].includes(values[6])) values.splice(6, 0, "off");
+    // disabled default only when that slot is not already an alignment value.
+    const alignmentValue = values[6];
+    const isAlignmentValue = typeof alignmentValue === "boolean"
+        || (typeof alignmentValue === "string"
+            && (durationAlignment(alignmentValue) !== "off"
+                || ["off", "none", "false", "0", "关闭", "关闭对齐"].includes(alignmentValue.trim().toLowerCase())));
+    if (!isAlignmentValue) values.splice(6, 0, "off");
 
     // v1.4.0 briefly wrote the final nine values in defaults-object order:
     // force offload, low VRAM, FPS, keyframe, reference size, mention mode,
@@ -5938,6 +6082,7 @@ function ensureEmbeddedMediaGallery(node) {
 function setupMainNodeFrontend(node) {
     if (!node || !isTarget(node)) return;
     node.properties ||= {};
+    void refreshRefmodCatalog();
     delete node.properties[LINKS_PROP];
     ensureEmbeddedMedia(node);
     pruneTransportInputsFromNode(node, { force: true });
@@ -6132,7 +6277,7 @@ function installNode(nodeType, nodeData) {
             syncPromptExternalConnectionState(this);
             globalThis.requestAnimationFrame?.(() => syncPromptExternalConnectionState(this));
         }
-        if (String(input?.name || "") === CORE_MEDIA_INPUT) {
+        if ([CORE_MEDIA_INPUT, "refmods"].includes(String(input?.name || ""))) {
             setTimeout(() => {
                 syncAudioDurationAuto(this);
                 renderEditorFromNode(this);
@@ -6718,12 +6863,50 @@ function installMediaNode(nodeType, nodeData) {
     };
 }
 
+function installRefmodMentionRefresh(nodeType, nodeData) {
+    if (!["MiniMaxH3RefModsLoader", "MiniMaxH3RefModsAxis"].includes(nodeData?.name)) return;
+    const created = nodeType.prototype.onNodeCreated;
+    nodeType.prototype.onNodeCreated = function () {
+        const result = created?.apply(this, arguments);
+        for (const widget of this.widgets || []) {
+            const callback = widget.callback;
+            widget.callback = function () {
+                const value = callback?.apply(this, arguments);
+                void refreshRefmodCatalog(true);
+                requestMentionPreviewRefresh();
+                return value;
+            };
+        }
+        void refreshRefmodCatalog(true);
+        return result;
+    };
+    for (const hook of ["onConfigure", "onConnectionsChange", "onRemoved"]) {
+        const previous = nodeType.prototype[hook];
+        nodeType.prototype[hook] = function () {
+            const result = previous?.apply(this, arguments);
+            requestMentionPreviewRefresh();
+            return result;
+        };
+    }
+}
+
 app.registerExtension({
     name: "FeiHouEasyH3",
     setup() {
         install();
     },
+    async refreshComboInNodes() {
+        // ComfyUI's R refresh overwrites localized combo options with backend IDs.
+        // Reload the catalog so rules saved in another page also become selectable.
+        try {
+            await loadPromptOptimizerSettings({ force: true });
+        } catch (error) {
+            console.warn("Easy H3: could not refresh prompt rules; using cached names", error);
+            syncPromptOptimizerNodes();
+        }
+    },
     beforeRegisterNodeDef(nodeType, nodeData) {
+        installRefmodMentionRefresh(nodeType, nodeData);
         installFaceRefineNode(nodeType, nodeData);
         installResolutionNode(nodeType, nodeData);
         localizeNodeDefinition(nodeData);

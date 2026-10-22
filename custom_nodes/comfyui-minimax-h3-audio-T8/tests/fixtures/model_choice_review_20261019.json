@@ -1,0 +1,17 @@
+{
+  "schema": "t8.model-choice.director-review.v1",
+  "previous_site": {
+    "path": "h3_t8/director_generation.py",
+    "symbol": "build_director_generation_prompt",
+    "callee": "<director_graph_builder>",
+    "call_sha256": "5569e3e4db78e134b477b3d15bf72bf810d759398d6633c05c5d62fd804edd74"
+  },
+  "reviewed_site": {
+    "path": "h3_t8/director_generation.py",
+    "symbol": "build_director_generation_prompt",
+    "callee": "<director_graph_builder>",
+    "call_sha256": "b1e8647b4da0272ab98de5079ab2e148d3295138cd7e5f7c09b9e023575617a3"
+  },
+  "reason": "Only remove manual LoRA route admission; preserve LoRA ordering/strength and existing turbo-route defaults; newly opened combinations keep eight steps. No new stage nodes or sampler calls.",
+  "evidence": "Completed local CPU twelve-family regression: 310 passed; includes ordered multiple LoRA reference/end route checks. No new GPU claim."
+}

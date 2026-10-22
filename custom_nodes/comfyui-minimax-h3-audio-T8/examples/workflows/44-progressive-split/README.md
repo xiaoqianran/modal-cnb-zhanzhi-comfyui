@@ -1,5 +1,7 @@
 # S10 Progressive 分离式二采（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#44-progressive-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录是现有 Progressive single 的 T2VA／I2VA 分离式实验图。旧 `28-progressive-sampling` 一体工作流与默认采样入口均保留。160 张图分为两组配方：文件名含 `Legacy6plus2` 的80张对应旧公开样例的总8步、LOW6＋HIGH2、两阶段EMA B LoRA、1024×512×124；另外80张为现有分离候选的Stock20 LOW10＋HIGH10，**不是旧6＋2的替代**。每组再覆盖两种任务 × 10 种已实现效果配方（无效果，或 EAV／Prompt Relay／两者组合各作用于 LOW、HIGH、两段）× 四种操作：
 
 - `Full_NoSave`：显式运行 LOW→原 learned3D→HIGH，不保存阶段。

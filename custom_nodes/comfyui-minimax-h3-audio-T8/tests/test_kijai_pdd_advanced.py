@@ -176,8 +176,8 @@ def test_actual_registration_appends_new_setup_and_metadata_matches():
     from pathlib import Path
     import h3_audio_t8_pkg
     ids = [node.define_schema().node_id for node in asyncio.run(h3_audio_t8_pkg.comfy_entrypoint().get_node_list())]
-    assert len(ids) == len(set(ids)) == 620
-    assert ids[618:] == ["MiniMaxH3HyperFlowCurveBaseLoaderEXPT8", "MiniMaxH3KijaiPDD8StepSetupEXPT8"]
+    assert len(ids) == len(set(ids))
+    assert ids[618:620] == ["MiniMaxH3HyperFlowCurveBaseLoaderEXPT8", "MiniMaxH3KijaiPDD8StepSetupEXPT8"]
     assert json.loads((Path(__file__).resolve().parents[1] / "features.json").read_text(encoding="utf8"))["nodes"] == ids
 
 

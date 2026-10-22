@@ -67,8 +67,10 @@ def validate_native_model(model, sampler):
     import comfy.samplers
     from .h3_core_compat import plain_attention_backend
     av_type = getattr(comfy.model_sampling, "ModelSamplingAV", None)
-    if av_type is None or type(getattr(model, "model", None)) is not comfy.model_base.MiniMaxH3:
-        raise ValueError("Progressive first sampling requires current Core native H3 FLOW_AV; old routes remain unchanged")
+    if av_type is None:
+        raise ValueError("Progressive sampling requires Core's ModelSamplingAV API")
+    if type(getattr(model, "model", None)) is not comfy.model_base.MiniMaxH3:
+        warn_patch_stack("Progressive sampling received another MODEL class; checking actual AV APIs")
     sampling = model.get_model_object("model_sampling")
     if not isinstance(sampling, (av_type,)) or not isinstance(sampling, comfy.model_sampling.CONST):
         raise ValueError("Configure native H3 Euler/AV sampling, not dual_clock_euler")

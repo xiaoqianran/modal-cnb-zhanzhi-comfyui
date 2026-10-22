@@ -258,9 +258,8 @@ def build_tiled_vae_coordinate_compatibility(video_vae, mode="report_only"):
         raise ValueError("mode must be report_only or apply_global_coordinates_exp")
     first_stage = getattr(video_vae, "first_stage_model", None)
     if first_stage is None or first_stage.__class__.__name__ != "MiniMaxH3VideoVAE":
-        raise TypeError(
-            "MiniMax H3 Global-Coordinate Tiled VAE requires the native H3 video VAE."
-        )
+        from .patch_stack_policy import warn_patch_stack
+        warn_patch_stack("Global-Coordinate Tiled VAE received another VAE class; probing its decoder API")
     decoder = getattr(first_stage, "decoder", None)
     if decoder is None:
         raise RuntimeError("MiniMax H3 video VAE decoder is unavailable.")

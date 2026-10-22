@@ -569,7 +569,7 @@ def _multikeyframe_forward(
         set_segment_time("audio", audio_time)
 
     unique_t = sorted(
-        set(segment_times)
+        {t_v, t_a} | set(segment_times)
         | (set(video_rows_t.unique().tolist()) if video_rows_t is not None else set())
         | (set(audio_rows_t.unique().tolist()) if audio_rows_t is not None else set())
     )
@@ -617,6 +617,8 @@ def _multikeyframe_forward(
         else:
             mod_segments.append((start, stop, row_base + segment_tags[kind]))
 
+    # Core exposes the layout before text refinement as well as DiT blocks.
+    transformer_options["minimax_h3_layout"] = layout
     img_update = layout.img_update.to(device)
     audio_update = layout.audio_update.to(device)
     video_rows = minimax_model.patchify_video(video_x.to(torch.float32), self.patch_size)
@@ -776,7 +778,7 @@ def patch_multikeyframe_model(model, require_per_condition_forward: bool):
     if type(base_model).__name__ != "MiniMaxH3":
         diffusion_name = type(getattr(base_model, "diffusion_model", None)).__name__
         if diffusion_name != "MiniMaxH3Model":
-            raise ValueError("MiniMax H3 Multi-Keyframe Advanced requires a MiniMax H3 MODEL")
+            warn_patch_stack("Multi-Keyframe received another MODEL class; attempting the selected model's API")
 
     original_extra_conds = patched.get_model_object("extra_conds")
     if getattr(original_extra_conds, "_t8_long_video_patch_version", None) is not None:
@@ -854,7 +856,6 @@ def patch_multikeyframe_model(model, require_per_condition_forward: bool):
                 return patched
             required_forward_contract = (
                 "layout = payload.get(\"layout\")",
-                "cond_video_rows = self._cond_video_rows(payload, device)",
                 "mod_segments = []",
                 "rope_rotation_table",
                 "self.final_layer",
@@ -862,6 +863,16 @@ def patch_multikeyframe_model(model, require_per_condition_forward: bool):
             missing = [
                 snippet for snippet in required_forward_contract if snippet not in forward_source
             ]
+            # New Core extracts the unchanged embedding/packing operations into
+            # _embed_and_pack. Inspect the called helper, not just _forward's
+            # text; keep support for older Core with the inline implementation.
+            embedding_source = forward_source
+            if "self._embed_and_pack(" in forward_source:
+                embedding_source = inspect.getsource(minimax_model.MiniMaxH3Model._embed_and_pack)
+            for snippet in ("self._cond_video_rows(payload, device)",
+                            "self._cond_audio_rows(payload, device)"):
+                if snippet not in embedding_source:
+                    missing.append(snippet)
             if missing:
                 warn_patch_stack(
                     "This ComfyUI build changed the MiniMax H3 forward contract; "
@@ -1371,6 +1382,11 @@ def build_multikeyframe_conditioning(
     )
     require_per_condition_forward = len({float(value) for value in visual_augs}) > 1
     patched_model = patch_multikeyframe_model(model, require_per_condition_forward)
+    installed_forward = patched_model.get_model_object("diffusion_model._forward")
+    per_condition_forward_active = (
+        getattr(installed_forward, "_t8_multikeyframe_patch_version", None)
+        == MULTIKEYFRAME_PATCH_VERSION
+    )
 
     keyframe_map = []
     for ordinal, spec in enumerate(keyframe_specs, 1):
@@ -1402,9 +1418,14 @@ def build_multikeyframe_conditioning(
         ),
         "Do not stack this node with Long Video Conditioning or an external global H3 layout patch.",
     ]
-    if require_per_condition_forward:
+    if per_condition_forward_active:
         warnings.append(
             "Independent per-condition noise/timestep routing is active and requires quality monotonicity validation."
+        )
+    elif require_per_condition_forward:
+        warnings.append(
+            "Independent per-condition routing was requested but is not installed; "
+            "the selected forward is retained and independent strengths may not take effect."
         )
     if any(float(value) <= 0.95 for value in visual_augs):
         warnings.append(
@@ -1417,7 +1438,8 @@ def build_multikeyframe_conditioning(
         "scoped_model_patch_version": MULTIKEYFRAME_PATCH_VERSION,
         "native_middle_layout_supported": native_layout,
         "scoped_position_repair": not native_layout,
-        "per_condition_forward_patch": require_per_condition_forward,
+        "per_condition_forward_patch": per_condition_forward_active,
+        "per_condition_forward_requested": require_per_condition_forward,
         "frame_count": frame_count,
         "middle_keyframe_count": len(resolved_middle),
         "total_keyframe_count": len(keyframe_specs),

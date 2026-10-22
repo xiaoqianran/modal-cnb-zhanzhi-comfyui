@@ -1,5 +1,7 @@
 # 可选一致流式加载（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../../PLAIN_PROMPTS.md#60-ltx-rgb-stage-splitnative-load-policy-exp)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 短名入口：[Ordinary Full](S27_LTX25_Ordinary_full_save_eav_relay_native_EXP.json)／[Ordinary Cold](S27_LTX25_Ordinary_resume_ltx_eav_relay_native_EXP.json)／[Identity Full](S27_LTX25_Identity_Preserve_full_save_eav_relay_native_EXP.json)／[Identity Cold](S27_LTX25_Identity_Preserve_resume_ltx_eav_relay_native_EXP.json)。仅重命名、原字节不变，旧名见[对照表](../../filename-map.tsv)。
 
 四张新增图对应普通／Identity 的 full-save 和 cold-LTX；旧图未覆盖。

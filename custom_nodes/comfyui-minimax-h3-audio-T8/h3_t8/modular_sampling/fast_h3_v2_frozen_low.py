@@ -24,9 +24,8 @@ SCHEMA = "t8.modular-sampling.fasth3-v2-frozen-low-bundle.v1"
 SIDECAR = "current-v2-low-bundle.json"
 ENVELOPE_SCHEMA = "t8.modular-sampling.fasth3-v2-frozen-low-envelope.v1"
 BLOB = "current-v2-low-bundle.zlib"
-MAX_INLINE_JSON = storage.MAX_JSON
-MAX_BUNDLE_JSON = 64 * 1024 * 1024
-MAX_COMPRESSED = 16 * 1024 * 1024
+# Compression threshold, not a size admission limit.
+MAX_INLINE_JSON = 4 * 1024 * 1024
 
 
 def _unique_pairs(pairs):
@@ -44,9 +43,9 @@ def _read_payload(target):
         return wrapper
     if (wrapper.get("encoding") != "zlib" or wrapper.get("blob") != BLOB
             or type(wrapper.get("raw_bytes")) is not int
-            or not 0 < wrapper["raw_bytes"] <= MAX_BUNDLE_JSON
+            or not 0 < wrapper["raw_bytes"]
             or type(wrapper.get("compressed_bytes")) is not int
-            or not 0 < wrapper["compressed_bytes"] <= MAX_COMPRESSED):
+            or not 0 < wrapper["compressed_bytes"]):
         raise ValueError("Frozen LOW compressed envelope is invalid")
     blob = target.with_name(BLOB)
     if (blob.is_symlink() or not blob.is_file()
@@ -55,7 +54,7 @@ def _read_payload(target):
         raise ValueError("Frozen LOW compressed blob changed")
     compressed = blob.read_bytes()
     decoder = zlib.decompressobj()
-    raw = decoder.decompress(compressed, MAX_BUNDLE_JSON + 1)
+    raw = decoder.decompress(compressed, wrapper["raw_bytes"] + 1)
     if (len(raw) != wrapper["raw_bytes"] or not decoder.eof
             or decoder.unused_data or decoder.unconsumed_tail
             or hashlib.sha256(raw).hexdigest() != wrapper.get("raw_sha256")):
@@ -135,13 +134,9 @@ def save_current_low_bundle(current_recipe, low_stage_result, low_attestation,
         "low_condition_receipt": conditioned,
         "boundary": "Frozen LOW witnesses only; current HIGH and parent still need live checks"}
     encoded = canonical(payload).encode("utf-8")
-    if len(encoded) > MAX_BUNDLE_JSON:
-        raise ValueError("Frozen V2 LOW bundle exceeds the 64 MiB witness limit")
     compressed = None
     if len(encoded) > MAX_INLINE_JSON:
         compressed = zlib.compress(encoded, level=9)
-        if len(compressed) > MAX_COMPRESSED:
-            raise ValueError("Frozen V2 LOW compressed witness exceeds the 16 MiB limit")
         wrapper = {"schema": ENVELOPE_SCHEMA, "encoding": "zlib", "blob": BLOB,
                    "raw_bytes": len(encoded), "raw_sha256": hashlib.sha256(encoded).hexdigest(),
                    "compressed_bytes": len(compressed),

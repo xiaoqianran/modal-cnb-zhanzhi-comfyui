@@ -1,5 +1,7 @@
 # MiniMax H3 Audio Refine 音频精修
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#18-audio-refine)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 这组工作流用于给已经完成首遍采样的 MiniMax H3 联合 AV latent 增加一段音频 partial-tail 双时钟采样。它主要面向 Turbo 低步数画面可用、但声音发闷、金属感或细节不足的情况。
 
 ## 工作流

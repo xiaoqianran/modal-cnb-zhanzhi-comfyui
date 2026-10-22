@@ -1,5 +1,7 @@
 # S19–S21 Chunked v2/v3/v4 分离式双采（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#53-chunked-v234-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录按 v2／v3／v4 × 10 种外置效果配置 × 完整不保存／完整保存／冷 HIGH 三种形式提供 90 张可导入图。十种配置是无效果，或 EAV、Prompt Relay、两者组合分别作用 LOW、HIGH、两阶段。旧 Chunked 一体工作流和原采样节点没有替换。
 
 建议先导入 `none_none_full_no_save` 看原始两阶段，再导入 `combined_both_full_save`：LOW 和 HIGH 各有独立 MODEL、条件和采样接线，Relay Plan 与 EAV Config 可按阶段分别编辑。v2 保留 PDD 绝对 LOW4／HIGH4、全片单块与原全局噪声同种子；v3 保留完整原生 LOW8／低 sigma HIGH3；v4 在 v3 基础上保留原视频遮罩继承。两阶段的默认权重可以相同，但 HIGH 有单独的模型加载节点；改变配方、尺寸、时间块、遮罩或噪声须重新验证，不能把这 90 张图当作任意 Chunked 参数的通用模板。

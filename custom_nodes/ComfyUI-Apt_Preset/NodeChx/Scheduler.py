@@ -237,90 +237,6 @@ class scheduler_ModelAligned:
 
 
 
-class scheduler_manual_sigmas:
-    def __init__(self):
-        self.asteval = Interpreter()
-        self.asteval.symtable.update({
-            "pi": pi, "cos": cos, "sin": sin, "sqrt": sqrt,
-            "norm": norm, "phi": (1 + sqrt(5)) / 2
-        })
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("MODEL",),
-                "custom_sigmas": (
-                    "STRING",
-                    {
-                        "default": "((1 - cos(2 * pi * (1-y**0.5) * 0.5)) / 2)*sigmax+((1 - cos(2 * pi * y**0.5 * 0.5)) / 2)*sigmin"
-                    },
-                ),
-                "steps": ("INT", {"default": 20, "min": 1, "max": 100000, "step": 1}),
-                "sgm": ("BOOLEAN", {"default": False}),
-            }
-        }
-
-    FUNCTION = "simple_output"
-    RETURN_TYPES = ("SIGMAS",)
-    CATEGORY = "Apt_Preset/chx_ksample/Scheduler"
-
-    def simple_output(self, model, custom_sigmas, steps, sgm):
-        total_steps = steps + 1 if sgm else steps
-        try:
-            sampling = model.get_model_object("model_sampling")
-            sigmin = float(sampling.sigma(sampling.timestep(sampling.sigma_min)))
-            sigmax = float(sampling.sigma(sampling.timestep(sampling.sigma_max)))
-        except Exception as e:
-            print(f"[manual_scheduler] Error getting sigma bounds: {e}")
-            sigmin = 0.0291
-            sigmax = 14.6146
-        sigmas = []
-        fibo = fibonacci_normalized_descending(total_steps)
-        if len(fibo) < total_steps:
-            fibo += [fibo[-1]] * (total_steps - len(fibo))
-        self.asteval.symtable.update({
-            "sigmin": sigmin,
-            "sigmax": sigmax,
-            "s": total_steps,
-            "phi": (1 + sqrt(5)) / 2,
-        })
-        error_occurred = False
-        for j in range(total_steps):
-            if total_steps == 1:
-                y = 0.0
-                x = 1.0
-            else:
-                y = j / (total_steps - 1)
-                x = 1 - y
-            self.asteval.symtable.update({
-                "y": y,
-                "x": x,
-                "f": fibo[j] if j < len(fibo) else 0.0,
-                "j": j,
-            })
-            try:
-                val = self.asteval(custom_sigmas)
-                val = float(val)
-                if np.isnan(val) or np.isinf(val):
-                    val = sigmin + (sigmax - sigmin) * (1 - y)
-                sigmas.append(val)
-            except Exception as e:
-                print(f"[manual_scheduler] Error at step {j}: {e}")
-                error_occurred = True
-                sigmas.append(sigmin)
-        if sgm and len(sigmas) > 1:
-            sigmas = sigmas[:-1]
-        sigmas.append(0.0)
-        device = getattr(model, "device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-        dtype = getattr(model, "get_dtype", lambda: torch.float32)()
-        sigmas_tensor = torch.tensor(sigmas, device=device, dtype=dtype)
-        return (sigmas_tensor,)
-
-
-
-
-
 #region-------------------------------Scheduler_MixScheduler-----------------------------------------
 
 
@@ -392,7 +308,7 @@ class Scheduler_MixScheduler:
 
 
 
-class Scheduler_CondNoise:
+class condi_add_Noise:
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -406,7 +322,7 @@ class Scheduler_CondNoise:
 
     RETURN_TYPES = ("CONDITIONING",)
     FUNCTION = "randomize_conditioning"
-    CATEGORY = "Apt_Preset/chx_ksample/Scheduler"
+    CATEGORY = "Apt_Preset/chx_tool/conditioning"
     DESCRIPTION = """
     strength强度:
     轻微风格 / 细节扰动  0.1 ~ 5.0

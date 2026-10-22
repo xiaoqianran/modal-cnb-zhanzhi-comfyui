@@ -1,5 +1,7 @@
 # S23 H16 七窗口分离式双采（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#55-h16-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录提供固定 124 帧、LOW 736×416 → learned3D HIGH 1472×832、34 帧窗口／17 帧重叠的 224 张可导入研究图。LOW partial4 和七个独立 PASS2 窗口是显式节点；EAV、Prompt Relay 或两者组合可只作用 LOW、某一窗口或全部活动阶段。每种配置有完整不保存、完整逐窗保存、从窗口 1–6 任一位置冷恢复三类入口。旧 H16 一体图仍在 `13-latent-upscale`，未迁移或替换。
 
 先看 `none_none_full_no_save`，再看 `combined_all_full_save`。LOW／HIGH 各有独立模型加载；在选中对应效果的图中，各活动窗口才有自己的 Relay Plan 或 EAV Config。逐窗 Relay 先从全片计划投影到 guarded-overlap 局部 AV 布局；EAV 对同窗实际调用做审计。默认 EAV 为 `report_only`，不表示默认画质增强。原 H16 `refined_exp` 音频历史、原时钟和遮罩、一次全局噪声准备与逐窗 learned lift 保持。

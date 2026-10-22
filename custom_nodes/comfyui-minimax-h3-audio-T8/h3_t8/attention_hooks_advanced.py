@@ -258,7 +258,8 @@ def _make_attention_forward(attention, block_index, block_type, total_blocks):
 def build_attention_hook_compatibility(model):
     diffusion = model.get_model_object("diffusion_model")
     if diffusion.__class__.__name__ != "MiniMaxH3Model":
-        raise TypeError("MiniMax H3 Attention Hooks requires a native MiniMaxH3Model MODEL.")
+        from .patch_stack_policy import warn_patch_stack
+        warn_patch_stack("Attention Hooks received another MODEL class; trying the selected model's actual API")
 
     capability = probe_native_attention_hooks(diffusion)
     patched = model.clone()

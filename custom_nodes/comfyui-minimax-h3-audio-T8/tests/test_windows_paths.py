@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import re
 import shutil
 import subprocess
 import sys
@@ -44,7 +46,11 @@ class WindowsPathsTests(unittest.TestCase):
 
     def test_renamed_examples_are_byte_exact_and_old_aliases_are_not_shipped(self):
         rows = rename_rows()
-        self.assertEqual(len(rows), 37)
+        ordinary = json.loads((ROOT / "examples/workflows/plain-prompt-index.json").read_text(encoding="utf-8"))["rows"]
+        numbered = [row for row in rows if re.fullmatch(r"Plain_\d{3,}\.json", Path(row["old_path"]).name)]
+        self.assertEqual(len(rows) - len(numbered), 37)  # Preserve all original long-path migrations.
+        self.assertEqual(len(numbered), len(ordinary))
+        self.assertEqual({row["new_path"] for row in numbered}, {row["ordinary"] for row in ordinary})
         self.assertEqual(validate_paths([row["new_path"] for row in rows]), [])
         for row in rows:
             with self.subTest(path=row["new_path"]):

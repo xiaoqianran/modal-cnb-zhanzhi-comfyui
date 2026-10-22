@@ -38,6 +38,30 @@ from .tiling_ui import format_plan
 from . import h3_tst
 from .diagnostics import log_memory
 
+_HIGHRES_TILING_MODES = ("spatial", "global_stream", "global", "global_ram")
+_GLOBAL_TILING_MODES = frozenset(("global_stream", "global", "global_ram"))
+
+
+def _global_tiled_model(model, chunk_size, mode, weight_cache_gb):
+    """Build the full-sequence H3 memory-saving wrapper.
+
+    Imported lazily so the existing spatial path still loads on installations
+    without the optional comfy_kitchen/native-sparse dependencies.
+    """
+    try:
+        from . import h3_global_tiling
+    except Exception as exc:
+        raise RuntimeError(
+            "selflift-Avatar: global high-resolution mode is unavailable; "
+            "check ComfyUI/native sparse dependencies"
+        ) from exc
+    return h3_global_tiling.tiled_model(
+        model, chunk_size,
+        use_ram=mode == "global_ram",
+        use_stream=mode == "global_stream",
+        weight_cache_gb=weight_cache_gb,
+    )
+
 
 class _StageTimer:
     def __init__(self, stage, device, resolution=None, pixel_scale=1):
@@ -189,7 +213,9 @@ def _debug_dump(vae, latents):
 def progressive_sample(low_res_model, positive, negative, vae, latent_image, sampler, sigmas, seed, cfg,
                        transition_step, lowres_scale, rho, w_min, w_max, latent_upsample, latent_lifter=None,
                        highres_tiling=False, high_res_model=None, tiling_mode="auto", tiling_tiles=2,
-                       tiling_axis="auto", on_tiling_plan=None):
+                       tiling_axis="auto", on_tiling_plan=None,
+                       highres_tiling_mode="spatial", highres_token_chunk=4096,
+                       highres_weight_cache_gb=4.0):
     _validate_schedule(sigmas, transition_step)
     if sigmas.numel() < 2:
         return latent_image
@@ -200,11 +226,29 @@ def progressive_sample(low_res_model, positive, negative, vae, latent_image, sam
     if not 0.0 <= w_min <= w_max <= 1.0:
         raise ValueError("selflift-Avatar: weights must satisfy 0 <= w_min <= w_max <= 1")
     noise_masks = _validate_latent_input(latent_image)
+    global_tiling = (highres_tiling and isinstance(highres_tiling_mode, str)
+                     and highres_tiling_mode in _GLOBAL_TILING_MODES)
     if highres_tiling:
-        h3_tiling.validate_options(tiling_mode, tiling_tiles, tiling_axis)
-        avatar_masks.validate_tiling_masks(noise_masks)
-        if noise_masks is not None:
-            logging.info("[selflift-Avatar tiling] video=generate, audio=fully preserved; full audio conditioning on every spatial tile")
+        if highres_tiling_mode not in _HIGHRES_TILING_MODES:
+            raise ValueError(
+                f"selflift-Avatar: unknown highres_tiling_mode {highres_tiling_mode!r}; "
+                f"expected one of {_HIGHRES_TILING_MODES}"
+            )
+        if highres_tiling_mode == "spatial":
+            h3_tiling.validate_options(tiling_mode, tiling_tiles, tiling_axis)
+            avatar_masks.validate_tiling_masks(noise_masks)
+            if noise_masks is not None:
+                logging.info("[selflift-Avatar tiling] video=generate, audio=fully preserved; full audio conditioning on every spatial tile")
+        else:
+            if not isinstance(highres_token_chunk, int) or not 128 <= highres_token_chunk <= 16384:
+                raise ValueError("selflift-Avatar: highres_token_chunk must be an integer from 128 to 16384")
+            if not 0.0 <= float(highres_weight_cache_gb) <= 64.0:
+                raise ValueError("selflift-Avatar: highres_weight_cache_gb must be between 0 and 64")
+            # Global modes keep the packed sequence intact, so arbitrary video/audio
+            # masks remain valid: no spatial crop or tile-local mask transform is needed.
+            logging.info("[selflift-Avatar global] mode=%s token_chunk=%d weight_cache=%.2f GiB; "
+                         "full-sequence video/audio masks enabled",
+                         highres_tiling_mode, highres_token_chunk, highres_weight_cache_gb)
 
     model = low_res_model
     model_sampling = model.get_model_object("model_sampling")
@@ -215,9 +259,28 @@ def progressive_sample(low_res_model, positive, negative, vae, latent_image, sam
         latent_image.get("downscale_ratio_temporal", None)))
     hires_base = high_res_model if high_res_model is not None else model
     _validate_sampling(hires_base.get_model_object("model_sampling"), sampler)
-    high_model = h3_tiling.tiled_model(hires_base, [tuple(stream.shape) for stream in streams],
-                                         mode=tiling_mode, tiles=tiling_tiles, axis=tiling_axis,
-                                         on_plan=on_tiling_plan) if highres_tiling else hires_base
+    if highres_tiling and highres_tiling_mode == "spatial":
+        high_model = h3_tiling.tiled_model(hires_base, [tuple(stream.shape) for stream in streams],
+                                           mode=tiling_mode, tiles=tiling_tiles, axis=tiling_axis,
+                                           on_plan=on_tiling_plan)
+    elif global_tiling:
+        high_model = _global_tiled_model(
+            hires_base, highres_token_chunk, highres_tiling_mode, highres_weight_cache_gb
+        )
+        if on_tiling_plan is not None:
+            plan = {
+                "kind": "global",
+                "mode": highres_tiling_mode,
+                "token_chunk": int(highres_token_chunk),
+                "weight_cache_gb": float(highres_weight_cache_gb),
+                "full_sequence": True,
+            }
+            fallback = getattr(high_model, "_selflift_global_fallback", None)
+            if fallback:
+                plan["fallback"] = str(fallback)
+            on_tiling_plan(plan)
+    else:
+        high_model = hires_base
     video = streams[0].ndim == 5
     if video:
         b, c, t, H, W = streams[0].shape
@@ -389,7 +452,12 @@ def progressive_sample(low_res_model, positive, negative, vae, latent_image, sam
 
     high_timer = _StageTimer("high_resolution", high_model.load_device, (H, W), resolution_scale)
     if highres_tiling:
-        logging.info("[selflift-Avatar plan] high-resolution tiling enabled; mode=%s axis=%s", tiling_mode, tiling_axis)
+        if highres_tiling_mode == "spatial":
+            logging.info("[selflift-Avatar plan] high-resolution tiling enabled; mode=%s axis=%s", tiling_mode, tiling_axis)
+        else:
+            logging.info("[selflift-Avatar plan] high-resolution global context enabled; mode=%s token_chunk=%d "
+                         "weight_cache=%.2f GiB; masks remain full-sequence",
+                         highres_tiling_mode, highres_token_chunk, highres_weight_cache_gb)
     out = comfy.samplers.sample(high_model, resume_noise, positive, negative, cfg, high_model.load_device,
                                 sampler, sigmas[transition_step:], high_model.model_options,
                                 latent_image=resume_latent, callback=callback_high,
@@ -419,7 +487,7 @@ class SelfLiftAvatarH3Sampler:
             "positive": ("CONDITIONING",),
             "negative": ("CONDITIONING",),
             "vae": ("VAE", {"tooltip": "Video VAE used for the pixel re-encode anchor at the resolution transition."}),
-            "latent_image": ("LATENT", {"tooltip": "Target-resolution H3 AV latent defining size and duration. Experimental: accepts existing latents, Tensor masks and H3 NestedTensor video/audio masks. 0 keeps content; 1 generates. With highres_tiling, masks must be video=1 everywhere and audio=0 everywhere."}),
+            "latent_image": ("LATENT", {"tooltip": "Target-resolution H3 AV latent defining size and duration. Experimental: accepts existing latents, Tensor masks and H3 NestedTensor video/audio masks. 0 keeps content; 1 generates. Spatial tiling requires video=1 everywhere and audio=0 everywhere; global modes keep full-sequence masks unchanged."}),
             "sampler": ("SAMPLER", {"tooltip": "Standard Euler only; SelfLift reuses its transition-step prediction to keep the original NFE count."}),
             "sigmas": ("SIGMAS",),
             "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True}),
@@ -432,10 +500,13 @@ class SelfLiftAvatarH3Sampler:
             "upscaler_model": _upscaler_input(),
         }, "optional": {
             "high_res_model": ("MODEL", {"tooltip": "高分辨率阶段模型 / High-resolution model. Used after the resolution lift. If disconnected, uses low_res_model. Both stages must use compatible architecture, latent format, sampling parameterization, VAE and conditioning."}),
-            "highres_tiling": ("BOOLEAN", {"default": False, "label_on": "高分辨率分块：开启", "label_off": "高分辨率分块：关闭", "tooltip": "Experimental: spatial tiling; auto/manual controls below. 1 tile means no split. Masks supported only for video=1 everywhere / audio=0 everywhere. Every tile receives complete audio and audio conditioning. Without masks, only the first tile audio prediction is retained. Quality and speed may change."}),
-            "tiling_mode": (["auto", "manual"], {"default": "auto", "tooltip": "auto 自动: choose 1–8 tiles using memory estimates. manual 手动: use tiling_tiles, no automatic increase. Only active when highres_tiling is on."}),
-            "tiling_tiles": ([2, 4, 6, 8], {"default": 2, "tooltip": "手动块数 / Manual tiles: 2, 4, 6, 8. Ignored in auto mode. Turn highres_tiling off for full-frame processing. Small dimensions can reduce the effective count. Does not guarantee enough VRAM."}),
-            "tiling_axis": (["auto", "width", "height"], {"default": "auto", "tooltip": "分块方向 / Spatial direction: auto = longer patch-grid side; width = left/right strips; height = top/bottom strips. Used by both auto and manual modes; audio/time are not split."}),
+            "highres_tiling": ("BOOLEAN", {"default": False, "label_on": "高分辨率省显存：开启", "label_off": "高分辨率省显存：关闭", "tooltip": "Experimental high-resolution memory saving. Choose Spatial for crop tiles, or Global stream/Global for full-sequence chunking that preserves cross-tile attention context. Spatial supports only video=1 everywhere / audio=0 everywhere; global modes keep arbitrary full-sequence masks."}),
+            "tiling_mode": (["auto", "manual"], {"default": "auto", "tooltip": "Spatial mode only. auto 自动: choose 1–8 tiles using memory estimates. manual 手动: use tiling_tiles, no automatic increase."}),
+            "tiling_tiles": ([2, 4, 6, 8], {"default": 2, "tooltip": "Spatial mode only. Manual tiles: 2, 4, 6, 8. Ignored in auto mode. Small dimensions can reduce the effective count."}),
+            "tiling_axis": (["auto", "width", "height"], {"default": "auto", "tooltip": "Spatial mode only. auto = longer patch-grid side; width = left/right strips; height = top/bottom strips; audio/time are not split."}),
+            "highres_tiling_mode": (["spatial", "global_stream", "global", "global_ram"], {"default": "spatial", "tooltip": "Memory-saving strategy. spatial: crop tiles (legacy; background can become inconsistent). global_stream: full-sequence context, GPU head groups, requires native SLA/sol-attn (VSA not adapted). global: full-sequence dense-compatible path; higher VRAM. global_ram: full-sequence host-RAM staging; slower. Global modes preserve the complete video/audio mask on the packed sequence."}),
+            "highres_token_chunk": ("INT", {"default": 4096, "min": 128, "max": 16384, "step": 128, "tooltip": "Global modes only. Tokens per projection/feed-forward batch. Smaller batches usually save intermediate VRAM but add overhead. This is not a spatial tile or attention window."}),
+            "highres_weight_cache_gb": ("FLOAT", {"default": 4.0, "min": 0.0, "max": 64.0, "step": 0.5, "tooltip": "Global stream only. Resident DynamicVRAM weight-cache budget in GiB. Not total VRAM or system RAM. 0 keeps the automatic policy; it does not disable caching."}),
         }, "hidden": {"unique_id": "UNIQUE_ID"}}
 
     RETURN_TYPES = ("LATENT",)
@@ -444,7 +515,9 @@ class SelfLiftAvatarH3Sampler:
 
     def sample(self, low_res_model, positive, negative, vae, latent_image, sampler, sigmas, seed, cfg,
                transition_step, lowres_scale, rho, w_min, w_max, upscaler_model, high_res_model=None, highres_tiling=False,
-               tiling_mode="auto", tiling_tiles=2, tiling_axis="auto", unique_id=None):
+               tiling_mode="auto", tiling_tiles=2, tiling_axis="auto",
+               highres_tiling_mode="spatial", highres_token_chunk=4096,
+               highres_weight_cache_gb=4.0, unique_id=None):
         if rho == 0.0 and upscaler_model == "none":
             raise ValueError(
                 "SelfLift H3: rho=0 with upscaler_model=none disables both SelfLift-zero correction "
@@ -455,8 +528,16 @@ class SelfLiftAvatarH3Sampler:
             if rho > 0.0 and w_max > 0.0:
                 logging.warning("SelfLift H3: rho > 0 with an external upscaler is a hybrid experiment; select upscaler_model=none to test the paper's SelfLift-zero direct route")
             lifter = lambda z, hw: h3_upscaler.learned_latent_lift(z, hw, upscaler_model)
-        summary = "Preparing / 准备中: {} | axis={} | tiles={}\nActual plan appears at high-resolution preparation / 高清阶段准备时显示实际方案".format(
-            tiling_mode, tiling_axis, tiling_tiles if tiling_mode == "manual" else "auto") if highres_tiling else "OFF / 高分辨率空间分块已关闭"
+        if not highres_tiling:
+            summary = "OFF / 高分辨率省显存已关闭"
+        elif highres_tiling_mode == "spatial":
+            summary = "Preparing / 准备中: spatial | {} | axis={} | tiles={}\nActual plan appears at high-resolution preparation / 高清阶段准备时显示实际方案".format(
+                tiling_mode, tiling_axis, tiling_tiles if tiling_mode == "manual" else "auto")
+        else:
+            cache = (f" | weight_cache={float(highres_weight_cache_gb):.1f} GiB"
+                     if highres_tiling_mode == "global_stream" else "")
+            summary = "Preparing / 准备中: {} | token_chunk={}{}\nFull-sequence masks / 全序列遮罩: enabled".format(
+                highres_tiling_mode, highres_token_chunk, cache)
         last_plan = None
 
         def send_status(text):
@@ -476,7 +557,9 @@ class SelfLiftAvatarH3Sampler:
                                         transition_step, lowres_scale, rho, w_min, w_max, "nearest",
                                         latent_lifter=lifter, highres_tiling=highres_tiling, high_res_model=high_res_model,
                                         tiling_mode=tiling_mode, tiling_tiles=tiling_tiles, tiling_axis=tiling_axis,
-                                        on_tiling_plan=report)
+                                        on_tiling_plan=report, highres_tiling_mode=highres_tiling_mode,
+                                        highres_token_chunk=highres_token_chunk,
+                                        highres_weight_cache_gb=highres_weight_cache_gb)
         except Exception:
             send_status("FAILED / 运行失败：以下不是成功结果；详见错误报告\n" + summary)
             raise

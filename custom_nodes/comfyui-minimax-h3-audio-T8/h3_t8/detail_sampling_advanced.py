@@ -555,7 +555,7 @@ def apply_h3_spatiotemporal_guidance(
 
     diffusion_model = getattr(getattr(model, "model", None), "diffusion_model", None)
     if not isinstance(diffusion_model, MiniMaxH3Model):
-        raise ValueError("H3 STG requires a native ComfyUI MiniMax H3 diffusion MODEL")
+        warn_patch_stack("H3 STG received another MODEL class; attempting the user-selected model")
     if model.model_options.get("sampler_post_cfg_function"):
         warn_patch_stack('H3 STG appends to existing sampler_post_cfg_function; prior callbacks are retained and composition is unverified')
 

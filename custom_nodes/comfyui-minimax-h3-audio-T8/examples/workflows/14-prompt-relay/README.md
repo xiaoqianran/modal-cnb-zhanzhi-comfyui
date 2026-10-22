@@ -1,5 +1,7 @@
 # Prompt Relay / 分段提示词时间线
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#14-prompt-relay)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录用于在同一段 MiniMax H3 视频里保留一份全局人物/场景约束，并让多条局部事件按时间段发挥作用。当前实现是 H3 packed joint-AV self-attention 的 Advanced/EXP 适配，不是把 Wan/LTX 节点原样搬过来。
 
 ## 当前工作流

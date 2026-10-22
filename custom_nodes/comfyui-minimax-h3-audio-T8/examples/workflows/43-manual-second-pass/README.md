@@ -1,5 +1,7 @@
 # S09 手动二采分离式工作流（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#43-manual-second-pass)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 这里有 NativeNoise 和 FreeNoise 各一对前端 JSON。`Full_Stages` 显式运行并保存 FIRST／SECOND；`Cold_SECOND` 读取已保存 FIRST 的真实 manifest 路径和 SHA，只运行 SECOND。原有长视频一体节点及工作流没有迁移或替换。
 
 FIRST 是完整原生20步轨迹，交接使用完成阶段的 `output`，不是 `denoised_output`。SECOND 是独立的手工 sigma `0.5,0.412,0.35,0` 三次迭代；没有 learned3D 放大或 FastH3 V2 绝对步窗。两个可见 StageNoise 节点分别对应各阶段：NativeNoise 为 `disabled` 旁路，FreeNoise 为 `variance_preserving_blend`；默认同 seed 和同 segment index。宽、高、帧数原语须与冻结 FIRST 保持一致。

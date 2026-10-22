@@ -5678,6 +5678,7 @@ function syncSecondPassWidgets(node, mode = String(getWidgetValue(node, getPassM
     if (!isMulTarget(node) && !isRef2RefineTarget(node)) return false;
     const refineEnabled = mode === "refine" || mode === "pixel_refine";
     const latentScaleEnabled = mode === "latent_scale" || mode === "latent_refine";
+    const selfliftEnabled = isRef2UnifiedTarget(node) && mode === "selflift";
     const externalSigmas = isRef2RefineTarget(node)
         && (node.inputs || []).some((input) => String(input?.name || "") === "sigmas" && input.link != null);
     const changed = [
@@ -5686,6 +5687,9 @@ function syncSecondPassWidgets(node, mode = String(getWidgetValue(node, getPassM
         ...["latent_model", "latent_scale", "split_step"]
             .map((name) => setConditionalWidgetVisible(node, getWidget(node, name), latentScaleEnabled)),
         setConditionalWidgetVisible(node, getWidget(node, "low_sigma_start_step"), latentScaleEnabled && !externalSigmas),
+        ...["transition_step", "lowres_scale", "rho", "w_min", "w_max", "upscaler_model", "highres_tiling", "upscaler_unload"]
+            .map((name) => setConditionalWidgetVisible(node, getWidget(node, name), selfliftEnabled)),
+        isRef2UnifiedTarget(node) && setConditionalWidgetVisible(node, getWidget(node, "latent_sample_tile"), !selfliftEnabled),
     ]
         .some(Boolean);
     if (changed) {

@@ -1,5 +1,7 @@
 # S13 连续 HyperFlow 分离式采样（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#47-hyperflow-continuous-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录提供 1＋7、4＋4、7＋1 三种连续 8 步分界，每种覆盖无效果，或 Enhance A Video／Prompt Relay／两者组合分别作用于 HEAD、TAIL、两段的 10 种配置，再各有四种操作，共 120 张可编辑实验图。它们与 `fresh4`、P7 先低分辨率后放大、普通二次加噪采样是不同路线；旧 HyperFlow 工作流保留，不需要迁移。
 
 - `Full_NoSave`：HEAD 和 TAIL 连续执行，不保存阶段。

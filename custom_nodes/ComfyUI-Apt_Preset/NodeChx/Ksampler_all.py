@@ -62,7 +62,7 @@ import latent_preview
 
 
 
-from .main_stack import Apply_CN_union,Apply_Redux
+from .main_stack import Apply_CN_union
 
 
 
@@ -183,18 +183,20 @@ class DynamicTileSplit:
 
     def tile_image(self, image, upscale_model, use_fixed_size, tile_width, tile_height,
                    width_factor, height_factor, overlap_rate):
+        alpha = image[..., 3:4].clone() if image.shape[-1] == 4 else None
+        if alpha is not None:
+            image = image[..., :3]
         if upscale_model != "None":
             up_model = load_upscale_model(upscale_model)
-            if image.shape[-1] == 4:
-                alpha = image[..., 3:4]
-                image = upscale_with_model(up_model, image[..., :3])
-                alpha = F.interpolate(
-                    alpha.movedim(-1, 1).to(device=image.device, dtype=torch.float32),
-                    size=image.shape[1:3], mode="bilinear", align_corners=False,
-                ).movedim(1, -1).to(dtype=image.dtype)
-                image = torch.cat((image, alpha), dim=-1)
-            else:
-                image = upscale_with_model(up_model, image)
+            image = upscale_with_model(up_model, image)
+
+        if alpha is not None and alpha.shape[1:3] != image.shape[1:3]:
+            alpha = F.interpolate(
+                alpha.movedim(-1, 1).to(device=image.device, dtype=torch.float32),
+                size=image.shape[1:3], mode="bilinear", align_corners=False,
+            ).movedim(1, -1).to(dtype=image.dtype)
+        if alpha is not None:
+            alpha = alpha.to(device="cpu")
 
         tile_width, tile_height = self.image_width_height(
             image, width_factor, height_factor, overlap_rate,
@@ -205,7 +207,8 @@ class DynamicTileSplit:
         img_width, img_height = image.size
 
         if img_width <= tile_width and img_height <= tile_height:
-            return (pil2tensor(image), [(0, 0, img_width, img_height)], 1)
+            stich = ([(0, 0, img_width, img_height)], (img_width, img_height), (1, 1), alpha)
+            return (pil2tensor(image), stich, 1)
 
         def calculate_step(size, tile_size):
             if size <= tile_size:
@@ -242,7 +245,7 @@ class DynamicTileSplit:
         image = torch.stack(tiles, dim=0).squeeze(1)
         orig_size = (img_width, img_height)
         grid_size = (num_cols, num_rows)
-        stich = (positions, orig_size, grid_size)
+        stich = (positions, orig_size, grid_size, alpha)
         
         return (image, stich, total)
 
@@ -280,6 +283,9 @@ class DynamicTileMerge:
 
     def blend_tiles(self, tile1, tile2, overlap_size, direction, padding):
         """Blend two tiles with a smooth transition."""
+        mode = "RGBA" if tile1.mode == "RGBA" or tile2.mode == "RGBA" else "RGB"
+        tile1 = tile1.convert(mode)
+        tile2 = tile2.convert(mode)
         blend_size = padding
         if blend_size > overlap_size:
             blend_size = overlap_size
@@ -287,14 +293,14 @@ class DynamicTileMerge:
         if blend_size == 0:
             # No blending, just concatenate the images at the correct overlap
             if direction == 'horizontal':
-                result = Image.new("RGB", (tile1.width + tile2.width - overlap_size, tile1.height))
+                result = Image.new(mode, (tile1.width + tile2.width - overlap_size, tile1.height))
                 # Paste the left part of tile1 excluding the overlap
                 result.paste(tile1.crop((0, 0, tile1.width - overlap_size, tile1.height)), (0, 0))
                 # Paste tile2 directly after tile1
                 result.paste(tile2, (tile1.width - overlap_size, 0))
             else:
                 # For vertical direction
-                result = Image.new("RGB", (tile1.width, tile1.height + tile2.height - overlap_size))
+                result = Image.new(mode, (tile1.width, tile1.height + tile2.height - overlap_size))
                 result.paste(tile1.crop((0, 0, tile1.width, tile1.height - overlap_size)), (0, 0))
                 result.paste(tile2, (0, tile1.height - overlap_size))
             return result
@@ -314,7 +320,7 @@ class DynamicTileMerge:
                 raise ValueError(f"Crop sizes do not match: {crop_tile1.size} vs {crop_tile2.size}")
 
             blended = Image.composite(crop_tile1, crop_tile2, mask)
-            result = Image.new("RGB", (tile1.width + tile2.width - overlap_size, tile1.height))
+            result = Image.new(mode, (tile1.width + tile2.width - overlap_size, tile1.height))
             result.paste(tile1.crop((0, 0, tile1.width - overlap_size + offset_left, tile1.height)), (0, 0))
             result.paste(blended, (tile1.width - overlap_size + offset_left, 0))
             result.paste(tile2.crop((offset_left + blend_size, 0, tile2.width, tile2.height)), (tile1.width - offset_right, 0))
@@ -332,7 +338,7 @@ class DynamicTileMerge:
                 raise ValueError(f"Crop sizes do not match: {crop_tile1.size} vs {crop_tile2.size}")
 
             blended = Image.composite(crop_tile1, crop_tile2, mask)
-            result = Image.new("RGB", (tile1.width, tile1.height + tile2.height - overlap_size))
+            result = Image.new(mode, (tile1.width, tile1.height + tile2.height - overlap_size))
             result.paste(tile1.crop((0, 0, tile1.width, tile1.height - overlap_size + offset_top)), (0, 0))
             result.paste(blended, (0, tile1.height - overlap_size + offset_top))
             result.paste(tile2.crop((0, offset_top + blend_size, tile2.width, tile2.height)), (0, tile1.height - offset_bottom))
@@ -340,10 +346,13 @@ class DynamicTileMerge:
 
     def assemble_image(self, tiles, stich,  padding):
 
-        positions, original_size, grid_size = stich
+        if len(stich) == 4:
+            positions, original_size, grid_size, alpha = stich
+        else:
+            positions, original_size, grid_size = stich
+            alpha = None
 
         num_cols, num_rows = grid_size
-        reconstructed_image = Image.new("RGB", original_size)
 
         # First, blend each row independently
         row_images = []
@@ -361,7 +370,10 @@ class DynamicTileMerge:
                     # Adjust the size of row_image to accommodate the new tile
                     new_width = row_image.width + tile_image.width
                     new_height = max(row_image.height, tile_image.height)
-                    new_row_image = Image.new("RGB", (new_width, new_height))
+                    mode = "RGBA" if row_image.mode == "RGBA" or tile_image.mode == "RGBA" else "RGB"
+                    row_image = row_image.convert(mode)
+                    tile_image = tile_image.convert(mode)
+                    new_row_image = Image.new(mode, (new_width, new_height))
                     new_row_image.paste(row_image, (0, 0))
                     new_row_image.paste(tile_image, (row_image.width, 0))
                     row_image = new_row_image
@@ -379,12 +391,24 @@ class DynamicTileMerge:
                 # Adjust the size of final_image to accommodate the new row image
                 new_width = max(final_image.width, row_images[row].width)
                 new_height = final_image.height + row_images[row].height
-                new_final_image = Image.new("RGB", (new_width, new_height))
+                mode = "RGBA" if final_image.mode == "RGBA" or row_images[row].mode == "RGBA" else "RGB"
+                final_image = final_image.convert(mode)
+                row_image = row_images[row].convert(mode)
+                new_final_image = Image.new(mode, (new_width, new_height))
                 new_final_image.paste(final_image, (0, 0))
-                new_final_image.paste(row_images[row], (0, final_image.height))
+                new_final_image.paste(row_image, (0, final_image.height))
                 final_image = new_final_image
 
-        return pil2tensor(final_image).unsqueeze(0)
+        image = pil2tensor(final_image)
+        if alpha is not None:
+            if alpha.shape[1:3] != image.shape[1:3]:
+                alpha = F.interpolate(
+                    alpha.movedim(-1, 1).to(device=image.device, dtype=torch.float32),
+                    size=image.shape[1:3], mode="bilinear", align_corners=False,
+                ).movedim(1, -1)
+            alpha = alpha[:1].to(device=image.device, dtype=image.dtype)
+            image = torch.cat((image[..., :3], alpha), dim=-1)
+        return (image,)
 
 
 
@@ -530,15 +554,15 @@ class sampler_enhance:
         return {
             "required": {
                 "sampler": ("SAMPLER",),
-                "detail_amount": ("FLOAT", {"default": 0.1, "min": -5.0, "max": 5.0, "step": 0.01}),
-                "fade": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05}),
-                "smooth": ("BOOLEAN", {"default": True}),
-                "cfg_scale_override": ("FLOAT", {"default": 0, "min": 0.0, "max": 100.0, "step": 0.5, "round": 0.01}),
+                "detail_amount": ("FLOAT", {"default": 0.1, "min": -5.0, "max": 5.0, "step": 0.01, "tooltip": "控制细节增强幅度。"}),
+                "fade": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05, "tooltip": "整体削弱细节增强效果；1 表示完全淡化。"}),
+                "cfg_scale_override": ("FLOAT", {"default": 0, "min": 0.0, "max": 100.0, "step": 0.5, "round": 0.01, "tooltip": "0 自动读取 CFG；非 0 使用此值。调整后 sigma = 原 sigma × (1 − 细节调度值 × 0.1 × CFG值)。"}),
                 
             },
         }
     CATEGORY = "Apt_Preset/chx_ksample"
-    RETURN_TYPES = ("SAMPLER",)
+    DESCRIPTION = "默认在采样进度约 20%～80% 起作用，中段最强，两端逐渐减弱。"
+    RETURN_TYPES = ("sampler",)
     FUNCTION = "go"
     
     @classmethod
@@ -554,7 +578,6 @@ class sampler_enhance:
         start_offset=0,
         end_offset=0,
         fade=0,
-        smooth="true",
         cfg_scale_override=0,
     ) -> tuple:
         def dds_make_schedule(steps):
@@ -568,7 +591,7 @@ class sampler_enhance:
                 start_offset,
                 end_offset,
                 fade,
-                smooth,
+                True,
             )
 
         return (
@@ -588,13 +611,14 @@ class sampler_enhance:
 
 
 
-class pre_latent_light:
+class latent_mix2latent:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "context": ("RUN_CONTEXT",),
-                "weigh": ("FLOAT", {"default": 0.3, "min": 0.1, "max": 0.7, "step": 0.01}),
+                "mix_mode": (["mean_shift", "low_frequency", "interpolate"], {"default": "mean_shift"}),
+                "weigh": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "光照图像影响目标图像的强度。"}),
 
             },
             "optional": {
@@ -608,16 +632,17 @@ class pre_latent_light:
     RETURN_NAMES = ("context", "image", "latent")
     OUTPUT_NODE = True
     FUNCTION = "run"
-    CATEGORY = "Apt_Preset/chx_tool/😺backup"
+    CATEGORY = "Apt_Preset/chx_tool/latent"
+    DESCRIPTION = "均值偏移适合纯色调色；低频混合保留更多纹理；插值为原有的整体潜空间混合。"
 
-    def run(self,context, weigh, img_targe=None, img_light=None, ):
+    def run(self, context, weigh, mix_mode="mean_shift", img_targe=None, img_light=None):
 
         latent = context.get("latent", None)
         vae = context.get("vae", None)
 
         if img_light is None:
             outimg = decode(vae, latent)[0]
-            return (context,outimg)
+            return (context, outimg, latent)
 
 
         if img_targe is None:
@@ -627,7 +652,20 @@ class pre_latent_light:
 
         latent2 = encode(vae, img_targe)[0]
         latent1 = encode(vae, img_light)[0]
-        latent = latent_inter_polate(latent1, latent2, weigh)
+        if mix_mode == "interpolate":
+            latent = latent_inter_polate(latent1, latent2, weigh)
+        else:
+            target = latent2["samples"]
+            light = reshape_latent_to(target.shape, latent1["samples"])
+            difference = light - target
+            if mix_mode == "mean_shift":
+                adjustment = difference.mean(dim=(-2, -1), keepdim=True)
+            else:
+                height, width = target.shape[-2:]
+                low = F.adaptive_avg_pool2d(difference, (max(1, height // 8), max(1, width // 8)))
+                adjustment = F.interpolate(low, size=(height, width), mode="bilinear", align_corners=False)
+            latent = latent2.copy()
+            latent["samples"] = target + weigh * adjustment
 
         output_image = decode(vae, latent)[0]
         context = new_context(context, latent=latent, images=output_image, )

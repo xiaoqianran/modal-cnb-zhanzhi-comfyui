@@ -38,6 +38,34 @@ def prepared(dtype=torch.bfloat16, strength=1., bias=True, bare=None, targets=No
     return patched
 
 
+@pytest.mark.parametrize('newline', [b'\n', b'\r\n'])
+def test_reviewed_core_source_accepts_lf_and_crlf(monkeypatch, newline):
+    original = bypass.Path.read_bytes
+    targets = {bypass.Path(m.__file__).resolve() for m in (bypass.core_base, bypass.core_bypass, bypass.core_lora)}
+    def read(path):
+        data = original(path)
+        return data.replace(b'\r\n', b'\n').replace(b'\n', newline) if path.resolve() in targets else data
+    monkeypatch.setattr(bypass.Path, 'read_bytes', read)
+    bypass._authenticate_core()
+
+
+def test_core_force_forward_lifecycle_is_normalized_without_hiding_tampering():
+    bare = prepared()
+    injection = bare.get_injections(bypass.KEY)[0]
+    before = stage_model_identity(bare)
+    injection.inject(bare)
+    try:
+        assert model_identity_matches(before, stage_model_identity(bare))
+        target = bare.model.diffusion_model.blocks[0].attn.qkv_proj
+        manager = injection.inject.__closure__[0].cell_contents
+        if any(hasattr(hook, 'original_force_forward') for hook in manager.hooks):
+            target.comfy_force_forward = False
+            with pytest.raises(UnverifiedModelStack, match='force-forward'):
+                bypass.project(bare)
+    finally:
+        injection.eject(bare)
+
+
 def arguments(stage='native_low', effects=False, dtype=torch.bfloat16):
     bare, positive = prepared(dtype), conditioning()
     source=source_latent(True)

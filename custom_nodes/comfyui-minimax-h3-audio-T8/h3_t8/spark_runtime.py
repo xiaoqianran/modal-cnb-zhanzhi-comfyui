@@ -325,7 +325,8 @@ def apply_spark(model, sigmas, runtime_config, *, enabled=True, stage="SINGLE", 
     controller.direct_output = True
     diffusion = model.get_model_object("diffusion_model")
     if type(diffusion).__name__ != "MiniMaxH3Model" or not hasattr(diffusion, "blocks"):
-        raise TypeError("Spark requires the supplied native ComfyUI MiniMaxH3Model")
+        from .patch_stack_policy import warn_patch_stack
+        warn_patch_stack("Spark received another MODEL implementation; attempting its actual block API")
     state = SparkState(grid, stage, mode, warmup_steps, dense_layers, min_tokens, upstream, controller)
     patched = model.clone()
     replacements = patched.model_options.get("transformer_options", {}).get("patches_replace", {}).get("dit", {})

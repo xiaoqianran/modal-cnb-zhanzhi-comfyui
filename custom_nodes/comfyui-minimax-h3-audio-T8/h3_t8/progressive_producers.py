@@ -153,11 +153,11 @@ def _native_producer_description(component, role):
     from comfy.text_encoders.minimax import MiniMaxH3TEModel, MiniMaxH3ClipModel, MiniMaxQwen3VL
     expected = {'clip': comfy.sd.CLIP, 'video_vae': comfy.sd.VAE, 'audio_vae': comfy.sd.VAE}
     if role not in expected or type(component) is not expected[role]:
-        raise ValueError('Progressive producers require native CLIP/video VAE/audio VAE components')
+        raise UnverifiedModelStack('Selected producer class has no portable CLIP/VAE identity adapter')
     network = component.cond_stage_model if role == 'clip' else component.first_stage_model
     network_type = {'clip': MiniMaxH3TEModel, 'video_vae': MiniMaxH3VideoVAE, 'audio_vae': MiniMaxH3AudioVAE}[role]
     if not isinstance(network, network_type) or component.patcher.model is not network:
-        raise ValueError('Progressive producer has the wrong native H3 network or patcher')
+        raise UnverifiedModelStack('Selected producer network or patcher has no portable identity adapter')
     # Hash methods actually selected by the public native wrapper. Instance
     # replacements need an explicit adapter, even if their filename looks right.
     methods = ('tokenize', 'encode_from_tokens', 'encode_from_tokens_scheduled') if role == 'clip' else (

@@ -1,0 +1,2508 @@
+{
+  "id": "70ed47b4-8f58-58ef-b85f-59af9d5f43f4",
+  "revision": 0,
+  "last_node_id": 35,
+  "last_link_id": 69,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CLIPLoader",
+      "title": "CLIPLoader",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        390,
+        212
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            1,
+            23,
+            58,
+            64
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "minimax",
+        "default"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "VAELoader",
+      "title": "VAELoader",
+      "pos": [
+        0,
+        300
+      ],
+      "size": [
+        390,
+        124
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            2,
+            24,
+            49,
+            59,
+            65
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "minimax_h3_video_vae_fp16.safetensors"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "VAELoader",
+      "title": "VAELoader",
+      "pos": [
+        0,
+        600
+      ],
+      "size": [
+        390,
+        124
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            3,
+            25,
+            50,
+            60,
+            66
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "minimax_h3_audio_vae_fp32.safetensors"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "MiniMaxH3SPEEDPlanT8Advanced",
+      "title": "MiniMax H3 SPEED Plan / 渐进分辨率计划 (Advanced)",
+      "pos": [
+        0,
+        900
+      ],
+      "size": [
+        390,
+        564
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "spectrum_profile",
+          "type": "H3_T8_SPEED_PROFILE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "speed_plan",
+          "type": "H3_T8_SPEED_PLAN",
+          "links": [
+            7,
+            29
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDPlanT8Advanced"
+      },
+      "widgets_values": [
+        736,
+        416,
+        20,
+        "0.5,1.0",
+        "manual_sigmas",
+        "0.85",
+        0.01,
+        12.0,
+        "dct",
+        "require_validated_profile",
+        "error"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "UNETLoader",
+      "title": "Stage MODEL 10 — independent LoRA input",
+      "pos": [
+        0,
+        1512
+      ],
+      "size": [
+        390,
+        168
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "minimax_h3_fl2va_int8_convrot.safetensors",
+        "default"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "MiniMaxH3SPEEDSourceT8Advanced",
+      "title": "MiniMax H3 SPEED Stage Source / 分阶段条件源 (Advanced)",
+      "pos": [
+        1320,
+        0
+      ],
+      "size": [
+        390,
+        738
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 1
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 2
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 3
+        },
+        {
+          "name": "drive_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "final_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "first_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "last_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "ref_videos.ref_video_0",
+          "type": "IMAGE",
+          "link": 4,
+          "shape": 7
+        },
+        {
+          "name": "ref_video_audios.ref_video_audio_0",
+          "type": "AUDIO",
+          "link": 5,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "speed_source",
+          "type": "H3_T8_SPEED_SOURCE",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDSourceT8Advanced"
+      },
+      "widgets_values": [
+        "Global scene: Use <Video 1> as the motion and visual reference and <Audio 1> as its associated soundtrack reference. Create a new coherent shot; add no speech.\nEvent 1: Maintain one coherent shot and the same subjects.\nEvent 2: Continue the motion naturally without a scene change.\nEvent 3: Finish the same shot with stable detail and synchronized ambience.",
+        124,
+        "Ref2VA",
+        "native",
+        1.0,
+        false,
+        0,
+        true,
+        "match",
+        "official_2_to_15s",
+        "unrecorded",
+        "unrecorded"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "MiniMaxH3SPEEDStageSetupEXPT8",
+      "title": "H3 SPEED · Prepare ONE Stage (T8 EXP)",
+      "pos": [
+        1760,
+        0
+      ],
+      "size": [
+        390,
+        396
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 6
+        },
+        {
+          "name": "speed_plan",
+          "type": "H3_T8_SPEED_PLAN",
+          "link": 7
+        },
+        {
+          "name": "speed_source",
+          "type": "H3_T8_SPEED_SOURCE",
+          "link": 8
+        },
+        {
+          "name": "previous_spec",
+          "type": "T8_SPEED_STAGE_SPEC",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            9
+          ]
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            15
+          ]
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            11,
+            16
+          ]
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "links": [
+            17
+          ]
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "links": [
+            10,
+            18
+          ]
+        },
+        {
+          "name": "stage_spec",
+          "type": "T8_SPEED_STAGE_SPEC",
+          "links": [
+            20,
+            31
+          ]
+        },
+        {
+          "name": "mux_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "conditioned_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "media_map_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "stage_context",
+          "type": "T8_STAGE_CONTEXT",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDStageSetupEXPT8"
+      },
+      "widgets_values": [
+        0,
+        3.0,
+        2609231701,
+        "fixed",
+        "multimodal_research_exp",
+        false
+      ]
+    },
+    {
+      "id": 8,
+      "type": "MiniMaxH3PlainPromptRecipeEXPT8",
+      "title": "完整提示词 · 普通文本",
+      "pos": [
+        0,
+        1728
+      ],
+      "size": [
+        480,
+        476
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "prompt_recipe",
+          "type": "H3_T8_PROMPT_RELAY_PLAN",
+          "links": null
+        },
+        {
+          "name": "compiled_prompt",
+          "type": "STRING",
+          "links": [
+            63
+          ]
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "timeline_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3PlainPromptRecipeEXPT8"
+      },
+      "widgets_values": [
+        "Use <Video 1> as the motion and visual reference and <Audio 1> as its associated soundtrack reference. Create a new coherent shot; add no speech.\n\nMaintain one coherent shot and the same subjects.\nContinue the motion naturally without a scene change.\nFinish the same shot with stable detail and synchronized ambience.",
+        124
+      ]
+    },
+    {
+      "id": 10,
+      "type": "MiniMaxH3StageEAVConfigEXPT8",
+      "title": "H3 Stage EAV · External Config (T8 EXP)",
+      "pos": [
+        0,
+        2252
+      ],
+      "size": [
+        390,
+        344
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "eav_config",
+          "type": "T8_STAGE_EAV_CONFIG",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3StageEAVConfigEXPT8"
+      },
+      "widgets_values": [
+        "report_only",
+        0.1,
+        0.0,
+        1.0,
+        32,
+        3.0
+      ]
+    },
+    {
+      "id": 11,
+      "type": "MiniMaxH3StageEAVApplyEXPT8",
+      "title": "H3 Stage EAV · Apply to This Stage (T8 EXP)",
+      "pos": [
+        2640,
+        0
+      ],
+      "size": [
+        390,
+        210
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 9
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 10
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 11
+        },
+        {
+          "name": "stage_context",
+          "type": "T8_STAGE_CONTEXT",
+          "link": 12
+        },
+        {
+          "name": "eav_config",
+          "type": "T8_STAGE_EAV_CONFIG",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            14
+          ]
+        },
+        {
+          "name": "runtime",
+          "type": "T8_STAGE_EAV_RUNTIME",
+          "links": [
+            22
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3StageEAVApplyEXPT8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 12,
+      "type": "MiniMaxH3SPEEDModalityStableNoiseT8Advanced",
+      "title": "MiniMax H3 Modality-Stable AV Noise / AV独立随机噪声 (Advanced)",
+      "pos": [
+        0,
+        2644
+      ],
+      "size": [
+        390,
+        142
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "links": [
+            19
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDModalityStableNoiseT8Advanced"
+      },
+      "widgets_values": [
+        2609231701,
+        "fixed"
+      ]
+    },
+    {
+      "id": 13,
+      "type": "MiniMaxH3SPEEDStageSampleEXPT8",
+      "title": "H3 SPEED · Sample ONE Stage (T8 EXP)",
+      "pos": [
+        3080,
+        0
+      ],
+      "size": [
+        390,
+        262
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 14
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 15
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 16
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 17
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 18
+        },
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 19
+        },
+        {
+          "name": "stage_spec",
+          "type": "T8_SPEED_STAGE_SPEC",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            21
+          ]
+        },
+        {
+          "name": "stage_result",
+          "type": "T8_SPEED_STAGE_RESULT",
+          "links": [
+            37
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDStageSampleEXPT8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 14,
+      "type": "MiniMaxH3StageEAVAuditEXPT8",
+      "title": "H3 Stage EAV · Actual Calls Audit (T8 EXP)",
+      "pos": [
+        3520,
+        0
+      ],
+      "size": [
+        390,
+        132
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 21
+        },
+        {
+          "name": "runtime",
+          "type": "T8_STAGE_EAV_RUNTIME",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3StageEAVAuditEXPT8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 15,
+      "type": "UNETLoader",
+      "title": "Stage MODEL 22 — independent LoRA input",
+      "pos": [
+        0,
+        2834
+      ],
+      "size": [
+        390,
+        168
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            28
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "minimax_h3_fl2va_int8_convrot.safetensors",
+        "default"
+      ]
+    },
+    {
+      "id": 16,
+      "type": "MiniMaxH3SPEEDSourceT8Advanced",
+      "title": "MiniMax H3 SPEED Stage Source / 分阶段条件源 (Advanced)",
+      "pos": [
+        1320,
+        786
+      ],
+      "size": [
+        390,
+        738
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 23
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 24
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 25
+        },
+        {
+          "name": "drive_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "final_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "first_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "last_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "ref_videos.ref_video_0",
+          "type": "IMAGE",
+          "link": 26,
+          "shape": 7
+        },
+        {
+          "name": "ref_video_audios.ref_video_audio_0",
+          "type": "AUDIO",
+          "link": 27,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "speed_source",
+          "type": "H3_T8_SPEED_SOURCE",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDSourceT8Advanced"
+      },
+      "widgets_values": [
+        "Global scene: Use <Video 1> as the motion and visual reference and <Audio 1> as its associated soundtrack reference. Create a new coherent shot; add no speech.\nEvent 1: Maintain one coherent shot and the same subjects.\nEvent 2: Continue the motion naturally without a scene change.\nEvent 3: Finish the same shot with stable detail and synchronized ambience.",
+        124,
+        "Ref2VA",
+        "native",
+        1.0,
+        false,
+        0,
+        true,
+        "match",
+        "official_2_to_15s",
+        "unrecorded",
+        "unrecorded"
+      ]
+    },
+    {
+      "id": 17,
+      "type": "MiniMaxH3SPEEDStageSetupEXPT8",
+      "title": "H3 SPEED · Prepare ONE Stage (T8 EXP)",
+      "pos": [
+        2200,
+        320
+      ],
+      "size": [
+        390,
+        422
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 28
+        },
+        {
+          "name": "speed_plan",
+          "type": "H3_T8_SPEED_PLAN",
+          "link": 29
+        },
+        {
+          "name": "speed_source",
+          "type": "H3_T8_SPEED_SOURCE",
+          "link": 30
+        },
+        {
+          "name": "previous_spec",
+          "type": "T8_SPEED_STAGE_SPEC",
+          "link": 31,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            32
+          ]
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            40
+          ]
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            34,
+            41
+          ]
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "links": [
+            42
+          ]
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "links": [
+            33,
+            43
+          ]
+        },
+        {
+          "name": "stage_spec",
+          "type": "T8_SPEED_STAGE_SPEC",
+          "links": [
+            38,
+            45
+          ]
+        },
+        {
+          "name": "mux_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "conditioned_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "media_map_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "stage_context",
+          "type": "T8_STAGE_CONTEXT",
+          "links": [
+            35
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDStageSetupEXPT8"
+      },
+      "widgets_values": [
+        1,
+        3.0,
+        2609231701,
+        "fixed",
+        "multimodal_research_exp",
+        false
+      ]
+    },
+    {
+      "id": 18,
+      "type": "MiniMaxH3PlainPromptRecipeEXPT8",
+      "title": "完整提示词 · 普通文本",
+      "pos": [
+        0,
+        3050
+      ],
+      "size": [
+        480,
+        476
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "prompt_recipe",
+          "type": "H3_T8_PROMPT_RELAY_PLAN",
+          "links": null
+        },
+        {
+          "name": "compiled_prompt",
+          "type": "STRING",
+          "links": [
+            69
+          ]
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "timeline_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3PlainPromptRecipeEXPT8"
+      },
+      "widgets_values": [
+        "Use <Video 1> as the motion and visual reference and <Audio 1> as its associated soundtrack reference. Create a new coherent shot; add no speech.\n\nMaintain one coherent shot and the same subjects.\nContinue the motion naturally without a scene change.\nFinish the same shot with stable detail and synchronized ambience.",
+        124
+      ]
+    },
+    {
+      "id": 20,
+      "type": "MiniMaxH3StageEAVConfigEXPT8",
+      "title": "H3 Stage EAV · External Config (T8 EXP)",
+      "pos": [
+        0,
+        3574
+      ],
+      "size": [
+        390,
+        344
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "eav_config",
+          "type": "T8_STAGE_EAV_CONFIG",
+          "links": [
+            36
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3StageEAVConfigEXPT8"
+      },
+      "widgets_values": [
+        "report_only",
+        0.1,
+        0.0,
+        1.0,
+        32,
+        3.0
+      ]
+    },
+    {
+      "id": 21,
+      "type": "MiniMaxH3StageEAVApplyEXPT8",
+      "title": "H3 Stage EAV · Apply to This Stage (T8 EXP)",
+      "pos": [
+        3080,
+        310
+      ],
+      "size": [
+        390,
+        210
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 32
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 33
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 34
+        },
+        {
+          "name": "stage_context",
+          "type": "T8_STAGE_CONTEXT",
+          "link": 35
+        },
+        {
+          "name": "eav_config",
+          "type": "T8_STAGE_EAV_CONFIG",
+          "link": 36
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            39
+          ]
+        },
+        {
+          "name": "runtime",
+          "type": "T8_STAGE_EAV_RUNTIME",
+          "links": [
+            47
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3StageEAVApplyEXPT8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 22,
+      "type": "MiniMaxH3SPEEDDCTTransitionEXPT8",
+      "title": "H3 SPEED · DCT + AV Transition (T8 EXP)",
+      "pos": [
+        3520,
+        300
+      ],
+      "size": [
+        390,
+        176
+      ],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "completed_stage",
+          "type": "T8_SPEED_STAGE_RESULT",
+          "link": 37
+        },
+        {
+          "name": "next_stage",
+          "type": "T8_SPEED_STAGE_SPEC",
+          "link": 38
+        }
+      ],
+      "outputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "links": [
+            44
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDDCTTransitionEXPT8"
+      },
+      "widgets_values": [
+        64
+      ]
+    },
+    {
+      "id": 23,
+      "type": "MiniMaxH3SPEEDStageSampleEXPT8",
+      "title": "H3 SPEED · Sample ONE Stage (T8 EXP)",
+      "pos": [
+        3960,
+        0
+      ],
+      "size": [
+        390,
+        262
+      ],
+      "flags": {},
+      "order": 25,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 39
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 40
+        },
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 41
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 42
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 43
+        },
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 44
+        },
+        {
+          "name": "stage_spec",
+          "type": "T8_SPEED_STAGE_SPEC",
+          "link": 45
+        }
+      ],
+      "outputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            46
+          ]
+        },
+        {
+          "name": "stage_result",
+          "type": "T8_SPEED_STAGE_RESULT",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDStageSampleEXPT8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 24,
+      "type": "MiniMaxH3StageEAVAuditEXPT8",
+      "title": "H3 Stage EAV · Actual Calls Audit (T8 EXP)",
+      "pos": [
+        4400,
+        0
+      ],
+      "size": [
+        390,
+        132
+      ],
+      "flags": {},
+      "order": 26,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 46
+        },
+        {
+          "name": "runtime",
+          "type": "T8_STAGE_EAV_RUNTIME",
+          "link": 47
+        }
+      ],
+      "outputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "links": [
+            48
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3StageEAVAuditEXPT8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 25,
+      "type": "MiniMaxH3AVDecodeT8",
+      "title": "MiniMax H3 AV Decode (T8)",
+      "pos": [
+        4840,
+        0
+      ],
+      "size": [
+        390,
+        158
+      ],
+      "flags": {},
+      "order": 27,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 48
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 49
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 50
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            56
+          ]
+        },
+        {
+          "name": "generated_audio",
+          "type": "AUDIO",
+          "links": [
+            57
+          ]
+        },
+        {
+          "name": "video_latent",
+          "type": "LATENT",
+          "links": null
+        },
+        {
+          "name": "audio_latent",
+          "type": "LATENT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3AVDecodeT8"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 26,
+      "type": "CreateVideo",
+      "title": "Create Video",
+      "pos": [
+        5720,
+        0
+      ],
+      "size": [
+        390,
+        220
+      ],
+      "flags": {},
+      "order": 29,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 51
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 52,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            53
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        24.0,
+        8,
+        "sRGB",
+        "none"
+      ]
+    },
+    {
+      "id": 27,
+      "type": "SaveVideo",
+      "title": "Save Video",
+      "pos": [
+        6160,
+        0
+      ],
+      "size": [
+        390,
+        238
+      ],
+      "flags": {},
+      "order": 30,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 53
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "MiniMaxH3/Modular_SPEED_ref_video_audio_native_EXP",
+        "mp4",
+        "auto"
+      ]
+    },
+    {
+      "id": 28,
+      "type": "LoadVideo",
+      "title": "Load Video",
+      "pos": [
+        0,
+        3966
+      ],
+      "size": [
+        390,
+        124
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            54
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadVideo"
+      },
+      "widgets_values": [
+        "replace_with_2_to_15s_reference_video.mp4"
+      ]
+    },
+    {
+      "id": 29,
+      "type": "Video Slice",
+      "title": "Trim Video",
+      "pos": [
+        440,
+        0
+      ],
+      "size": [
+        390,
+        238
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 54
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            55
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Video Slice"
+      },
+      "widgets_values": [
+        0.0,
+        2.0,
+        true
+      ]
+    },
+    {
+      "id": 30,
+      "type": "GetVideoComponents",
+      "title": "Get Video Components",
+      "pos": [
+        880,
+        0
+      ],
+      "size": [
+        390,
+        110
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 55
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            4,
+            26,
+            61,
+            67
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            5,
+            27,
+            62,
+            68
+          ]
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "bit_depth",
+          "type": "COMBO",
+          "links": null
+        },
+        {
+          "name": "color_space",
+          "type": "COMBO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetVideoComponents"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 31,
+      "type": "MiniMaxH3OutputTrimT8",
+      "title": "MiniMax H3 Output Trim (T8)",
+      "pos": [
+        5280,
+        0
+      ],
+      "size": [
+        390,
+        264
+      ],
+      "flags": {},
+      "order": 28,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "link": 56
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 57,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            51
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            52
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3OutputTrimT8"
+      },
+      "widgets_values": [
+        0.0,
+        5.166666666666667,
+        24.0
+      ]
+    },
+    {
+      "id": 32,
+      "type": "MarkdownNote",
+      "title": "先读 / S17 multimodal SPEED EXP",
+      "pos": [
+        0,
+        -800
+      ],
+      "size": [
+        1180,
+        580
+      ],
+      "flags": {},
+      "order": 31,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "S17 SPEED ref_video_audio_native／combined:all／full_no_save 两阶段分离研究图。沿用旧 SPEED 多模态示例的原始输入模式：视频素材先按目标124帧或参考2秒显式切片，再取首帧／末帧／原音频／参考；每个活动阶段用同一真实素材在该阶段画布重新编码。I2VA lock_source 交付用切片源音频，其余用生成音频，末端精确裁到124帧。两阶段 MODEL/可插 LoRA、Source、条件、Sampler、噪声与 DCT 转段独立；Relay Plan 和 EAV Config 按文件名阶段独立外置，EAV 默认 report_only。冷图仅凭真实阶段 manifest 路径及 SHA 选择冻结前段，前段不重采；效果标签记录完整图来源，不代表冷图会重新执行冻结效果。请替换素材占位并核对精确24fps、原音频与参考2至15秒范围；无效文件和空回执不可直接排队。手工 sigma 已被旧用户盲评否决，仅机械示范，不作为质量／速度推荐或旧图逐帧替代。原尺寸预训练GPU、实际 Relay/EAV 画质、其它后端／LoRA、显存和人工验收均未由本图证明。"
+      ]
+    },
+    {
+      "id": 33,
+      "type": "MiniMaxH3SPEEDSourceT8Advanced",
+      "title": "MiniMax H3 SPEED Stage Source / 分阶段条件源 (Advanced)",
+      "pos": [
+        1320,
+        450
+      ],
+      "size": [
+        390,
+        738
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 58
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 59
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 60
+        },
+        {
+          "name": "drive_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "final_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "first_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "last_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "ref_videos.ref_video_0",
+          "type": "IMAGE",
+          "link": 61,
+          "shape": 7
+        },
+        {
+          "name": "ref_video_audios.ref_video_audio_0",
+          "type": "AUDIO",
+          "link": 62,
+          "shape": 7
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 63,
+          "widget": {
+            "name": "prompt"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "speed_source",
+          "type": "H3_T8_SPEED_SOURCE",
+          "links": [
+            8
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDSourceT8Advanced"
+      },
+      "widgets_values": [
+        "Global scene: Use <Video 1> as the motion and visual reference and <Audio 1> as its associated soundtrack reference. Create a new coherent shot; add no speech.\nEvent 1: Maintain one coherent shot and the same subjects.\nEvent 2: Continue the motion naturally without a scene change.\nEvent 3: Finish the same shot with stable detail and synchronized ambience.",
+        124,
+        "Ref2VA",
+        "native",
+        1.0,
+        false,
+        0,
+        true,
+        "match",
+        "official_2_to_15s",
+        "unrecorded",
+        "unrecorded"
+      ]
+    },
+    {
+      "id": 34,
+      "type": "MiniMaxH3SPEEDSourceT8Advanced",
+      "title": "MiniMax H3 SPEED Stage Source / 分阶段条件源 (Advanced)",
+      "pos": [
+        1320,
+        1236
+      ],
+      "size": [
+        390,
+        738
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 64
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 65
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 66
+        },
+        {
+          "name": "drive_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "final_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "first_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "last_frame",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "ref_videos.ref_video_0",
+          "type": "IMAGE",
+          "link": 67,
+          "shape": 7
+        },
+        {
+          "name": "ref_video_audios.ref_video_audio_0",
+          "type": "AUDIO",
+          "link": 68,
+          "shape": 7
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 69,
+          "widget": {
+            "name": "prompt"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "speed_source",
+          "type": "H3_T8_SPEED_SOURCE",
+          "links": [
+            30
+          ]
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SPEEDSourceT8Advanced"
+      },
+      "widgets_values": [
+        "Global scene: Use <Video 1> as the motion and visual reference and <Audio 1> as its associated soundtrack reference. Create a new coherent shot; add no speech.\nEvent 1: Maintain one coherent shot and the same subjects.\nEvent 2: Continue the motion naturally without a scene change.\nEvent 3: Finish the same shot with stable detail and synchronized ambience.",
+        124,
+        "Ref2VA",
+        "native",
+        1.0,
+        false,
+        0,
+        true,
+        "match",
+        "official_2_to_15s",
+        "unrecorded",
+        "unrecorded"
+      ]
+    },
+    {
+      "id": 35,
+      "type": "MarkdownNote",
+      "title": "普通提示词 · 从这里开始",
+      "pos": [
+        -900,
+        -1300
+      ],
+      "size": [
+        800,
+        400
+      ],
+      "flags": {},
+      "order": 32,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "普通提示词副本\n\n来源：examples/workflows/51-speed-multimodal-split/SPEED_S17_MM_ref_video_audio_native_combined_all_full_no_save_EXP.json\n\n在“完整提示词”框一次填写整段画面、动作与对白。两采／各阶段的文字框可分别编辑；原图的全局与局部文字已合并，不再按事件时间段路由。\n原采样次数、LoRA、底模、放大、音频和阶段接线保留。\n恢复版请先使用对应普通版 Full 保存新缓存，再填入新的文件路径和 SHA。Prepared LTX 的普通文字仍由准备包的 prompt／文本缓存提供。\n旧 NOTE 中的 Relay 操作属于原版；本副本按上述普通入口编辑。"
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      6,
+      0,
+      "CLIP"
+    ],
+    [
+      2,
+      2,
+      0,
+      6,
+      1,
+      "VAE"
+    ],
+    [
+      3,
+      3,
+      0,
+      6,
+      2,
+      "VAE"
+    ],
+    [
+      4,
+      30,
+      0,
+      6,
+      7,
+      "IMAGE"
+    ],
+    [
+      5,
+      30,
+      1,
+      6,
+      8,
+      "AUDIO"
+    ],
+    [
+      6,
+      5,
+      0,
+      7,
+      0,
+      "MODEL"
+    ],
+    [
+      7,
+      4,
+      0,
+      7,
+      1,
+      "H3_T8_SPEED_PLAN"
+    ],
+    [
+      8,
+      33,
+      0,
+      7,
+      2,
+      "H3_T8_SPEED_SOURCE"
+    ],
+    [
+      9,
+      7,
+      0,
+      11,
+      0,
+      "MODEL"
+    ],
+    [
+      10,
+      7,
+      4,
+      11,
+      1,
+      "SIGMAS"
+    ],
+    [
+      11,
+      7,
+      2,
+      11,
+      2,
+      "LATENT"
+    ],
+    [
+      12,
+      7,
+      10,
+      11,
+      3,
+      "T8_STAGE_CONTEXT"
+    ],
+    [
+      13,
+      10,
+      0,
+      11,
+      4,
+      "T8_STAGE_EAV_CONFIG"
+    ],
+    [
+      14,
+      11,
+      0,
+      13,
+      0,
+      "MODEL"
+    ],
+    [
+      15,
+      7,
+      1,
+      13,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      16,
+      7,
+      2,
+      13,
+      2,
+      "LATENT"
+    ],
+    [
+      17,
+      7,
+      3,
+      13,
+      3,
+      "SAMPLER"
+    ],
+    [
+      18,
+      7,
+      4,
+      13,
+      4,
+      "SIGMAS"
+    ],
+    [
+      19,
+      12,
+      0,
+      13,
+      5,
+      "NOISE"
+    ],
+    [
+      20,
+      7,
+      5,
+      13,
+      6,
+      "T8_SPEED_STAGE_SPEC"
+    ],
+    [
+      21,
+      13,
+      0,
+      14,
+      0,
+      "LATENT"
+    ],
+    [
+      22,
+      11,
+      1,
+      14,
+      1,
+      "T8_STAGE_EAV_RUNTIME"
+    ],
+    [
+      23,
+      1,
+      0,
+      16,
+      0,
+      "CLIP"
+    ],
+    [
+      24,
+      2,
+      0,
+      16,
+      1,
+      "VAE"
+    ],
+    [
+      25,
+      3,
+      0,
+      16,
+      2,
+      "VAE"
+    ],
+    [
+      26,
+      30,
+      0,
+      16,
+      7,
+      "IMAGE"
+    ],
+    [
+      27,
+      30,
+      1,
+      16,
+      8,
+      "AUDIO"
+    ],
+    [
+      28,
+      15,
+      0,
+      17,
+      0,
+      "MODEL"
+    ],
+    [
+      29,
+      4,
+      0,
+      17,
+      1,
+      "H3_T8_SPEED_PLAN"
+    ],
+    [
+      30,
+      34,
+      0,
+      17,
+      2,
+      "H3_T8_SPEED_SOURCE"
+    ],
+    [
+      31,
+      7,
+      5,
+      17,
+      3,
+      "T8_SPEED_STAGE_SPEC"
+    ],
+    [
+      32,
+      17,
+      0,
+      21,
+      0,
+      "MODEL"
+    ],
+    [
+      33,
+      17,
+      4,
+      21,
+      1,
+      "SIGMAS"
+    ],
+    [
+      34,
+      17,
+      2,
+      21,
+      2,
+      "LATENT"
+    ],
+    [
+      35,
+      17,
+      10,
+      21,
+      3,
+      "T8_STAGE_CONTEXT"
+    ],
+    [
+      36,
+      20,
+      0,
+      21,
+      4,
+      "T8_STAGE_EAV_CONFIG"
+    ],
+    [
+      37,
+      13,
+      1,
+      22,
+      0,
+      "T8_SPEED_STAGE_RESULT"
+    ],
+    [
+      38,
+      17,
+      5,
+      22,
+      1,
+      "T8_SPEED_STAGE_SPEC"
+    ],
+    [
+      39,
+      21,
+      0,
+      23,
+      0,
+      "MODEL"
+    ],
+    [
+      40,
+      17,
+      1,
+      23,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      41,
+      17,
+      2,
+      23,
+      2,
+      "LATENT"
+    ],
+    [
+      42,
+      17,
+      3,
+      23,
+      3,
+      "SAMPLER"
+    ],
+    [
+      43,
+      17,
+      4,
+      23,
+      4,
+      "SIGMAS"
+    ],
+    [
+      44,
+      22,
+      0,
+      23,
+      5,
+      "NOISE"
+    ],
+    [
+      45,
+      17,
+      5,
+      23,
+      6,
+      "T8_SPEED_STAGE_SPEC"
+    ],
+    [
+      46,
+      23,
+      0,
+      24,
+      0,
+      "LATENT"
+    ],
+    [
+      47,
+      21,
+      1,
+      24,
+      1,
+      "T8_STAGE_EAV_RUNTIME"
+    ],
+    [
+      48,
+      24,
+      0,
+      25,
+      0,
+      "LATENT"
+    ],
+    [
+      49,
+      2,
+      0,
+      25,
+      1,
+      "VAE"
+    ],
+    [
+      50,
+      3,
+      0,
+      25,
+      2,
+      "VAE"
+    ],
+    [
+      51,
+      31,
+      0,
+      26,
+      0,
+      "IMAGE"
+    ],
+    [
+      52,
+      31,
+      1,
+      26,
+      1,
+      "AUDIO"
+    ],
+    [
+      53,
+      26,
+      0,
+      27,
+      0,
+      "VIDEO"
+    ],
+    [
+      54,
+      28,
+      0,
+      29,
+      0,
+      "VIDEO"
+    ],
+    [
+      55,
+      29,
+      0,
+      30,
+      0,
+      "VIDEO"
+    ],
+    [
+      56,
+      25,
+      0,
+      31,
+      0,
+      "IMAGE"
+    ],
+    [
+      57,
+      25,
+      1,
+      31,
+      1,
+      "AUDIO"
+    ],
+    [
+      58,
+      1,
+      0,
+      33,
+      0,
+      "CLIP"
+    ],
+    [
+      59,
+      2,
+      0,
+      33,
+      1,
+      "VAE"
+    ],
+    [
+      60,
+      3,
+      0,
+      33,
+      2,
+      "VAE"
+    ],
+    [
+      61,
+      30,
+      0,
+      33,
+      7,
+      "IMAGE"
+    ],
+    [
+      62,
+      30,
+      1,
+      33,
+      8,
+      "AUDIO"
+    ],
+    [
+      63,
+      8,
+      1,
+      33,
+      9,
+      "STRING"
+    ],
+    [
+      64,
+      1,
+      0,
+      34,
+      0,
+      "CLIP"
+    ],
+    [
+      65,
+      2,
+      0,
+      34,
+      1,
+      "VAE"
+    ],
+    [
+      66,
+      3,
+      0,
+      34,
+      2,
+      "VAE"
+    ],
+    [
+      67,
+      30,
+      0,
+      34,
+      7,
+      "IMAGE"
+    ],
+    [
+      68,
+      30,
+      1,
+      34,
+      8,
+      "AUDIO"
+    ],
+    [
+      69,
+      18,
+      1,
+      34,
+      9,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        120,
+        120
+      ]
+    },
+    "workflow_title": "S17 SPEED ref_video_audio_native combined:all full_no_save EXP",
+    "t8_split_example": {
+      "schema": "t8.speed.multimodal-split-example.v1",
+      "route": "S17",
+      "input_mode": "ref_video_audio_native",
+      "stages": 2,
+      "effect_kind": "combined",
+      "effect_scope": "all",
+      "variant": "full_no_save",
+      "status": "experimental_importable_not_quality_accepted"
+    },
+    "t8_plain_source": "examples/workflows/51-speed-multimodal-split/SPEED_S17_MM_ref_video_audio_native_combined_all_full_no_save_EXP.json"
+  },
+  "version": 0.4
+}

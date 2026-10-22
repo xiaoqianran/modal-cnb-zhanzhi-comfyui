@@ -1,5 +1,7 @@
 # S18 Chunked v1 三段分离工作流（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#52-chunked-v1-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录有固定56帧、34帧窗口/17帧重叠的三段 Chunked v1 研究图，共52张：无效果，或 EAV／Prompt Relay／组合分别作用段0、段1、段2或全部；每种有完整不保存、完整保存、冷恢复段1、冷恢复段2四种图。首采 PDD 与三个 PASS2 时间段都显式分开；每个活动段有自己的 MODEL、PDD LoRA Setup、条件和采样信号。启用效果时，每段有独立的整片 Relay Plan→局部时间投影，以及独立 EAV Config→Apply→实际调用 Audit。EAV 默认为 `report_only`。
 
 先用 `none_none_full_no_save` 理解首采、原 learned3D lift、时间窗和原始完整音频的关系，再看 `combined_all_full_save`。保存图的原生首采和段0／段1保存都默认 `confirm_save=false`；真要交接，须分别开启并抄录实际文件路径、manifest与SHA。`cold_1`需填首采和段0回执，仅运行段1／段2；`cold_2`需填首采和段1回执，仅运行段2。冻结阶段不因当前控件改变而自动重算；若修改前段模型、提示或效果，必须重新运行并保存。坏回执会拒绝读取，但这不是任意当前模型/条件的自动缓存同一性证明。

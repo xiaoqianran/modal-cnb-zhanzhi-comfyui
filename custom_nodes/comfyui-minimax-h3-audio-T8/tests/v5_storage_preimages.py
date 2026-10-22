@@ -14,6 +14,23 @@ def _replace_once(source, before, after):
 
 def reviewed_preimage_bytes(profile):
     source = Path(current.__file__).read_text(encoding="utf8")
+    # Historical source hashes include the old size caps. Reconstruct those
+    # exact old readers for replay tests, never weaken the pinned SHA or put
+    # their admission limits back into current execution.
+    size_changes = (
+        ('from .storage import _digest,', 'from .storage import MAX_FILE, MAX_JSON, _digest,'),
+        ('        snapshot = _decode_metadata_value(encoded, tensors, set(), path="chunked_v5.window")',
+         '        if len(payload.encode("utf-8")) > MAX_JSON or sum(\n'
+         '                item.numel() * item.element_size() for item in tensors.values()) > MAX_FILE - MAX_JSON:\n'
+         '            raise ValueError("v5 frozen window exceeds metadata or tensor size limit")\n'
+         '        snapshot = _decode_metadata_value(encoded, tensors, set(), path="chunked_v5.window")'),
+        ('0 < header_bytes <= os.fstat(handle.fileno()).st_size - 8:', '0 < header_bytes <= MAX_JSON:'),
+        ('0 < manifest_path.stat().st_size or', '0 < manifest_path.stat().st_size <= MAX_JSON or'),
+        ('8 < manifest["state_bytes"] or', '8 < manifest["state_bytes"] <= MAX_FILE or'),
+        ('0 < header_bytes or header_bytes >', '0 < header_bytes <= MAX_JSON or header_bytes >'),
+    )
+    for before, after in size_changes:
+        source = _replace_once(source, before, after)
     changes = (
         ('from . import chunked_v5_storage_compat as compat\n', ''),
         ('modules = (parity, legacy, chunked_v5, chunked_v5_effects, chunked_v5_relay, compat)',

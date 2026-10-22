@@ -761,9 +761,9 @@ def patch_h3_world_model(model, compile_flex_attention: bool = True):
         raise ValueError("H3-World requires a ComfyUI MODEL")
     diffusion = model.get_model_object("diffusion_model")
     if diffusion.__class__.__name__ != "MiniMaxH3Model":
-        raise ValueError("H3-World requires the native ComfyUI MiniMaxH3Model")
+        warn_patch_stack("H3-World received another MODEL class; attempting its actual APIs")
     if len(getattr(diffusion, "blocks", ())) != 50:
-        raise ValueError("H3-World requires the 50-block MiniMax H3 architecture")
+        warn_patch_stack("H3-World selected model does not have 50 blocks; effect coverage is unverified")
     model, sparse_removed = prepare_attention_owner(model, "H3-World")
     _ensure_patch_compatibility(model)
     runtime = H3WorldFlexRuntime(compile_flex_attention)

@@ -14,7 +14,7 @@ from safetensors.torch import save_file
 
 from .progressive import ProgressiveBoundary, plan_from_dict
 from .results import canonical
-from .storage import MAX_FILE, MAX_JSON, _digest, _lease, _path, _root, file_sha
+from .storage import _digest, _lease, _path, _root, file_sha
 
 SCHEMA = "t8.modular-sampling.frozen-progressive-low.v1"
 FILENAME = "progressive-low.safetensors"
@@ -28,7 +28,7 @@ def _payload(text):
                 raise ValueError("Duplicate Progressive artifact key")
             output[key] = value
         return output
-    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_JSON:
+    if not isinstance(text, str):
         raise ValueError("Progressive metadata exceeds its size limit")
     value = json.loads(text, object_pairs_hook=unique)
     if (type(value) is not dict or set(value) != {"schema", "receipt_json"}
@@ -38,11 +38,11 @@ def _payload(text):
 
 
 def _check_file(path):
-    if not path.is_file() or not 8 < path.stat().st_size <= MAX_FILE:
+    if not path.is_file() or not 8 < path.stat().st_size:
         raise ValueError("Missing or oversized Progressive LOW artifact")
     with path.open("rb") as handle:
         count = struct.unpack("<Q", handle.read(8))[0]
-    if not 0 < count <= MAX_JSON or count > path.stat().st_size - 8:
+    if not 0 < count or count > path.stat().st_size - 8:
         raise ValueError("Invalid Progressive safetensors header size")
 
 
@@ -64,8 +64,6 @@ def save_boundary(boundary, storage_root, prefix="progressive-low"):
         ProgressiveBoundary(tensors, boundary.receipt_json).verify()
         payload = canonical({"schema": SCHEMA, "receipt_json": boundary.receipt_json})
         _payload(payload)
-        if sum(value.numel() * value.element_size() for value in tensors.values()) > MAX_FILE - MAX_JSON:
-            raise ValueError("Progressive tensors exceed the size limit")
         partial, final = directory / (FILENAME + ".partial"), directory / FILENAME
         save_file(tensors, str(partial), metadata={"progressive_json": payload})
         _check_file(partial)

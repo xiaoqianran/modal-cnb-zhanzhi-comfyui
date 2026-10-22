@@ -1,5 +1,7 @@
 # 高动态、尾段细节与混合采样
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#07-motion-detail)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 可选[Fun深度控制实验](../../../docs/DEPTH_REFERENCE_EXP.md)：`2026-09-13_H3_Depth_Fun_Single5s_EXP.json`为124帧单窗口、裁到120帧/5秒，不是长视频循环。已验证UI/API接线，效果尚未验收；Apply的MODEL和positive都必须连接。
 
 这一组研究高速运动、小脸稳定和采样尾段细节，包括Dynamic Guidance、额外尾段NFE、Model-Time Bias、联合AV Restart、H3 STG、时域后处理、Mixer、实验性的 Enhance-A-Video / FETA 时序注意力增强，以及独立的 Motion Recovery 二次V2V时间超采样链。

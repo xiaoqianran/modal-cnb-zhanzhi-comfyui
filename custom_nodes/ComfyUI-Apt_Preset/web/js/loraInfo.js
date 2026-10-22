@@ -7,7 +7,7 @@ const supportedNodes = {
         loraParamPattern: /^lora_name_\d+$/
     },
     "sum_lora": {
-        loraParamPattern: /^lora_\d+$/
+        loraParamPattern: /^lora_name_\d+$/
     },
     "sum_load_adv": {
         loraParamPattern: /^lora\d*$/

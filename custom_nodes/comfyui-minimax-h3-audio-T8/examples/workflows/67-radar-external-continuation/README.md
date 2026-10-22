@@ -1,5 +1,7 @@
 # 外片续拍：外置 EAV／Relay（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#67-radar-external-continuation)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 四张新增图，旧工作流不变：EAV Only、Relay＋EAV 各一张 Full Save 与 Cold Delivery。
 
 Full 先填写已保存且手动采用外片的 project／shot／take ID，检查本机模型。默认单个完整4步、448×256、124渲染帧／22上下文，交付显式裁前22帧。Relay／EAV 默认 report_only，不自动采用、拼回、接受或改变原音频。

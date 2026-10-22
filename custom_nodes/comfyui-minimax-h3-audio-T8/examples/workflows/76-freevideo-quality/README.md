@@ -1,5 +1,7 @@
 # FreeVideo 新四档：Full／Cold 模板
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#76-freevideo-quality)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 新版Quality v2单独追加，不覆盖[旧8+2和真正4+4](../72-freevideo-split/README.md)。先按[准备说明](../../../docs/FREEVIDEO_QUALITY_EXP.md)建立独立新配置、选择真实本机CLIP／VAEs／learned放大器。Loader空值只读取专用`user/default/T8/freevideo-runtime-v2.json`；没有配置就明确失败，不暗下主体或回落旧v1。
 
 - [Light Full 8+3](FVQ_Light_8plus3.json)：LOW8 → 外置learned1.2× → HIGH3 → 原生音画解码保存；外置LOW／HIGH Relay及EAV报告。

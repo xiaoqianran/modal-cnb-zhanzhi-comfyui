@@ -26,6 +26,8 @@ from .contracts import StageContext
 from .results import StageResult, canonical
 
 SCHEMA = "t8.modular-sampling.frozen-stage.v1"
+# Import ABI for historical frozen-reader modules only. Current readers and
+# writers never consult these legacy bounds; do not reintroduce admission caps.
 MAX_JSON = 4 * 1024 * 1024
 MAX_FILE = 20 * 1024 ** 3
 
@@ -96,7 +98,7 @@ def _lease(directory):
 
 
 def _json_file(path):
-    if not path.is_file() or not 0 < path.stat().st_size <= MAX_JSON:
+    if not path.is_file() or not 0 < path.stat().st_size:
         raise ValueError("Missing or oversized completed stage manifest")
     def unique_pairs(pairs):
         value = {}
@@ -124,10 +126,6 @@ def save_stage(result, storage_root, prefix="stage"):
         encoded = _encode_metadata_value({"output": result.output, "denoised_output": result.denoised_output},
                                          tensors, path="stage.outputs")
         payload = canonical({"schema": SCHEMA, "receipt_json": result.receipt_json, "state": encoded})
-        if len(payload.encode("utf-8")) > MAX_JSON:
-            raise ValueError("Stage metadata exceeds the 4 MiB limit")
-        if sum(value.numel() * value.element_size() for value in tensors.values()) > MAX_FILE - MAX_JSON:
-            raise ValueError("Stage tensor payload exceeds the 20 GiB limit")
         snapshot = _decode_metadata_value(encoded, tensors, set(), path="stage.outputs")
         StageResult(snapshot["output"], snapshot["denoised_output"], result.receipt_json).verify()
         # Serialization snapshots tensor values, then revalidates the original:
@@ -138,7 +136,7 @@ def save_stage(result, storage_root, prefix="stage"):
         save_file(tensors, str(partial), metadata={"stage_json": payload})
         with partial.open("rb+") as handle:
             header_bytes = struct.unpack("<Q", handle.read(8))[0]
-            if not 0 < header_bytes <= MAX_JSON:
+            if not 0 < header_bytes <= os.fstat(handle.fileno()).st_size - 8:
                 raise ValueError("Stage tensor header exceeds its bound")
             os.fsync(handle.fileno())
         os.replace(partial, state)
@@ -166,7 +164,7 @@ def load_stage(storage_root, artifact_path, artifact_sha256, expected_stage):
     if not manifest_path.parent.is_dir():
         raise FileNotFoundError("Stage artifact directory does not exist")
     with _lease(manifest_path.parent):
-        if (not manifest_path.is_file() or not 0 < manifest_path.stat().st_size <= MAX_JSON
+        if (not manifest_path.is_file() or not 0 < manifest_path.stat().st_size
                 or file_sha(manifest_path) != expected_sha):
             raise ValueError("Frozen stage manifest SHA mismatch or missing completion")
         manifest = _json_file(manifest_path)
@@ -182,13 +180,13 @@ def load_stage(storage_root, artifact_path, artifact_sha256, expected_stage):
             raise ValueError("This artifact has unverified executable identity; persistent stage reuse needs its adapter")
         state = _path(root, (manifest_path.parent / manifest["state_file"]).relative_to(root).as_posix())
         if (not state.is_file() or type(manifest["state_bytes"]) is not int
-                or not 8 < manifest["state_bytes"] <= MAX_FILE or state.stat().st_size != manifest["state_bytes"]):
+                or not 8 < manifest["state_bytes"] or state.stat().st_size != manifest["state_bytes"]):
             raise ValueError("Stage tensor size changed or exceeds its limit")
         if file_sha(state) != _digest(manifest["state_sha256"]):
             raise ValueError("Stage tensor SHA mismatch")
         with state.open("rb") as handle:
             header_bytes = struct.unpack("<Q", handle.read(8))[0]
-        if not 0 < header_bytes <= MAX_JSON or header_bytes > state.stat().st_size - 8:
+        if not 0 < header_bytes or header_bytes > state.stat().st_size - 8:
             raise ValueError("Stage tensor header exceeds its bound")
         with safe_open(str(state), framework="pt", device="cpu") as handle:
             metadata = handle.metadata()
@@ -230,6 +228,6 @@ def fingerprint_stage(storage_root, artifact_path):
         if data.get("state_file") != "state.safetensors":
             raise ValueError("Unknown stage state filename")
         state = _path(root, (manifest.parent / "state.safetensors").relative_to(root).as_posix())
-        if not 8 < state.stat().st_size <= MAX_FILE:
+        if not 8 < state.stat().st_size:
             raise ValueError("Invalid stage tensor size")
         return file_sha(manifest), file_sha(state)

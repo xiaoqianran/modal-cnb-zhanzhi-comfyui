@@ -1,5 +1,7 @@
 # S14／S15 HyperFlow fresh-noise 分离式采样（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#48-hyperflow-fresh-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录有两条不同配方：S14 `full8plus4`（LOW完整8步）与 S15 `partial4plus4`（LOW绝对0:4）。每条配方覆盖无效果，或 EAV／Prompt Relay／两者组合分别作用于 LOW、HIGH、两段的10种配置，再各有完整运行、保存、冷 HIGH、完成 HIGH 读取四种操作，共80张可编辑实验图。旧工作流不迁移。
 
 - `Full_NoSave`：LOW→原 learned3D→HIGH 连续执行，不保存阶段。

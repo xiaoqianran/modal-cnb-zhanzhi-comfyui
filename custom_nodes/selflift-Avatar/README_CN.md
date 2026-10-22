@@ -1,10 +1,10 @@
 # selflift-Avatar
 
-**开发版：`main`（分块失效引用修复）** · **已打包版本：`v0.1.4-experimental`** · [English README](README.md) · [更新记录](CHANGELOG.md) · [v0.1.4 发布页](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.4-experimental)
+**开发版：`main`（全局上下文省显存）** · **已打包版本：`v0.1.4-experimental`** · [English README](README.md) · [更新记录](CHANGELOG.md) · [v0.1.4 发布页](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.4-experimental)
 
-这是一个面向 ComfyUI / MiniMax H3 的 SelfLift 独立实验分支，重点处理 H3 音视频 latent 遮罩、采样过程中的原始音频保留，以及一个有限制的高分辨率自动分块路径。它使用独立的节点 ID，可以和原版 SelfLift 共存。
+这是一个面向 ComfyUI / MiniMax H3 的 SelfLift 独立实验分支，重点处理 H3 音视频 latent 遮罩、采样过程中的原始音频保留，以及高分辨率空间分块 / 全局上下文省显存。它使用独立的节点 ID，可以和原版 SelfLift 共存。
 
-> **实验版本，非官方项目。** 当前代码已通过 57 项 CPU 测试和两套模拟前端测试。此前版本已在维护者的 H3 工作流中试用；新控件仍需更多真实模型与前端测试。尚未进行系统性的口型准确率、速度和所有模型/插件组合测试。不同角色、音频、提示词、采样器、latent upscaler 和 seed 可能产生不同结果。
+> **实验版本，非官方项目。** 当前代码已通过 75 项 CPU 测试和两套模拟前端测试。此前版本已在维护者的 H3 工作流中试用；新控件仍需更多真实模型与前端测试。尚未进行系统性的口型准确率、速度和所有模型/插件组合测试。不同角色、音频、提示词、采样器、latent upscaler 和 seed 可能产生不同结果。
 
 ## 主分支修复：高分辨率分块遇到失效模型引用时报错（2026-10-09）
 
@@ -51,9 +51,45 @@
 
 两个阶段共享 VAE、正负条件、CFG、采样器和 sigma 日程。模型必须具有兼容的架构、latent 格式和采样参数化，适合同架构的不同权重或 LoRA 组合，不支持任意模型家族混用。模型切换跟随**分辨率提升边界**，不是独立设置的高噪 / 低噪阈值。
 
-**53 项 CPU 测试**和两套 Node.js 前端测试通过，覆盖模型选择、单模型回退、阶段边界、遮罩与分块、接口排序及重排后的连线目标保持。这些是合成去噪器和模拟前端测试；双真实模型的输出质量、显存峰值及全部前端 / 子图组合仍待验证。
+**75 项 CPU 测试**和两套 Node.js 前端测试通过，覆盖模型选择、单模型回退、阶段边界、遮罩与分块、接口排序及重排后的连线目标保持。这些是合成去噪器和模拟前端测试；双真实模型的输出质量、显存峰值及全部前端 / 子图组合仍待验证。
 
 本次更新位于仓库 `main` 分支；已有的 `v0.1.4-experimental` 发布压缩包**不包含本次修改**，本次没有创建新的 Release 压缩包。
+
+## 主分支更新：全局上下文省显存（2026-10-20）
+
+> 全局上下文省显存实现基于 [Fish4AI](https://github.com/Fish4AI) 的 [comfyui-SelfLift-Fish](https://github.com/Fish4AI/comfyui-SelfLift-Fish)，特别感谢作者的公开工作。
+
+这一版新增了 `spatial`、`global_stream`、`global`、`global_ram` 四种高分辨率省显存模式。旧工作流默认仍是 `spatial`，不会自动改变行为。
+
+### 新增参数
+
+| 参数 | 取值 | 意义 | 作用与建议 |
+| --- | --- | --- | --- |
+| `highres_tiling` | false / true | 高分辨率省显存总开关。 | 关闭时高分辨率阶段整帧处理；低分辨率阶段始终整帧处理。 |
+| `highres_tiling_mode` | `spatial` / `global_stream` / `global` / `global_ram` | 省显存策略。 | `spatial`：空间裁切，最快、最省显存，但容易产生背景膨胀/位移/接缝；`global_stream`：保留完整 token/attention 上下文，按 head group、投影和 MLP 分批，推荐但需要 native SLA/sol-attn；`global`：完整上下文兼容路径，不需要 native sparse，但显存更高；`global_ram`：完整上下文 + 主机内存暂存，GPU 更省但最慢。 |
+| `highres_token_chunk` | 128～16384，默认 4096 | 全局模式的 token 批次大小。 | 控制投影/MLP 每次处理多少 token。调小通常降低中间激活显存但增加开销；调大更快但更吃显存。它不是空间块，也不是 attention 窗口。 |
+| `highres_weight_cache_gb` | 0～64，默认 4 | `global_stream` 的 DynamicVRAM 权重缓存预算。 | 调小给工作区留更多空间但可能增加权重换入换出；调大可能挤占工作区。`0` 表示保留自动策略，不是关闭缓存。 |
+| `tiling_mode` | auto / manual | 仅 `spatial` 有效。 | 自动从 1～8 块中选择首个估计能放下的方案；手动按请求块数执行，不悄悄增加块数。 |
+| `tiling_tiles` | 2 / 4 / 6 / 8，默认 2 | 仅 `spatial` + manual 有效。 | 请求的空间块数；尺寸很小时实际块数可能减少。 |
+| `tiling_axis` | auto / width / height | 仅 `spatial` 有效。 | 自动沿 patch 网格长边；width 左右分条；height 上下分条。时间/音频不会被切开。 |
+
+### 推荐配置
+
+| 场景 | 建议 |
+| --- | --- |
+| 有 native SLA/sol-attn，且没有冲突的 attention override | `global_stream`、`highres_token_chunk=4096`、`highres_weight_cache_gb=4` |
+| 没有 native sparse，或需要最大兼容性 | `global`；显存更高，但路径更直接 |
+| 显存非常紧、主机内存很大 | `global_ram`；速度最慢 |
+| 只追求速度和显存，能接受背景形变 | `spatial` |
+
+### 遮罩、回退与状态
+
+- `spatial` 仍要求 `video mask = 1` 全图、`audio mask = 0` 全音频。
+- `global_stream` / `global` / `global_ram` 保留完整全序列 mask，支持局部/软遮罩，不需要按 tile 做坐标变换。
+- 检测到 TST 或其他 attention override 时，`global_stream` / `global_ram` 会自动回退到“全序列 dense attention + 分块 MLP”，保留 override，但显存占用更高。
+- 如果 override 只是 ComfyUI 的 `Model Attention Backend`（例如 comfy kitchen attention），全序列回退会移除这个后端选择，改用默认 PyTorch attention，避免长序列下后端不兼容导致异常噪点。TST / Motion Context 等真正改变 attention 语义的 override 不会被移除。
+- 节点状态栏会显示实际模式、token chunk、回退原因和显存估算；这些数字是估算值，不是实测峰值。
+- 当前代码通过 75 项 CPU 测试及两套模拟前端测试；真实 H3 模型的质量、速度和显存峰值仍需按工作流做 A/B。
 
 ## 历史升级：v0.1.4
 
@@ -112,6 +148,13 @@ H3 采样器新增可选参数，旧工作流保持原有默认行为。
 - 每个视频块都会收到完整音频 latent 和完整 H3 音频条件；音频不会按画面分块。
 - 仍然拒绝视频局部保留、音频局部/软遮罩，以及尚未验证的其他遮罩组合。
 - 新增分块拼接、完整音频保留、H3 音频遮罩传递、非法组合和无遮罩路径测试。
+
+## 示例工作流
+
+- [H3+selflift-avatar-fixed.json](example_workflows/H3+selflift-avatar-fixed.json)
+- [示例工作流说明](example_workflows/README.md)
+
+该工作流默认使用 `global_stream`、`highres_token_chunk=4096`、`highres_weight_cache_gb=4`。模型权重不包含在仓库中；运行前请替换 `LoadImage` 节点的本地参考图，并安装工作流中使用的自定义节点。
 
 ## Demo
 
@@ -253,7 +296,11 @@ node tests/test_tiling_ui.mjs
 node tests/test_model_input_order.mjs
 ```
 
-当前共有 53 项 CPU 测试，覆盖音视频打包、H3 音频尺度、全量/局部遮罩、恒定音频 SolidMask 转换、原生音频条件、两阶段采样、自动分块规划、分块拼接、每个分块获得完整音频、非法遮罩组合和无遮罩分块路径。测试不会加载大型 H3 权重，也不衡量最终视频的口型质量。
+当前共有 75 项 CPU 测试，覆盖音视频打包、H3 音频尺度、全量/局部遮罩、恒定音频 SolidMask 转换、原生音频条件、两阶段采样、自动分块规划、分块拼接、每个分块获得完整音频、非法遮罩组合和无遮罩分块路径。测试不会加载大型 H3 权重，也不衡量最终视频的口型质量。
+
+## 致谢
+
+感谢 [Fish4AI](https://github.com/Fish4AI) 的 [comfyui-SelfLift-Fish](https://github.com/Fish4AI/comfyui-SelfLift-Fish)。本项目的全局上下文省显存实现，包括 `h3_global_tiling.py`、`h3_stream_attention.py`、`h3_ram_attention.py`、`h3_output_chunking.py`、`h3_prepared_weights.py`，基于 Fish4AI 的公开工作移植并适配到 selflift-Avatar 的音频/视频 mask 路径。也感谢 facok 的原版 comfyui-SelfLift 和 SelfLift 论文作者。
 
 ## 来源与许可
 

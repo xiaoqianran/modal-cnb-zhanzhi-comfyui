@@ -1,5 +1,7 @@
 # MiniMax H3 PDD 8-Step / 8步蒸馏加速
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#19-pdd-acceleration)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录提供 Alibaba PAI `MiniMax-H3-Acc-LoRAs` 的前端 ComfyUI 工作流。PDD 是 Parallel Decoding Distillation：源模型的32个时间间隔按每4个加权融合为一次模型前向，实际固定为8 NFE。它除了258个主干LoRA adapter，还带32组视频输出头和32组音频输出头；普通 `Load LoRA` 会漏掉这些动态输出头，因此不能代替专用节点。
 
 ## 工作流

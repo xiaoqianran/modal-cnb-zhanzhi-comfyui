@@ -18,7 +18,7 @@ from ..core import validate_audio
 from ..native_latent_checkpoint_advanced import _encode_metadata_value, _decode_metadata_value
 from .face_stage import audit_multiface_face_stage
 from .results import StageResult, _input_identity, canonical
-from .storage import _root, _path, _lease, _digest, _json_file, file_sha, MAX_JSON, MAX_FILE
+from .storage import _root, _path, _lease, _digest, _json_file, file_sha
 
 SCHEMA = "t8.modular-sampling.multiface-source.v1"
 METADATA_KEY = "t8_multiface_source"
@@ -52,8 +52,6 @@ def source_values(stage_result, face_plan, source_frames, parent_frames, av_late
 
 
 def _check_tensors(tensors):
-    if sum(t.numel() * t.element_size() for t in tensors.values()) > MAX_FILE - MAX_JSON:
-        raise ValueError("Multi-Face input exceeds the 20 GiB limit")
     if any(t.is_floating_point() and not bool(torch.isfinite(t).all()) for t in tensors.values()):
         raise ValueError("Multi-Face input contains non-finite tensors")
 
@@ -78,8 +76,6 @@ def save_source(values, stage_result, parent_frames, source_audio, storage_root,
             or validate_source(values, stage_result, parent_frames, source_audio) != identity):
         raise ValueError("Multi-Face input changed while snapshotting")
     payload = canonical(dict(schema=SCHEMA, state=encoded, identity=identity))
-    if len(payload.encode("utf8")) > MAX_JSON:
-        raise ValueError("Multi-Face source metadata exceeds the 4 MiB limit")
     root = _root(storage_root, create=True)
     selected = _path(root, prefix)
     directory = selected.with_name(selected.name + "-" + uuid.uuid4().hex)
@@ -90,7 +86,7 @@ def save_source(values, stage_result, parent_frames, source_audio, storage_root,
         save_file(tensors, str(partial), metadata={METADATA_KEY: payload})
         with partial.open("rb+") as handle:
             size = struct.unpack("<Q", handle.read(8))[0]
-            if not 0 < size <= MAX_JSON:
+            if not 0 < size <= os.fstat(handle.fileno()).st_size - 8:
                 raise ValueError("Multi-Face tensor header exceeds its bound")
             os.fsync(handle.fileno())
         interrupt()
@@ -123,13 +119,13 @@ def load_source(storage_root, artifact_path, artifact_sha256, stage_result, pare
     if path.name != "manifest.json" or not path.parent.is_dir():
         raise ValueError("Select a committed Multi-Face source manifest.json")
     with _lease(path.parent):
-        if not path.is_file() or not 0 < path.stat().st_size <= MAX_JSON or file_sha(path) != expected:
+        if not path.is_file() or not 0 < path.stat().st_size or file_sha(path) != expected:
             raise ValueError("Multi-Face source manifest SHA mismatch or missing completion")
         manifest = _json_file(path)
         if (set(manifest) != {"schema", "state_file", "state_bytes", "state_sha256", "payload_sha256", "data_only"}
                 or manifest["schema"] != SCHEMA or manifest["state_file"] != "state.safetensors"
                 or manifest["data_only"] is not True or type(manifest["state_bytes"]) is not int
-                or not 8 < manifest["state_bytes"] <= MAX_FILE):
+                or not 8 < manifest["state_bytes"]):
             raise ValueError("Unknown Multi-Face source manifest contract")
         state = _path(root, (path.parent / manifest["state_file"]).relative_to(root).as_posix())
         if (not state.is_file() or state.stat().st_size != manifest["state_bytes"]
@@ -137,7 +133,7 @@ def load_source(storage_root, artifact_path, artifact_sha256, stage_result, pare
             raise ValueError("Multi-Face source tensor size or SHA differs")
         with state.open("rb") as handle:
             size = struct.unpack("<Q", handle.read(8))[0]
-        if not 0 < size <= min(MAX_JSON, state.stat().st_size - 8):
+        if not 0 < size <= state.stat().st_size - 8:
             raise ValueError("Multi-Face source tensor header exceeds its bound")
         interrupt()
         with safe_open(str(state), framework="pt", device="cpu") as handle:

@@ -9,6 +9,13 @@ import pytest
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "h3_audio_t8_pkg"
+# Fresh-process replay tests also import this file without the CPU runner.
+# Resolve Core's absolute module before adding the extension's flat helpers.
+core_root = PACKAGE_ROOT.parents[1] if len(PACKAGE_ROOT.parents) > 1 else None
+if core_root is not None and (core_root / "comfy").is_dir():
+    sys.path.insert(0, str(core_root))
+import nodes as core_nodes  # noqa: E402,F401
+
 sys.path.insert(0, str(PACKAGE_ROOT / "tests"))
 sys.path.insert(0, str(PACKAGE_ROOT / "h3_t8"))
 

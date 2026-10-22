@@ -1,10 +1,10 @@
 # selflift-Avatar
 
-**Development: `main` (tiling stale-reference fix)** · **Packaged release: `v0.1.4-experimental`** · [中文说明](README_CN.md) · [Changelog](CHANGELOG.md) · [v0.1.4 release](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.4-experimental)
+**Development: `main` (global-context memory saving)** · **Packaged release: `v0.1.4-experimental`** · [中文说明](README_CN.md) · [Changelog](CHANGELOG.md) · [v0.1.4 release](https://github.com/slmonker/selflift-Avatar/releases/tag/v0.1.4-experimental)
 
-An independent experimental SelfLift branch for ComfyUI / MiniMax H3. It focuses on H3 audio-video latent masks, preserving source audio during sampling, and a narrowly supported high-resolution tiling path. It registers separate node IDs, so it can coexist with the original SelfLift plugin.
+An independent experimental SelfLift branch for ComfyUI / MiniMax H3. It focuses on H3 audio-video latent masks, preserving source audio during sampling, and high-resolution spatial tiling / global-context memory saving. It registers separate node IDs, so it can coexist with the original SelfLift plugin.
 
-> **Experimental, unofficial project.** The current code has passed 57 CPU tests and two frontend suites with stubs. Earlier versions were exercised in the maintainer's H3 workflow; the new controls still need broader real-model and frontend testing. This is not a systematic benchmark of lip-sync accuracy, speed, or every model/plugin combination. Results can vary by character, audio, prompt, sampler, latent upscaler, and seed.
+> **Experimental, unofficial project.** The current code has passed 75 CPU tests and two frontend suites with stubs. Earlier versions were exercised in the maintainer's H3 workflow; the new controls still need broader real-model and frontend testing. This is not a systematic benchmark of lip-sync accuracy, speed, or every model/plugin combination. Results can vary by character, audio, prompt, sampler, latent upscaler, and seed.
 
 ## Main-branch fix: expired model references during tiling (2026-10-09)
 
@@ -51,9 +51,45 @@ The separate H3 TST patch node still uses its original `model` socket. Socket or
 
 Both stages share the VAE, positive/negative conditioning, CFG, sampler and sigma schedule. Use compatible architectures, latent formats and sampling parameterizations, such as different checkpoints or LoRA stacks for the same backbone—not arbitrary model families. The switch follows the **resolution transition**, not an independent high-noise/low-noise threshold.
 
-**53 CPU tests** and both Node.js frontend suites pass. Coverage includes model selection, single-model fallback, stage boundaries, masks/tiling, socket ordering and preserving link targets when reordering. These are synthetic-denoiser and stub-frontend tests; real dual-model output quality, peak VRAM and all frontend/subgraph combinations remain unverified.
+**75 CPU tests** and both Node.js frontend suites pass. Coverage includes model selection, single-model fallback, stage boundaries, masks/tiling, socket ordering and preserving link targets when reordering. These are synthetic-denoiser and stub-frontend tests; real dual-model output quality, peak VRAM and all frontend/subgraph combinations remain unverified.
 
 This update is available from the repository's `main` branch. The existing `v0.1.4-experimental` release archive does **not** contain it; no new release archive is created with this update.
+
+## Main-branch update: global-context memory saving (2026-10-20)
+
+> The global-context memory-saving implementation is based on [Fish4AI](https://github.com/Fish4AI)'s [comfyui-SelfLift-Fish](https://github.com/Fish4AI/comfyui-SelfLift-Fish). Special thanks to the author for publishing this work.
+
+This update adds four high-resolution memory-saving modes: `spatial`, `global_stream`, `global`, and `global_ram`. Existing workflows still default to `spatial`.
+
+### New parameters
+
+| Parameter | Values | Meaning | Effect / guidance |
+| --- | --- | --- | --- |
+| `highres_tiling` | false / true | Master switch for high-resolution memory saving. | When off, the target-resolution stage runs full-frame; the low-resolution prefix is always full-frame. |
+| `highres_tiling_mode` | `spatial` / `global_stream` / `global` / `global_ram` | Memory-saving strategy. | `spatial` crops independent tiles: fastest and lowest VRAM, but can cause background swelling, displacement, or seams. `global_stream` keeps the full token/attention context and batches head groups, projections, and MLP; recommended when native SLA/sol-attn is available. `global` keeps the full context and needs no native sparse, but uses more VRAM. `global_ram` keeps the full context and stages work in host RAM; lowest GPU use, slowest. |
+| `highres_token_chunk` | 128–16384, default 4096 | Token batch size for global modes. | Controls how many tokens each projection/MLP call processes. Smaller values usually reduce intermediate activation VRAM but add overhead; larger values are faster but need more VRAM. It is not a spatial tile or an attention window. |
+| `highres_weight_cache_gb` | 0–64, default 4 | DynamicVRAM weight-cache budget for `global_stream`. | Smaller values leave more workspace but can increase weight transfers; larger values can crowd the workspace. `0` keeps the automatic policy; it does not disable caching. |
+| `tiling_mode` | auto / manual | `spatial` only. | Auto picks the first estimated fitting count from 1–8; manual uses the requested count without silently increasing it. |
+| `tiling_tiles` | 2 / 4 / 6 / 8, default 2 | `spatial` + manual only. | Requested spatial tile count. Very small dimensions can reduce the effective count. |
+| `tiling_axis` | auto / width / height | `spatial` only. | Auto uses the longer patch-grid side; width creates left/right strips; height creates top/bottom strips. Audio/time is never split. |
+
+### Recommended starting points
+
+| Situation | Recommendation |
+| --- | --- |
+| Native SLA/sol-attn and no conflicting attention override | `global_stream`, token chunk `4096`, weight cache `4` GiB |
+| No native sparse, or maximum compatibility | `global`; higher VRAM, more direct path |
+| Very tight VRAM and plenty of host RAM | `global_ram`; slowest |
+| Speed/VRAM first and background deformation is acceptable | `spatial` |
+
+### Masks, fallback, and status
+
+- `spatial` still requires `video mask = 1` everywhere and `audio mask = 0` everywhere.
+- `global_stream`, `global`, and `global_ram` keep full-sequence masks, including partial/soft masks, without per-tile coordinate transforms.
+- If TST or another attention override is active, `global_stream`/`global_ram` fall back to full-sequence dense attention with chunked MLP. The override is preserved, but VRAM use is higher.
+- If the override is only ComfyUI's `Model Attention Backend` (for example comfy kitchen attention), the full-sequence fallback removes that backend selector and uses default PyTorch attention to avoid long-sequence backend instability. TST/Motion Context overrides are not removed.
+- The node status panel reports the actual mode, token chunk, fallback reason, and memory estimates. These are estimates, not measured peaks.
+- The current code passes 75 CPU tests plus both stub-frontend suites. Real H3 quality, speed, and VRAM peaks still need workflow-specific A/B testing.
 
 ## Previous upgrade: v0.1.4
 
@@ -110,6 +146,13 @@ Overlap remains automatic; these controls do not change the latent upscaler's te
 - Every spatial tile receives the complete audio latent and complete H3 audio conditioning. Audio is not split by the visual tile boundary.
 - Keeps rejecting partial video preservation, partial/soft audio masks, and other mask combinations that have not been validated with tiling.
 - Adds tests for tile stitching, full-audio preservation, H3 audio mask forwarding, invalid mask combinations, and the no-mask path.
+
+## Example workflows
+
+- [H3+selflift-avatar-fixed.json](example_workflows/H3+selflift-avatar-fixed.json)
+- [Example workflow notes](example_workflows/README.md)
+
+The workflow uses `global_stream`, `highres_token_chunk=4096`, and `highres_weight_cache_gb=4` by default. Model weights are not included; replace the local reference image in the `LoadImage` node and install the custom nodes used by the workflow before running.
 
 ## Demo
 
@@ -251,7 +294,11 @@ node tests/test_tiling_ui.mjs
 node tests/test_model_input_order.mjs
 ```
 
-The current suite contains 53 CPU tests covering AV packing, H3 audio scaling, full/partial masks, constant audio SolidMask conversion, native audio conditioning, two-stage sampling, automatic tile planning, tile stitching, complete-audio forwarding to every tile, invalid masked-tiling combinations, and the unmasked tiling path. The tests do not load a large H3 checkpoint or measure final video lip-sync quality.
+The current suite contains 75 CPU tests covering AV packing, H3 audio scaling, full/partial masks, constant audio SolidMask conversion, native audio conditioning, two-stage sampling, automatic tile planning, tile stitching, complete-audio forwarding to every tile, invalid masked-tiling combinations, and the unmasked tiling path. The tests do not load a large H3 checkpoint or measure final video lip-sync quality.
+
+## Acknowledgements
+
+Special thanks to [Fish4AI](https://github.com/Fish4AI) and [comfyui-SelfLift-Fish](https://github.com/Fish4AI/comfyui-SelfLift-Fish). The global-context memory-saving implementation in this project, including `h3_global_tiling.py`, `h3_stream_attention.py`, `h3_ram_attention.py`, `h3_output_chunking.py`, and `h3_prepared_weights.py`, is adapted from Fish4AI's public work and integrated with selflift-Avatar's audio/video mask path. Thanks also to facok for the original comfyui-SelfLift and to the SelfLift paper authors.
 
 ## Source and licensing
 

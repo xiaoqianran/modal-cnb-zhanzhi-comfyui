@@ -885,19 +885,10 @@ class UC_load_model:
             if clip1 != "None" and clip2 != "None":
                 positive = node_helpers.conditioning_set_values(positive, {"guidance": 3.5})
 
-        if clip_type == "flux2":
-            latent = torch.zeros(
-                [1, 128, 32, 32],
-                device=comfy.model_management.intermediate_device(),
-            )
-        else:
-            latent = torch.zeros([1, 16, 64, 64])
-
         context = new_context(None, **{
             "model": model,
             "positive": positive,
             "negative": negative,
-            "latent": {"samples": latent},
             "vae": vae_obj,
             "audio_vae": audio_vae_obj,
             "clip": clip,
@@ -960,3 +951,18 @@ class UC_ContextCache:
                 comfy.model_management.unload_model_and_clones(clip.patcher)
             checkpoint_context["clip"] = None
         return (checkpoint_context,)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

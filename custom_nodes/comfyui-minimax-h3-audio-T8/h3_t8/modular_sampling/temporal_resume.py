@@ -19,7 +19,7 @@ from . import chunked_v5 as base, chunked_v5_storage
 from . import temporal_chunked_storage as scoped
 from .temporal_chunked_v5 import ScopedWindowResult
 from .results import canonical, _input_identity
-from .storage import MAX_JSON, MAX_FILE, _root, _path, _lease, _digest, _json_file, file_sha, fingerprint_stage
+from .storage import _root, _path, _lease, _digest, _json_file, file_sha, fingerprint_stage
 
 
 SCHEMA = 't8.temporal-dialogue.literal-v5-resume.v1'
@@ -113,11 +113,7 @@ def save_resume(result, source, lifted, prepared, plan, bank, storage_root):
     rebuilt = _rebuild(_decode_metadata_value(descriptor, tensors, set(), path='temporal.resume'))
     if _input_identity(_state(rebuilt[-1], *rebuilt[:5])) != _input_identity(values):
         raise ValueError('Native resume CPU copy changed literal values')
-    if sum(t.numel()*t.element_size() for t in tensors.values()) > MAX_FILE-MAX_JSON:
-        raise ValueError('Native resume tensors exceed size limit')
     payload = canonical(descriptor)
-    if len(payload.encode('utf8')) > MAX_JSON-4096:
-        raise ValueError('Native resume metadata exceeds size limit')
     root = _root(storage_root, create=True)
     directory = root/('resume-'+uuid.uuid4().hex)
     directory.mkdir()
@@ -126,7 +122,7 @@ def save_resume(result, source, lifted, prepared, plan, bank, storage_root):
         save_file(tensors, str(pending), metadata={'resume_state':payload})
         with pending.open('rb+') as stream:
             header = struct.unpack('<Q', stream.read(8))[0]
-            if not 0 < header <= MAX_JSON:
+            if not 0 < header <= os.fstat(stream.fileno()).st_size - 8:
                 raise ValueError('Native resume header exceeds size limit')
             os.fsync(stream.fileno())
         os.replace(pending, state)
@@ -136,8 +132,6 @@ def save_resume(result, source, lifted, prepared, plan, bank, storage_root):
             implementation=_implementation(), automatic_cache_reuse=False, provider_equivalence_certified=False,
             quality_accepted=False)
         data = canonical(manifest).encode('utf8')
-        if len(data) > MAX_JSON:
-            raise ValueError('Native resume manifest exceeds size limit')
         pending, path = directory/'manifest.json.partial', directory/'manifest.json'
         with pending.open('xb') as stream:
             stream.write(data)
@@ -166,12 +160,12 @@ def load_resume(storage_root, artifact_path, artifact_sha256, expected_index):
                 or any(manifest[k] is not False for k in ('automatic_cache_reuse','provider_equivalence_certified','quality_accepted'))):
             raise ValueError('Native resume implementation/contract/expected window differs')
         state = _path(root, (path.parent/'state.safetensors').relative_to(root).as_posix())
-        if (type(manifest['state_bytes']) is not int or not 8 < manifest['state_bytes'] <= MAX_FILE
+        if (type(manifest['state_bytes']) is not int or not 8 < manifest['state_bytes']
                 or state.stat().st_size != manifest['state_bytes'] or file_sha(state) != _digest(manifest['state_sha256'])):
             raise ValueError('Native resume tensor size/SHA mismatch')
         with state.open('rb') as stream:
             header = struct.unpack('<Q', stream.read(8))[0]
-        if not 0 < header <= MAX_JSON or header > state.stat().st_size-8:
+        if not 0 < header or header > state.stat().st_size-8:
             raise ValueError('Native resume tensor header exceeds size limit')
         with safe_open(str(state), framework='pt', device='cpu') as handle:
             metadata = handle.metadata()

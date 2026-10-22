@@ -324,7 +324,7 @@ def run_still_preflight(
     if model is not None:
         diffusion_model = getattr(getattr(model, "model", None), "diffusion_model", None)
         if not isinstance(diffusion_model, MiniMaxH3Model):
-            errors.append("model is not a native ComfyUI MiniMax H3 diffusion model")
+            warnings.append("selected MODEL class is unverified; retained for execution at the user's risk")
     else:
         warnings.append("connect model to verify the native MiniMax H3 model class")
     if video_vae is None:

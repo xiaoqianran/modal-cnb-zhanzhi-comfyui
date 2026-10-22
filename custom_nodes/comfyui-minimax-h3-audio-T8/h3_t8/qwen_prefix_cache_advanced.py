@@ -626,7 +626,13 @@ def build_prefix_cache_clip(
             warn_patch_stack('Qwen prefix cache has no verified KV identity adapter; retaining selected CLIP without cache optimization')
             report['status'] = 'cache_bypassed_user_clip_preserved'
         return clip, cache, report
-    _unwrap_h3_clip_model(clip)
+    try:
+        _unwrap_h3_clip_model(clip)
+    except ValueError as error:
+        warn_patch_stack('Qwen prefix cache retains the selected CLIP without KV optimization: ' + str(error))
+        report['status'] = 'cache_bypassed_user_clip_preserved'
+        report['reason'] = str(error)
+        return clip, cache, report
     if mode == "report_only":
         report["status"] = "report_only"
         return clip, cache, report

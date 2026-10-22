@@ -1,5 +1,7 @@
 # S05 OpenVDN 分离式二采（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#41-vdn-two-pass)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 这里的 18 张新增前端图覆盖 DMD8、Stage B 50 完整首采之后的独立后段：各自的 VDN 尾段 4 步、原生 EMA B HIGH 3/4/5 步，以及旧 Stage B 入口使用的 VDN 尾段 5 步。每种配方各有 `Full_Stages`（运行并保存 LOW/HIGH）和 `Cold_HIGH`（凭已保存 LOW 的 manifest 路径与 SHA 只运行 HIGH）。原 `10-speed` 四张一体式 VDN 二采图仍可照旧使用，不自动替换。
 
 LOW/HIGH 有分开的模型及可插 LoRA 位置、条件、噪声、Prompt Relay Plan 和 Stage EAV；VDN 分支另有专门的 Relay Apply/Audit，以观察其窗口与线性注意力路径。EAV 默认 `report_only`，这不会增强画质。LOW 必须是完成的 VDN 输出，再经原学习型 3D 潜空间放大和 Reconcile 接到 HIGH；HIGH 保留第一遍音频并做独立审计。原生 HIGH 使用独立干净底模和 EMA B，不继承 VDN branch。

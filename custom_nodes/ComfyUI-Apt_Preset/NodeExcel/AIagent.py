@@ -1348,8 +1348,7 @@ class AI_Qwen_text:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "llm_model": (["None", "qwen3.5-plus", "qwen3.5-flash", "qwen3-coder-plus", "qwen3-coder-flash", 
-                            "qwen3-coder-30b-a3b-instruct"], {"default": "qwen3-coder-plus"}),
+                "llm_model": (["None", "deepseek-v4.1-flash", "qwen3.8-omni-flash", ], {"default": "qwen3.8-omni-flash"}),
 
                 "preset": (list(TEXT_PROMPTS.keys()), {"default": "None"}),
                 "custom_system_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "custom_system_prompt：在预设preset=None时生效"}),
@@ -1487,7 +1486,7 @@ class AI_Qwen:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": (["None","qwen3.5-plus", "qwen3.6-plus", "qwen-vl-max", "qwen-vl-max-latest"], {"default": "qwen-vl-max-latest"}),
+                "model": (["None","qwen3.8-max","qwen3.8-omni-flash"], {"default": "qwen3.8-omni-flash"}),
                 "preset": (list(IMAGE_PROMPTS.keys()), {"default": "None"}),
                 "custom_system_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "custom_system_prompt：在预设preset=None时生效"}),
                 "text": ("STRING", {"default": "", "multiline": True, "placeholder": "user prompt"}),

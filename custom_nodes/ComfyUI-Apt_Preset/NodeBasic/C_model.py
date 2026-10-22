@@ -463,7 +463,7 @@ class model_tool_assy:   #小工具串联
 
                               }}
     
-    RETURN_TYPES = ("MODEL",)
+    RETURN_TYPES = ("model",)
     FUNCTION = "patch"
 
     CATEGORY = "Apt_Preset/chx_tool/Model"

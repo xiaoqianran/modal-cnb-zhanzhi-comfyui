@@ -16,7 +16,7 @@ from . import temporal_h16 as runtime, temporal_h16_effects as effects
 from . import chunked_source, chunked_stages
 from .chunked_stages import _check_segment
 from .results import _input_identity, canonical
-from .storage import MAX_FILE, MAX_JSON, _root, _path, _lease, _digest, _json_file, file_sha, fingerprint_stage
+from .storage import _root, _path, _lease, _digest, _json_file, file_sha, fingerprint_stage
 from .temporal_chunked_storage import _typed_receipt
 
 
@@ -85,15 +85,13 @@ def save_h16_scoped_window(result, source_segment, lifted_segment, spec, context
     with _lease(directory):
         video, audio = result.output_latent['samples'].unbind()
         tensors = {'video': video.detach().cpu().contiguous().clone(), 'audio': audio.detach().cpu().contiguous().clone()}
-        if sum(v.numel()*v.element_size() for v in tensors.values()) > MAX_FILE-MAX_JSON:
-            raise ValueError('Scoped H16 frozen tensors exceed size limit')
         if verify_h16_scoped_window(_rebuild(tensors, binding, context), *args) != binding:
             raise ValueError('Scoped H16 literal tensor copy differs')
         pending, state = directory/'state.safetensors.partial', directory/'state.safetensors'
         save_file(tensors, str(pending))
         with pending.open('rb+') as stream:
             header = struct.unpack('<Q', stream.read(8))[0]
-            if not 0 < header <= MAX_JSON:
+            if not 0 < header <= os.fstat(stream.fileno()).st_size - 8:
                 raise ValueError('Scoped H16 tensor header exceeds limit')
             os.fsync(stream.fileno())
         os.replace(pending, state)
@@ -102,8 +100,6 @@ def save_h16_scoped_window(result, source_segment, lifted_segment, spec, context
             binding=binding, implementation=_implementation(), automatic_cache_reuse=False,
             execution_identity_certified=False, quality_accepted=False)
         payload = canonical(manifest).encode('utf8')
-        if len(payload) > MAX_JSON:
-            raise ValueError('Scoped H16 manifest exceeds size limit')
         pending, path = directory/'manifest.json.partial', directory/'manifest.json'
         with pending.open('xb') as stream:
             stream.write(payload)
@@ -142,12 +138,12 @@ def load_h16_scoped_window(source_segment, lifted_segment, spec, context, plan, 
                 or binding['lifted_identity'] != _input_identity(lifted_segment)):
             raise ValueError('Scoped H16 frozen bank/source/noise/lift/window differs')
         state = _path(root, (path.parent/'state.safetensors').relative_to(root).as_posix())
-        if (type(manifest['state_bytes']) is not int or not 8 < manifest['state_bytes'] <= MAX_FILE
+        if (type(manifest['state_bytes']) is not int or not 8 < manifest['state_bytes']
                 or state.stat().st_size != manifest['state_bytes'] or file_sha(state) != _digest(manifest['state_sha256'])):
             raise ValueError('Scoped H16 tensor size/SHA mismatch')
         with state.open('rb') as stream:
             header = struct.unpack('<Q', stream.read(8))[0]
-        if not 0 < header <= MAX_JSON or header > state.stat().st_size-8:
+        if not 0 < header or header > state.stat().st_size-8:
             raise ValueError('Scoped H16 tensor header exceeds limit')
         with safe_open(str(state), framework='pt', device='cpu') as handle:
             if handle.metadata() not in (None, {}):

@@ -26,10 +26,12 @@
         "ImgLayer": "图层处理",
         "ImgBatch": "图像批次",
         "list|Batch": "列表批次",
+        "list|Array": "列表数组",
         "texture": "纹理",
         "visualize_edit": "可视化编辑",
         "AI_tool": "AI工具",
-        "batch_input": "批次输入"
+        "batch_input": "批次输入",
+        "Panorama": "全景图"
     }
 }
 

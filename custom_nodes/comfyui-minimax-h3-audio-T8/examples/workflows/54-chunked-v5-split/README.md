@@ -1,5 +1,7 @@
 # S22 Chunked v5 分离式双采（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#54-chunked-v5-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录提供固定 192 帧的 2／3／4 窗配方，共 198 张可导入研究图。各配方可让无效果、EAV、Prompt Relay 或两者组合只作用 LOW、某个 PASS2 窗或全部阶段；每种都提供完整不保存、完整逐窗保存，以及从任一后窗冷恢复。旧 v5 一体工作流没有迁移或替换。
 
 先看 `2window_none_none_full_no_save`，再看 `2window_combined_all_full_save`。LOW partial4、全片 learned3D 放大、全片 joint AV 噪声准备和各个 remaining4 PASS2 窗是显式节点；LOW/HIGH 模型加载独立，活动窗的 Relay Plan、EAV Config 可分别编辑。各 HIGH 窗共用同一全片准备噪声和原计划；不能将逐窗随机噪声随意更换。v5 最终音频来自 PASS2 的 joint AV 结果，不是 v1–v4 的首采音频透传。EAV 默认 `report_only`，不是默认画质增强。

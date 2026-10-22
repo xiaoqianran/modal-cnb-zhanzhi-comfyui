@@ -15,7 +15,7 @@ from .hyperflow_curve import CurveBoundary, CurveResult
 from .hyperflow_storage import _check_file
 from .progressive import portable
 from .results import canonical
-from .storage import MAX_FILE, MAX_JSON, _digest, _lease, _path, _root, file_sha
+from .storage import _digest, _lease, _path, _root, file_sha
 
 SCHEMA = "t8.hyperflow.frozen_curve_stage.v1"
 KINDS = {"head": (CurveBoundary, "curve-head.safetensors"), "tail": (CurveResult, "curve-tail.safetensors")}
@@ -31,7 +31,7 @@ def _unique(pairs):
 
 
 def _payload(text):
-    if type(text) is not str or len(text.encode("utf-8")) > MAX_JSON:
+    if type(text) is not str:
         raise ValueError("Curve artifact metadata exceeds its bound")
     value = json.loads(text, object_pairs_hook=_unique)
     if (type(value) is not dict or set(value) != {"schema", "kind", "receipt_json", "state"}
@@ -78,8 +78,6 @@ def _save(result, storage_root, prefix, kind):
     encoded = _encode_metadata_value(state, tensors, path="curve.state")
     payload = canonical({"schema": SCHEMA, "kind": kind, "receipt_json": result.receipt_json, "state": encoded})
     _decode(_payload(payload), tensors)
-    if sum(value.numel() * value.element_size() for value in tensors.values()) > MAX_FILE - MAX_JSON:
-        raise ValueError("Curve artifact tensors exceed the store bound")
     root = _root(storage_root, create=True)
     base = _path(root, prefix)
     directory = base.with_name(base.name + "-" + uuid.uuid4().hex)

@@ -340,7 +340,8 @@ def prepare(model,path,strength=1.,policy='generated_audio',owner_policy='delega
         return model,None,{'schema':SCHEMA,'status':'disabled','original_MODEL_returned':True,'file_opened':False}
     diffusion = model.get_model_object('diffusion_model')
     if not isinstance(diffusion,MiniMaxH3Model):
-        raise ValueError('Token-row scope requires native ComfyUI MiniMax H3; ordinary loaders remain available')
+        from .patch_stack_policy import warn_patch_stack
+        warn_patch_stack('Token-row scope received another MODEL class; checking actual LoRA targets')
     path = Path(path).resolve(strict=True)
     digest = _sha(path)
     raw,metadata = comfy.utils.load_torch_file(str(path),safe_load=True,return_metadata=True)

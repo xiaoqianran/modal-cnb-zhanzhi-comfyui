@@ -1,5 +1,71 @@
 # ComfyUI-RMBG Update Log
 
+## V3.3.0 (2026/10/20)
+### New Nodes
+- **Canvas (RMBG)**: An interactive multi-layer image compositing studio built directly into the ComfyUI node canvas:
+  ![Canvas_nodes](example_workflows/AILab_canvas.jpg)
+  
+  - **Interactive Stage**: Move, rotate, flip (horizontal/vertical), adjust opacity, and scale layers with 4-corner aspect-locked transform gizmos directly on the visual stage.
+  - **Dynamic Layer Management**: Clean slot architecture that dynamically expands layer inputs (`layer_1` through `layer_5`) as connections are made, featuring enlarged live preview cards and hover-to-remove actions.
+  - **Adaptive Canvas Sizing**: Automatically syncs aspect ratio with background inputs or supports free-form width and height scaling (snapped to 8px multiples, 320px–4096px bounds).
+  - **Alpha Transparency & Full RGBA Pipeline**: True 4-channel RGBA compositing and output when `Background: Alpha` is selected, preserving transparent pixels for downstream preview and save nodes without black background clipping.
+  - **Merged Foreground Mask**: Automatically composites and outputs an exact single-channel `MASK` covering all active foreground layers for downstream inpainting and matting workflows.
+- **VRMBG Video Background Removal (`AILab_VRMBG`)**:
+  ![VRMBG_nodes](example_workflows/VRMBG.jpg)
+  - **Flicker-Free Temporal Matting**: First dedicated video matting node designed specifically for sequential video batches and animation frames.
+  - **Autoregressive State Tracking**: Conditioned on prior frame foreground features to maintain temporal continuity and eliminate boundary flickering across frames.
+  - **Chunked Video Processing**: Features a `reset_state` toggle allowing creators to feed long videos in consecutive batches without losing temporal continuity.
+  - **Manual Model Loading**: Automatic download removed in favor of manual placement in `ComfyUI/models/RMBG/VRMBG-3.0/` for full offline control.
+- **FeyNoBg Ultra-Fine Matting (`AILab_FeyNoBg`)**:
+  - **Deepened Swin-L Matting Backbone**: Introduces the 263M parameter FeyNoBg model specializing in boundary reconstruction and complex dichotomous segmentation.
+  - **Micro-Hair & Semi-Transparent Subjects**: Drastically improves extraction quality on wispy hair, fur, transparent glassware, lace, and motion-blurred edges with zero manual trimap required.
+  - **Sub-Pixel Foreground Refinement**: Built-in `refine_foreground` ensures clean, halo-free subject boundaries.
+- **Finegrain Box Segmenter (`AILab_FinegrainBoxSegment`)**:
+  ![Finegrain Box Segmenter and Floorence-2_nodes](example_workflows/Florence2_Finegrain_box.jpg)
+
+  - **1024px High-Definition Bounding Box Matting**: Integrates the Swin-B MVANet architecture to perform high-resolution object cutouts using bounding boxes.
+  - **Florence-2 & YOLO Workflow Integration**: Directly connects with `BBOX` outputs from Florence-2 and YOLO nodes for an end-to-end detection-to-matting pipeline.
+  - **Fallback Full-Image Mode**: Automatically falls back to high-res subject cutout when no prompt box is connected.
+- **Florence-2 Segmentation Enhancement (`AILab_Florence2`)**:
+  - Added dedicated 4th output `BBOXES` (`BBOX` format) returning parsed bounding box data for direct plug-and-play connection to `Finegrain Box Segmenter`.
+- **SAM3 Segmentation Enhancement (`AILab_SAM3Segment`)**:
+  - Added dedicated 4th output `BBOXES` (`BBOX` format) returning detected bounding box coordinates (`[[x1, y1, x2, y2], ...]`), enabling direct connection to `Finegrain Box Segmenter`, Florence-2 tools, and detection-to-matting workflows.
+
+### Model Downloads & Offline Placement
+- **VRMBG-3.0**: Manually download from official [briaai/VRMBG-3.0](https://huggingface.co/briaai/VRMBG-3.0) to `ComfyUI/models/RMBG/VRMBG-3.0/`.
+- **FeyNoBg**: Download from [1038lab/FeyNobg](https://huggingface.co/1038lab/FeyNobg) to `ComfyUI/models/RMBG/FeyNoBg/`.
+- **Finegrain Box Segmenter**: Download from [1038lab/finegrain-box-segmenter](https://huggingface.co/1038lab/finegrain-box-segmenter) to `ComfyUI/models/RMBG/finegrain-box-segmenter/`.
+
+### Performance & VRAM Optimization
+- **RMBG-2.0 Native FP16 Acceleration**: Enabled native FP16 (Half Precision) inference for RMBG-2.0 on CUDA devices, reducing model weights and activation VRAM consumption by >50% while leveraging NVIDIA Tensor Cores for ~2x faster throughput.
+- **Video & Batch Processing Stability**:
+  - Implemented automatic intermediate VRAM clearing per batch chunk during video and long-sequence background removal, eliminating memory fragmentation and preventing GPU timeout (TDR) crashes.
+  - Enhanced numerical stability on half-precision outputs across RMBG-2.0 and BiRefNet to ensure clean edge matting without transparency artifacts.
+  - Hardened cleanup lifecycle across RMBG and SAM3 Multiplex nodes.
+
+### Compatibility & Model Architecture
+- **Florence-2 Architecture Rewrite**:
+  - **Why We Changed It**: The original Florence-2 implementation relied on Hugging Face's dynamic remote script execution (`trust_remote_code=True`), which constantly broke or crashed whenever ComfyUI or `transformers` was updated (especially on newer 4.40+ and 5.x releases).
+  - **Rock-Solid Local Stability**: Rebuilt entirely on a native local PyTorch architecture. It runs 100% offline without remote scripts, eliminating dependency collisions and version-locking issues across different ComfyUI setups.
+  - **Complete & Accurate Masks**: Fixed the issue where complex polygon masks (e.g. car wheels, full faces) were abruptly cut off mid-generation, now producing complete and precise boundaries.
+  - **Removed Matplotlib Dependency**: Replaced the heavy external plotting library with native image rendering, cutting unnecessary dependencies, reducing install footprint, and preventing memory leaks.
+  - **Workflow Quality-of-Life**: Moved `prompt` to the top for intuitive workflow chaining, simplified parameter names, and added an `unload_model` toggle to release GPU memory on demand.
+- **YOLO Segmentation (RMBG) Node Overhaul**:
+  ![YOLO_nodes](example_workflows/YOLO_Node.jpg)
+  - **Upgraded to YOLO26-seg & YOLO11-seg**: Integrated the state-of-the-art YOLO26 and YOLO11 instance segmentation model families (`yolo26n-seg` through `yolo26x-seg`, plus `yolo11*-seg`), hosted on our Hugging Face repository (`1038lab/YOLO`) with seamless auto-downloading.
+  - **Native Cutout Output (RGBA)**: Outputs direct transparent cutouts (`Alpha` RGBA) or custom background colors (`Color` RGB) right from the primary `IMAGE` output port, eliminating the need to chain downstream `Mask Applier` nodes.
+  - **Configurable Annotation Display**: Added `annotation_mode` (`Mask & Box`, `Box Only`, `Mask Only`, `None`) on `ANNOTATED_IMAGE` to flexibly control detection overlays without obstructing workflows.
+  - **Mask Refinement Suite**: Added built-in edge feathering (`mask_blur`), expansion/contraction (`mask_offset`), and mask inversion (`invert_output`).
+  - **Foldable Advanced Drawer**: Integrated with `Advanced_nodes.js` to present a clean, minimalist default interface while keeping fine-grained controls easily accessible.
+  - **Standardized Parameter Naming**: Standardized model selection widget to `model` for full consistency across all 1038lab segmentation nodes.
+
+### Bug Fixes & Stability
+- **Image Resize Scaling Factor**: Fixed an issue in `Image Resize` where scaling via `scale_by` squared the factor instead of applying it once (e.g. 512px with 1.2x became 736px instead of 614px). ([#211](https://github.com/1038lab/ComfyUI-RMBG/issues/211))
+- **Florence-2 Transformers 5.x Compatibility**: Fixed `'Florence2LanguageConfig' object has no attribute 'forced_bos_token_id'` error under `transformers >= 5.x` by rebuilding Florence-2 on a native local PyTorch architecture. ([#216](https://github.com/1038lab/ComfyUI-RMBG/issues/216))
+- **Node Discovery Exception Handling**: Fixed a `NameError` in `load_nodes()` error handler where undefined `module_name` crashed the entire custom node pack if an optional import failed. ([#217](https://github.com/1038lab/ComfyUI-RMBG/issues/217), [#218](https://github.com/1038lab/ComfyUI-RMBG/pull/218), [#220](https://github.com/1038lab/ComfyUI-RMBG/issues/220))
+- **SAM3 BBOX Output**: Added native `BBOXES` output support on `SAM3Segment` for direct connection to detection-to-matting workflows. ([#219](https://github.com/1038lab/ComfyUI-RMBG/issues/219))
+- **Timm Layers Deprecation**: Updated `timm.models.layers` imports to `timm.layers` across Florence-2 and SAM3 backbones to resolve deprecation warnings. ([#210](https://github.com/1038lab/ComfyUI-RMBG/issues/210))
+
 ## V3.2.0 (2026/09/30)
 ### New Features & Model Upgrades
 <img width="800" alt="sm3" src="https://github.com/user-attachments/assets/e01201e2-2871-4a7e-bbbc-2e2930cb2752" />
@@ -641,23 +707,3 @@ https://github.com/user-attachments/assets/259220d3-c148-4030-93d6-c17dd5bccee1
 - Model cache is checked before each operation
 - Memory is automatically cleaned when switching models
 - Video processing supports various formats and maintains quality
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

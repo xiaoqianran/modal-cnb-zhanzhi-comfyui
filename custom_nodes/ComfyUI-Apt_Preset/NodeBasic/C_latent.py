@@ -201,7 +201,7 @@ blending_modes = {
 
 
 
-class latent_chx_noise:
+class latent_image2noise:
     def __init__(self):
         pass
 
@@ -220,7 +220,7 @@ class latent_chx_noise:
             },
         }
 
-    RETURN_TYPES = ("IMAGE",)
+    RETURN_TYPES = ("image",)
     FUNCTION = "node"
     CATEGORY = "Apt_Preset/chx_tool/latent"
 
@@ -364,7 +364,7 @@ class latent_Image2Noise:
         return (output, )
 
 
-class chx_latent_adjust:
+class latent_chx_adjust:
     def __init__(self):
         pass
 
@@ -626,7 +626,7 @@ class _MinimaxH3LatentResizer3D(nn.Module):
 def _minimax_h3_upscale_models():
     return [
         name for name in folder_paths.get_filename_list(_MINIMAX_H3_UPSCALE_FOLDER)
-        if "minimax_h3_latent_upscaler_3d" in name.lower() and name.lower().endswith((".safetensors", ".pth", ".pt"))
+        if name.lower().endswith((".safetensors", ".pth", ".pt"))
     ]
 
 

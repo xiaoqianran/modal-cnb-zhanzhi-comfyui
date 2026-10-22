@@ -13,7 +13,7 @@ from ..native_latent_checkpoint_advanced import _encode_metadata_value, _decode_
 from . import progressive as stages
 from .progressive_storage import _check_file
 from .results import canonical, sha
-from .storage import MAX_FILE, MAX_JSON, _digest, _lease, _path, _root, file_sha
+from .storage import _digest, _lease, _path, _root, file_sha
 
 SCHEMA = "t8.modular-sampling.progressive-completed-high.v1"
 STORAGE_SCHEMA = "t8.modular-sampling.frozen-progressive-high.v1"
@@ -75,7 +75,7 @@ def _payload(text):
                 raise ValueError("Duplicate Progressive HIGH metadata key")
             result[key] = value
         return result
-    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_JSON:
+    if not isinstance(text, str):
         raise ValueError("Progressive HIGH metadata exceeds its limit")
     result = json.loads(text, object_pairs_hook=unique)
     if (type(result) is not dict or set(result) != {"schema", "receipt_json", "output"}
@@ -102,8 +102,6 @@ def save_result(result, storage_root, prefix="progressive-high"):
     encoded = _encode_metadata_value(result.output, tensors, path="progressive.high")
     payload = canonical({"schema": STORAGE_SCHEMA, "receipt_json": result.receipt_json, "output": encoded})
     _decode(_payload(payload), tensors)
-    if sum(value.numel() * value.element_size() for value in tensors.values()) > MAX_FILE - MAX_JSON:
-        raise ValueError("Progressive HIGH tensors exceed their size limit")
     root = _root(storage_root, create=True)
     base = _path(root, prefix)
     directory = base.with_name(base.name + "-" + uuid.uuid4().hex)

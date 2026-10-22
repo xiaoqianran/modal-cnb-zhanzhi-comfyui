@@ -709,7 +709,7 @@ def _assert_core_contract(
     if not isinstance(base, MiniMaxH3BaseModel):
         diffusion_name = type(getattr(base, "diffusion_model", None)).__name__
         if diffusion_name != "MiniMaxH3Model":
-            raise ValueError("Prompt Relay currently requires a native MiniMax H3 MODEL")
+            warn_patch_stack("Prompt Relay received another MODEL class; attempting its conditioning API")
 
     class_extra_conds = getattr(type(base), "extra_conds", None)
     if class_extra_conds is None:

@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.4.23
+
+- Expands automatic duration alignment to Video 1-3 and Audio 1-3, using each selected source's trimmed duration.
+- Changes the Output node's audio output to emit the selected alignment source's audio: the video soundtrack when aligning to a video, or the trimmed audio when aligning to an audio reference. Off keeps the previous Audio 1 behaviour.
+- Keeps legacy `audio`/`video`, Boolean and localized alignment values working in saved workflows.
+
+## v1.4.22
+
+- Distinguishes identically named custom rules from built-in rules so selecting RefMod keeps the intended rule binding.
+
+- Adds the saved RefMod filmmaking prompt rule, unchanged, as the read-only built-in `refmod` template (`RefMod`). Main and Setup can select it without creating a custom rule; existing custom rules remain intact.
+- Restores prompt-optimization rule names after ComfyUI's R / Refresh Node Definitions command. Custom rules such as RefMod stay selectable by name in the main node and Setup, preserving the selected rule's ID and reloading rules saved in another page.
+
+## v1.4.21
+
+- Adds optional upstream `H3_REF_MODS` inputs to the main node and Setup, with joint text/vision presentation, direct reference latents, strengths/copies, independent gallery slots and an appended `Output.reference_map` output. RefMods survive high-resolution/trigger-word condition rebuilds in both sampling passes; image mode asks users to switch to reference mode.
+- Adds original RefMod Loader/Axis references to the main node and Setup's `@` menu, with metadata-only discovery, saved source binding, and strengths/copies/component filtering. RefMods lead each modality's numbering; ordinary uploads follow them. Removing ordinary media no longer invalidates RefMod mentions. Replace old placeholder-video mentions via the new menu; genuinely removed references still fail clearly. Both sampling passes and prompt optimization use the same ordering.
+- Saves continuation tails for independent manual segments when production-pack batching is off, including the first segment in Auto mode and hard cuts. Tail saving is independent of applying a previous-segment guide, in both manual and package runs.
+- Preserves zero overlap for independent segments and prefers the saved native tail when a later segment selects the previous video. Existing V7 wiring remains valid.
+- Adds local-model dependency checks and an install/repair button to Standard settings, including native GGUF import, GPU offload and Qwen/MTMD interface checks.
+- Adds a Manager install.py hook and Windows manual-ZIP install scripts that use ComfyUI's Python, choose matching GGUF binary wheels and retain existing Torch/NumPy versions.
+- Checks dependencies before unloading H3 models for local prompt optimization, and reports missing dependencies at startup without automatically installing during node import.
+- Supports the generic MTMD interface used by current official CPU wheels, and respects CPU mode for the vision projector. RH is unchanged.
+
 ## v1.4.20
 
 - Brings the Standard GitHub package into parity with the local installation, including the previously local-only `FeiHouEasyH3ContinueOut` continuation/merge node and its registration.

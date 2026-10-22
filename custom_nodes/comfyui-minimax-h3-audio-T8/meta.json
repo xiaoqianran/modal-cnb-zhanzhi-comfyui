@@ -1,4 +1,11 @@
 {
+  "ordinary_prompt_examples": {
+    "node": "MiniMaxH3PlainPromptRecipeEXPT8",
+    "preserved_registered_prefix": 737,
+    "segmented_events": false,
+    "installs_attention_routing": false,
+    "original_examples_preserved": true
+  },
   "h14_token_scope_local": {
     "status": "human_reviewed_explicit_two_AV_and_saved_source_examples",
     "published": true,
@@ -271,6 +278,25 @@
     "old_workflows_and_defaults_retained": true
   },
   "vm01_visual_marker_exp": {
+    "editor_authoring_update_20261019": {
+      "status": "independent_browser_and_cpu_verified",
+      "published": true,
+      "live_drag_outline": true,
+      "add_actor_target_and_unique_ID": true,
+      "rename_updates_relations": true,
+      "direct_description_color_and_action_editing": true,
+      "select_move_resize_and_explicit_redraw": true,
+      "draft_undo_redo_and_unsaved_close_guard": true,
+      "connected_widget_ownership_checked_at_apply": true,
+      "explicit_mode_and_pixel_matched_prepare_preview": true,
+      "own_graph_reroute_source_and_portable_sha256": true,
+      "frontend_tests_passed": 42,
+      "related_cpu_tests_passed": 63,
+      "public_checkout_cpu_tests_passed": 52,
+      "new_full_ComfyUI_execution": false,
+      "node_schema_and_existing_workflows_changed": false,
+      "new_GPU_sampling_runs": 0
+    },
     "status": "implemented_three_native_cases_human_accepted",
     "source_repository": "RK-BoilingPoint/H3-Visual-Marker-Control",
     "source_commit": "0f0274f5f07c0e8dda0bb8cd0286256587f4e959",

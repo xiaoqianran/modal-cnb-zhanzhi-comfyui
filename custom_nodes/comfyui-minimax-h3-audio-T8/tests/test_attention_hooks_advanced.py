@@ -193,10 +193,10 @@ def test_builder_refuses_to_overwrite_existing_attention_object_patch(monkeypatc
         },
     )
     model = _Patcher()
-    model.object_patches["diffusion_model.blocks.0.attn.forward"] = object()
-
-    with pytest.raises(RuntimeError, match="will not replace"):
-        hooks.build_attention_hook_compatibility(model)
+    prior = lambda *args, **kwargs: args
+    model.object_patches["diffusion_model.blocks.0.attn.forward"] = prior
+    selected, _ = hooks.build_attention_hook_compatibility(model)
+    assert selected.object_patches["diffusion_model.blocks.0.attn.forward"] is prior
 
 
 def test_schema_and_append_only_registration():

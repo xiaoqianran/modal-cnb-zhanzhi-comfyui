@@ -237,7 +237,8 @@ def _compile_rewritten_forward(callable_object):
 def build_forward_sync_optimization(model):
     diffusion = model.get_model_object("diffusion_model")
     if diffusion.__class__.__name__ != "MiniMaxH3Model":
-        raise TypeError("MiniMax H3 Forward Sync Optimization requires MiniMaxH3Model.")
+        from .patch_stack_policy import warn_patch_stack
+        warn_patch_stack("Forward Sync received another MODEL class; probing the selected forward API")
 
     existing_patches = getattr(model, "object_patches", {})
     existing = existing_patches.get(FORWARD_PATCH_PATH)

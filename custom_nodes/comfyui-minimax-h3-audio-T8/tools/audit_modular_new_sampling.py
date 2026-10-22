@@ -220,6 +220,26 @@ def _workflow_graph(root, relative):
     return by_id, edges
 
 
+def reviewed_model_choice_sites(root, sites):
+    """One reviewed Director policy delta; keep historical baselines immutable.
+
+    No sampling calls/routes were added. Manual LoRAs retain their order and
+    newly opened combinations keep eight steps. Every other AST remains pinned.
+    """
+    path = Path(root) / "tests/fixtures/model_choice_review_20261019.json"
+    if not path.is_file():
+        return sites
+    review = json.loads(path.read_text(encoding="utf8"))
+    old, new = review["previous_site"], review["reviewed_site"]
+    expected = ("h3_t8/director_generation.py", "build_director_generation_prompt", "<director_graph_builder>")
+    if (review.get("schema") != "t8.model-choice.director-review.v1"
+            or _key(old)[:3] != expected or _key(new)[:3] != expected
+            or not all(re.fullmatch(r"[0-9a-f]{64}", row["call_sha256"]) for row in (old, new))
+            or old == new):
+        raise ValueError("Invalid bounded model-choice review")
+    return [dict(new) if _key(site) == _key(old) else site for site in sites]
+
+
 def _reaches(edges, source, target):
     pending, seen = [source], set()
     while pending:
@@ -332,6 +352,7 @@ def audit(root, baseline, admissions, routes, live_ids=None):
         raise ValueError("Invalid new-sampling admissions schema")
     current = discover(root)
     baseline_sites, layout_omissions = reviewed_layout_sites(root, baseline)
+    baseline_sites = reviewed_model_choice_sites(root, baseline_sites)
     old = Counter(_key(site) for site in baseline_sites)
     now = Counter(_key(site) for site in current)
     new = now - old

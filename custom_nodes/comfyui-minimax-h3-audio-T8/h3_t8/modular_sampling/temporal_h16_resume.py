@@ -19,7 +19,7 @@ from ..temporal_dialogue_bank import validate_window_bank
 from .chunked_source import ChunkedSourceSegment, slice_chunked_source
 from .chunked_stages import ChunkedPass2Context, _check_segment, lift_chunked_segment
 from .results import _input_identity, canonical
-from .storage import MAX_FILE, MAX_JSON, _root, _path, _lease, _digest, _json_file, file_sha
+from .storage import _root, _path, _lease, _digest, _json_file, file_sha
 from .temporal_resume import _bank, _bank_state, _typed
 from . import temporal_h16_storage as storage
 from .temporal_h16 import ScopedH16Result
@@ -128,8 +128,6 @@ def save_h16_resume(bundle, result, storage_root):
     if _input_identity(_values(*restored)) != _input_identity(raw):
         raise ValueError('H16 literal CPU copy differs')
     payload = canonical(descriptor)
-    if len(payload.encode('utf8')) > MAX_JSON-4096 or sum(t.numel()*t.element_size() for t in tensors.values()) > MAX_FILE-MAX_JSON:
-        raise ValueError('H16 literal bundle exceeds size limits')
     root = _root(storage_root,create=True)
     directory = root/('h16-resume-'+uuid.uuid4().hex)
     directory.mkdir()
@@ -138,7 +136,7 @@ def save_h16_resume(bundle, result, storage_root):
         save_file(tensors,str(pending),metadata={'h16_resume':payload})
         with pending.open('rb+') as stream:
             header = struct.unpack('<Q',stream.read(8))[0]
-            if not 0 < header <= MAX_JSON:
+            if not 0 < header <= os.fstat(stream.fileno()).st_size - 8:
                 raise ValueError('H16 literal header exceeds limit')
             os.fsync(stream.fileno())
         os.replace(pending,state)
@@ -147,8 +145,6 @@ def save_h16_resume(bundle, result, storage_root):
             values_identity=_input_identity(raw),index=result.index,implementation=_implementation(),
             automatic_cache_reuse=False,provider_equivalence_certified=False,quality_accepted=False)
         data = canonical(manifest).encode('utf8')
-        if len(data) > MAX_JSON:
-            raise ValueError('H16 literal manifest exceeds limit')
         pending,path = directory/'manifest.json.partial',directory/'manifest.json'
         with pending.open('xb') as stream:
             stream.write(data)
@@ -177,12 +173,12 @@ def load_h16_resume(storage_root,path,digest,expected_index):
                 or any(manifest[k] is not False for k in ('automatic_cache_reuse','provider_equivalence_certified','quality_accepted'))):
             raise ValueError('H16 literal implementation/expected window differs')
         state = _path(root,(path.parent/'state.safetensors').relative_to(root).as_posix())
-        if (type(manifest['state_bytes']) is not int or not 8 < manifest['state_bytes'] <= MAX_FILE
+        if (type(manifest['state_bytes']) is not int or not 8 < manifest['state_bytes']
                 or state.stat().st_size != manifest['state_bytes'] or file_sha(state) != _digest(manifest['state_sha256'])):
             raise ValueError('H16 literal state size/SHA mismatch')
         with state.open('rb') as stream:
             header = struct.unpack('<Q',stream.read(8))[0]
-        if not 0 < header <= MAX_JSON or header > state.stat().st_size-8:
+        if not 0 < header or header > state.stat().st_size-8:
             raise ValueError('H16 literal header exceeds limit')
         with safe_open(str(state),framework='pt',device='cpu') as handle:
             metadata = handle.metadata()

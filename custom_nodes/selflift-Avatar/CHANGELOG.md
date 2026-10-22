@@ -1,5 +1,20 @@
 # Changelog
 
+## Main branch — 2026-10-20 (not yet packaged)
+
+- Add `highres_tiling_mode` with `spatial`, `global_stream`, `global`, and `global_ram`.
+- Add `highres_token_chunk` for global projection/MLP batching and `highres_weight_cache_gb` for the `global_stream` DynamicVRAM budget.
+- Keep `spatial` as the backward-compatible default; existing workflows are unchanged.
+- Add full-sequence H3 block chunking adapted from Fish4AI/comfyui-SelfLift-Fish: Q/K/V projections and MLP are batched, while K/V context and layout remain complete.
+- Chunk video/audio input projections and final-head rows without changing attention math.
+- Preserve arbitrary video/audio masks in global modes; `spatial` keeps its existing video-all-1/audio-all-0 restriction.
+- If TST or another attention override is active, automatically fall back to full-sequence dense attention with chunked MLP instead of raising.
+- Remove only the ComfyUI dense attention backend selector for the fallback path; TST/Motion Context overrides are preserved.
+- Fix compatibility with ComfyUI H3 versions that do not expose `MiniMaxH3Model._embed_and_pack`.
+- Add `example_workflows/H3+selflift-avatar-fixed.json`, a working `global_stream` example with the new controls and sanitized local paths.
+- 75 CPU tests pass, including the existing workspace-regression tests; both stub-frontend suites pass. Real H3 GPU quality/VRAM verification remains required.
+- Special thanks to [Fish4AI](https://github.com/Fish4AI) and the [comfyui-SelfLift-Fish](https://github.com/Fish4AI/comfyui-SelfLift-Fish) project for the global-context implementation this work builds on.
+
 ## Main branch — 2026-10-09 (not yet packaged)
 
 - Fix high-resolution tiling workspace estimation crashing on `None` entries or expired wrapped model references in ComfyUI's loaded-model list.

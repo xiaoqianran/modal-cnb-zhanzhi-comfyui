@@ -3,7 +3,9 @@ import re
 import uuid
 
 import folder_paths
-from comfy_api.latest import VideoCodec, VideoContainer, VideoFromFile
+import torch
+import torch.nn.functional as F
+from comfy_api.latest import VideoCodec, VideoContainer, VideoFromComponents, VideoFromFile, VideoComponents
 from nodes import PreviewImage
 
 
@@ -52,36 +54,75 @@ def _preview_video(video, node_id, side):
     return {"filename": filename, "subfolder": "", "type": "temp"}
 
 
+def _combine_images(first, second, direction, split_position, opacity=1.0):
+    if direction in ("左右平铺", "左右图平铺", "双屏"):
+        height = first.shape[1]
+        width = max(1, round(second.shape[2] * height / second.shape[1]))
+        axis = 2
+    elif direction == "上下平铺":
+        width = first.shape[2]
+        height = max(1, round(second.shape[1] * width / second.shape[2]))
+        axis = 1
+    else:
+        height, width = first.shape[1:3]
+        axis = None
+    if second.shape[1:3] != (height, width):
+        second = F.interpolate(second.movedim(-1, 1), size=(height, width), mode="bilinear", align_corners=False).movedim(1, -1)
+    if axis is not None:
+        return torch.cat((first, second), dim=axis)
+    combined = first.clone()
+    if direction == "上下":
+        boundary = round(height * split_position / 100)
+        combined[:, :boundary] = first[:, :boundary].lerp(second[:, :boundary], opacity)
+    else:
+        boundary = round(width * split_position / 100)
+        combined[:, :, :boundary] = first[:, :, :boundary].lerp(second[:, :, :boundary], opacity)
+    return combined
+
+
+def _combine_video(video_a, video_b, direction, split_position):
+    if video_a is None or video_b is None:
+        return video_a if video_a is not None else video_b
+    first = video_a.get_components()
+    second = video_b.get_components()
+    frame_count = first.images.shape[0]
+    indices = (torch.arange(frame_count) * float(second.frame_rate / first.frame_rate)).long().clamp(max=second.images.shape[0] - 1)
+    frames = _combine_images(first.images, second.images[indices], direction, split_position)
+    return VideoFromComponents(VideoComponents(images=frames, audio=first.audio, frame_rate=first.frame_rate), bit_depth=video_a.get_bit_depth())
+
+
 class View_video_compare:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "video_a": ("VIDEO",),
-                "video_b": ("VIDEO",),
-                "direction": (["左右", "上下", "双屏"],),
+                "direction": (["左右", "上下", "左右平铺", "上下平铺"],),
+                "split_position": ("FLOAT", {"default": 50.0, "min": 0.0, "max": 100.0, "step": 1.0}),
             },
+            "optional": {"video_a": ("VIDEO",), "video_b": ("VIDEO",)},
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
 
-    RETURN_TYPES = ()
+    RETURN_TYPES = ("VIDEO",)
+    RETURN_NAMES = ("combine_video",)
     FUNCTION = "compare"
     CATEGORY = "Apt_Preset/PreView"
     OUTPUT_NODE = True
 
-    def compare(self, video_a, video_b, direction, unique_id):
+    def compare(self, direction, unique_id, split_position=50.0, video_a=None, video_b=None):
         node_id = re.sub(r"[^A-Za-z0-9_-]", "_", str(unique_id))
         return {
             "ui": {
                 "video_compare": [{
-                    "video_a": _preview_video(video_a, node_id, "a"),
-                    "video_b": _preview_video(video_b, node_id, "b"),
+                    "video_a": _preview_video(video_a, node_id, "a") if video_a is not None else None,
+                    "video_b": _preview_video(video_b, node_id, "b") if video_b is not None else None,
                     "direction": direction,
-                    "split_position": 50.0,
+                    "split_position": split_position,
                     "autoplay": True,
                     "loop": True,
                 }]
-            }
+            },
+            "result": (_combine_video(video_a, video_b, direction, split_position),),
         }
 
 
@@ -90,7 +131,7 @@ class View_image_compare:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "direction": (["左右", "上下", "左右图平铺"],),
+                "direction": (["左右", "上下", "左右平铺", "上下平铺"],),
                 "split_position": ("FLOAT", {"default": 50.0, "min": 0.0, "max": 100.0, "step": 1.0}),
                 "opacity": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
             },
@@ -100,7 +141,8 @@ class View_image_compare:
             },
         }
 
-    RETURN_TYPES = ()
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("combine_image",)
     FUNCTION = "compare"
     CATEGORY = "Apt_Preset/PreView"
     OUTPUT_NODE = True
@@ -109,6 +151,11 @@ class View_image_compare:
         preview = PreviewImage()
         image_a_info = preview.save_images(image_a[:1])["ui"]["images"][0] if image_a is not None else None
         image_b_info = preview.save_images(image_b[:1])["ui"]["images"][0] if image_b is not None else None
+        if image_a is not None and image_b is not None:
+            count = min(image_a.shape[0], image_b.shape[0])
+            combined = _combine_images(image_a[:count], image_b[:count], direction, split_position, opacity)
+        else:
+            combined = image_a if image_a is not None else image_b
         return {
             "ui": {
                 "image_compare": [{
@@ -118,5 +165,6 @@ class View_image_compare:
                     "split_position": split_position,
                     "opacity": opacity,
                 }]
-            }
+            },
+            "result": (combined,),
         }

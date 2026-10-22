@@ -247,7 +247,8 @@ def append_timed_reference(clip, reference):
         references = list(tokenizer.references)
         tokenizer = tokenizer.tokenizer
     if not isinstance(tokenizer, MiniMaxH3Tokenizer):
-        raise ValueError("timed references require a MiniMax H3 CLIP model")
+        from .patch_stack_policy import warn_patch_stack
+        warn_patch_stack("Timed references retain the selected CLIP tokenizer; its token API is unverified")
     if any(item["prompt_tag"] == reference["prompt_tag"] for item in references):
         raise ValueError("each chained timed reference requires a unique prompt_tag")
     references.append(reference)

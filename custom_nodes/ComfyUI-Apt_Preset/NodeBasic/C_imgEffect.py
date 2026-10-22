@@ -941,39 +941,6 @@ class img_effect_Liquify:
 #region------------------layout----------------------
 
 
-class lay_ImageGrid:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "batch_img": ("IMAGE",),
-                "rows": ("INT", {"default": 2, "min": 1, "max": 16, "step": 1}),
-                "cols": ("INT", {"default": 2, "min": 1, "max": 16, "step": 1}),
-            }
-        }
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
-    FUNCTION = "split_images"
-    CATEGORY = "Apt_Preset/imgEffect"
-    DESCRIPTION = "把每张输入图按 rows×cols 切成 batch；输入 N 张输出 N×rows×cols 张。边长除不尽时右侧/底部像素丢弃。"
-
-    def split_images(self, batch_img, rows, cols):
-        if batch_img.ndim == 3:
-            batch_img = batch_img.unsqueeze(0)
-        arr = batch_img.cpu().numpy()
-        batch_size, height, width, _ = arr.shape
-        cell_h = max(1, height // rows)
-        cell_w = max(1, width // cols)
-        cells = []
-        for i in range(batch_size):
-            for r in range(rows):
-                for c in range(cols):
-                    top = r * cell_h
-                    left = c * cell_w
-                    cells.append(arr[i, top:top + cell_h, left:left + cell_w, :])
-        return (torch.from_numpy(np.stack(cells, axis=0).astype(np.float32)),)
-
-
 def auto_crop_image(image, threshold=30, tolerance=0.95):
     img = image.convert("RGB")
     img_array = np.array(img)
@@ -1121,7 +1088,7 @@ class lay_edge_cut:
         return (preview_img, split_images)
 
 
-class lay_images_free_layout:
+class lay_images_free_layout:   # 废除
     @classmethod
     def INPUT_TYPES(s):
         templates = ["custom",
@@ -1446,7 +1413,7 @@ class Image_Panorama:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
     FUNCTION = "render"
-    CATEGORY = "Apt_Preset/imgEffect"
+    CATEGORY = "Apt_Preset/imgEffect/Panorama"
 
     @staticmethod
     def _parse_output_preset(value, max_val=4096):
@@ -1653,7 +1620,7 @@ class Image_Panorama_Seam:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image", "mask")
     FUNCTION = "prepare"
-    CATEGORY = "Apt_Preset/imgEffect"
+    CATEGORY = "Apt_Preset/imgEffect/Panorama"
 
     def prepare(self, image, seam_width_px=64, seam_center_offset_px=0):
         if image is None or not hasattr(image, "shape"):

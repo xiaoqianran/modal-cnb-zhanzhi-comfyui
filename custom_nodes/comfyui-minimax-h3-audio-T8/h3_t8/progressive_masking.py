@@ -130,7 +130,7 @@ def sampler_with_clean_anchor(sampler, clean_source, conditioning_noise):
             raise RuntimeError('Expected the native inpaint wrapper')
         base = model_k.inner_model.inner_model
         if type(base) is not comfy.model_base.MiniMaxH3:
-            raise RuntimeError('Clean anchors require native H3 AV scaling')
+            warn_patch_stack('Clean anchors retain the selected MODEL; its AV scaling is unverified')
         if [tuple(s) for s in base.latent_shapes or []] != shapes:
             raise RuntimeError('Clean source does not match actual stage AV shapes')
         mask = extra_args.get('denoise_mask')

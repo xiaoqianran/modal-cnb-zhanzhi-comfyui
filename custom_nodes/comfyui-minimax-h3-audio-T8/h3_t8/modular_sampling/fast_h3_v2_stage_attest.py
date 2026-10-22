@@ -65,6 +65,42 @@ def _raw_model_from_stage(model, *, _omit_dormant_sampling=False):
     return stage_model_identity(raw_view, _omit_dormant_sampling=_omit_dormant_sampling)
 
 
+def _verify_prompt_route(global_checked, projected_checked, expected_global,
+                         attachment, relay, segment_index):
+    if not global_checked["events"] and not projected_checked["events"]:
+        # Ordinary prompts have no attention-routing owner to attest. Verify
+        # the actual absence of that owner and the same authenticated window;
+        # the caller still checks the complete sampler/condition receipts.
+        if global_checked["plan_hash"] != expected_global:
+            raise ValueError("Ordinary prompt differs from the current recipe")
+        if projected_checked.get("global_plan_hash") != expected_global:
+            raise ValueError("Ordinary prompt window belongs to another recipe")
+        projection = projected_checked.get("long_video_projection", {})
+        if projection.get("segment_index") != segment_index:
+            raise ValueError("Ordinary prompt window belongs to another segment")
+        if attachment is not None or relay is not None:
+            raise ValueError("Ordinary prompt receipt unexpectedly contains a Relay effect")
+        return
+    if type(attachment) is not dict:
+        raise ValueError("Current stage Relay owner projection is missing")
+    if type(relay) is not dict:
+        raise ValueError("Current stage Relay receipt binding is missing")
+    relay_checks = {
+        "global_plan": global_checked["plan_hash"] == expected_global,
+        "owner_global": attachment.get("global_plan_hash") == expected_global,
+        "projection_global": projected_checked.get("global_plan_hash") == expected_global,
+        "owner_projection": attachment.get("projected_plan_hash") == projected_checked["plan_hash"],
+        "segment": attachment.get("segment_index") == segment_index,
+        "sampling_binding": relay.get("binding", {}).get("plan_hash") == projected_checked["plan_hash"],
+    }
+    failures = [name for name, passed in relay_checks.items() if not passed]
+    if failures:
+        raise ValueError("Current stage Relay owner/plan differs: " + ", ".join(failures))
+    if ("long_video_projection" in relay
+            and relay["long_video_projection"] != content_identity(attachment)):
+        raise ValueError("Current stage Relay receipt projection changed")
+
+
 def attest_current_stage(current_recipe, stage_result, raw_model, stage_model,
                          guider, noise, sigmas, source_latent, stage_context,
                          global_plan, projected_plan, eav_config, segment_index,
@@ -134,24 +170,8 @@ def attest_current_stage(current_recipe, stage_result, raw_model, stage_model,
                                        else "high_global_plan_sha256"]
     attachment = stage_model.get_attachment(PROMPT_RELAY_LONG_VIDEO_ATTACHMENT_KEY)
     relay = effects.get("relay")
-    if type(attachment) is not dict:
-        raise ValueError("Current stage Relay owner projection is missing")
-    if type(relay) is not dict:
-        raise ValueError("Current stage Relay receipt binding is missing")
-    relay_checks = {
-        "global_plan": global_checked["plan_hash"] == expected_global,
-        "owner_global": attachment.get("global_plan_hash") == expected_global,
-        "projection_global": projected_checked.get("global_plan_hash") == expected_global,
-        "owner_projection": attachment.get("projected_plan_hash") == projected_checked["plan_hash"],
-        "segment": attachment.get("segment_index") == segment_index,
-        "sampling_binding": relay.get("binding", {}).get("plan_hash") == projected_checked["plan_hash"],
-    }
-    failures = [name for name, passed in relay_checks.items() if not passed]
-    if failures:
-        raise ValueError("Current stage Relay owner/plan differs: " + ", ".join(failures))
-    if ("long_video_projection" in relay
-            and relay["long_video_projection"] != content_identity(attachment)):
-        raise ValueError("Current stage Relay receipt projection changed")
+    _verify_prompt_route(global_checked, projected_checked, expected_global,
+                         attachment, relay, segment_index)
     raw_from_stage = _raw_model_from_stage(stage_model, _omit_dormant_sampling=True)
     raw_current = stage_model_identity(raw_model, _omit_dormant_sampling=True)
     if raw_from_stage != raw_current:

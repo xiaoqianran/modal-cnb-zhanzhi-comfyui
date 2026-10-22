@@ -1,5 +1,7 @@
 # Audio Refine：尾采独立 EAV / Prompt Relay（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../../PLAIN_PROMPTS.md#59-audio-refine-spliteffects)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录的长名图已换为短配方名，`resume_audio`及下面三种效果后缀保留；JSON原字节不变。旧名定位见[文件名对照表](../../filename-map.tsv)，不要按旧长名生成别名副本。
 
 这里的26张新图不替换父目录的20张冻结／恢复图，也不修改 `18-audio-refine` 的十张旧图。

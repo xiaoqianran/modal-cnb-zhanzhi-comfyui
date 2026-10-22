@@ -24,7 +24,7 @@ from .speed_stages import (
     FrozenSpeedSpec, FrozenSpeedStageResult, SpeedStageResult,
     _implementation_identity, _plan_sha, _text_template,
 )
-from .storage import MAX_FILE, MAX_JSON, _digest, _lease, _path, _root, file_sha
+from .storage import _digest, _lease, _path, _root, file_sha
 
 SCHEMA = "t8.modular-sampling.frozen-speed-stage.v1"
 FILENAME = "speed-stage.safetensors"
@@ -44,17 +44,17 @@ def _unique_json(text):
             value[key] = item
         return value
 
-    if type(text) is not str or len(text.encode("utf-8")) > MAX_JSON:
+    if type(text) is not str:
         raise ValueError("SPEED artifact metadata exceeds its limit")
     return json.loads(text, object_pairs_hook=unique)
 
 
 def _check_state(path):
-    if not path.is_file() or not 8 < path.stat().st_size <= MAX_FILE:
+    if not path.is_file() or not 8 < path.stat().st_size:
         raise ValueError("Missing or oversized completed SPEED tensor file")
     with path.open("rb") as handle:
         header = struct.unpack("<Q", handle.read(8))[0]
-    if not 0 < header <= MAX_JSON or header > path.stat().st_size - 8:
+    if not 0 < header or header > path.stat().st_size - 8:
         raise ValueError("SPEED tensor header exceeds its limit")
 
 
@@ -75,8 +75,6 @@ def save_speed_stage(result, *, output_root=None):
             {"output": result.external_output, "template": _text_template(result.spec.stage)},
             tensors, path="speed.stage",
         )
-        if sum(value.numel() * value.element_size() for value in tensors.values()) > MAX_FILE - MAX_JSON:
-            raise ValueError("SPEED stage tensors exceed the size limit")
         snapshot = _decode_metadata_value(descriptor, tensors, set(), path="speed.stage")
         if (_input_identity(snapshot["output"]) != receipt["output"]
                 or _input_identity(snapshot["template"]) != receipt["request"]["text_template"]):
@@ -84,8 +82,6 @@ def save_speed_stage(result, *, output_root=None):
         payload = canonical({"schema": SCHEMA, "receipt_json": result.receipt_json,
                              "state": descriptor})
         _unique_json(payload)
-        if len(payload.encode("utf-8")) > MAX_JSON:
-            raise ValueError("SPEED stage metadata exceeds its limit")
         partial, state = directory / (FILENAME + ".partial"), directory / FILENAME
         save_file(tensors, str(partial), metadata={"speed_json": payload})
         _check_state(partial)
@@ -126,7 +122,7 @@ def load_speed_stage(plan, seed, shift_audio, next_stage_index, artifact_path, a
         raise ValueError("Select a completed SPEED manifest.json")
     expected_sha = _digest(artifact_sha256)
     with _lease(manifest_path.parent):
-        if (not manifest_path.is_file() or not 0 < manifest_path.stat().st_size <= MAX_JSON
+        if (not manifest_path.is_file() or not 0 < manifest_path.stat().st_size
                 or file_sha(manifest_path) != expected_sha):
             raise ValueError("SPEED manifest SHA mismatch or missing completion")
         manifest = _unique_json(manifest_path.read_text(encoding="utf-8"))

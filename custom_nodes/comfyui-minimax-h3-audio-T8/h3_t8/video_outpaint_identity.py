@@ -85,7 +85,7 @@ def _audited_native_stock_model_identity(model, *, interrupt_check=None):
 
     base = getattr(model, "model", None)
     if not isinstance(base, MiniMaxH3):
-        raise ValueError("outpaint stock execution requires a native MiniMax H3 MODEL")
+        raise UnverifiedModelStack("Selected MODEL class has no portable outpaint identity adapter")
     from .video_outpaint_regional import REGIONAL_WRAPPER_KEY, regional_model_contract
     regional = regional_model_contract(model)
     if regional is not None and regional.get("portable_cache_reuse") is False:

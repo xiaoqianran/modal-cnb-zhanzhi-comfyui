@@ -24,7 +24,8 @@ function hideImageCompareWidgets(node) {
 }
 
 function removeVideoCompareWidgets(node) {
-    const obsolete = new Set(["split_position", "autoplay", "loop"]);
+    hideWidget(node, "split_position");
+    const obsolete = new Set(["autoplay", "loop"]);
     for (let index = (node.widgets?.length || 0) - 1; index >= 0; index -= 1) {
         if (obsolete.has(node.widgets[index]?.name)) node.widgets.splice(index, 1);
     }
@@ -115,17 +116,28 @@ function createCompareUI(node) {
 
     let split = 50;
     let direction = "左右";
+    let comparing = false;
     let dragPointerId = null;
     let syncing = false;
 
     const applySplit = () => {
+        if (!comparing) {
+            videoA.style.inset = "0";
+            videoA.style.width = "100%";
+            videoA.style.height = "100%";
+            videoA.style.clipPath = "none";
+            divider.style.display = "none";
+            return;
+        }
         const value = Math.max(0, Math.min(100, Number(split) || 0));
-        if (direction === "双屏") {
+        if (direction === "左右平铺" || direction === "双屏") {
             videoA.style.inset = "0 50% 0 0";
             videoA.style.width = "50%";
+            videoA.style.height = "100%";
             videoA.style.clipPath = "none";
             videoB.style.inset = "0 0 0 50%";
             videoB.style.width = "50%";
+            videoB.style.height = "100%";
             videoB.style.clipPath = "none";
             divider.style.display = "none";
             labelA.style.left = "8px";
@@ -135,11 +147,29 @@ function createCompareUI(node) {
             labelB.style.bottom = "8px";
             return;
         }
+        if (direction === "上下平铺") {
+            videoA.style.inset = "0 0 50% 0";
+            videoA.style.width = "100%";
+            videoA.style.height = "50%";
+            videoA.style.clipPath = "none";
+            videoB.style.inset = "50% 0 0 0";
+            videoB.style.width = "100%";
+            videoB.style.height = "50%";
+            videoB.style.clipPath = "none";
+            divider.style.display = "none";
+            labelA.style.bottom = "auto";
+            labelA.style.top = "8px";
+            labelB.style.top = "auto";
+            labelB.style.bottom = "8px";
+            return;
+        }
         videoA.style.inset = "0";
         videoA.style.width = "100%";
+        videoA.style.height = "100%";
         videoA.style.clipPath = "none";
         videoB.style.inset = "0";
         videoB.style.width = "100%";
+        videoB.style.height = "100%";
         divider.style.display = "block";
         if (direction === "上下") {
             videoB.style.clipPath = `inset(0 0 ${100 - value}% 0)`;
@@ -171,7 +201,7 @@ function createCompareUI(node) {
     };
 
     const setSplitFromPointer = (event) => {
-        if (direction === "双屏") return;
+        if (["左右平铺", "上下平铺", "双屏"].includes(direction)) return;
         const rect = stage.getBoundingClientRect();
         split = direction === "上下"
             ? ((event.clientY - rect.top) / rect.height) * 100
@@ -208,7 +238,7 @@ function createCompareUI(node) {
     };
 
     stage.addEventListener("pointerdown", (event) => {
-        if (direction === "双屏") return;
+        if (["左右平铺", "上下平铺", "双屏"].includes(direction)) return;
         if (event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) return;
         dragPointerId = event.pointerId;
         stopPointerEvent(event);
@@ -225,6 +255,7 @@ function createCompareUI(node) {
     window.addEventListener("blur", finishSplitDrag, true);
 
     const syncVideoB = (force = false) => {
+        if (!comparing) return;
         if (!Number.isFinite(videoA.currentTime)) return;
         if (force || Math.abs(videoB.currentTime - videoA.currentTime) > 0.08) {
             videoB.currentTime = Math.min(videoA.currentTime, videoB.duration || videoA.currentTime);
@@ -243,7 +274,7 @@ function createCompareUI(node) {
     const playBoth = async () => {
         syncVideoB(true);
         try {
-            await Promise.all([videoA.play(), videoB.play()]);
+            await Promise.all(comparing ? [videoA.play(), videoB.play()] : [videoA.play()]);
             playButton.textContent = "❚❚";
         } catch {
             pauseBoth();
@@ -296,14 +327,24 @@ function createCompareUI(node) {
         split = data.split_position ?? getWidget(node, "split_position")?.value ?? 50;
         videoA.loop = false;
         videoB.loop = false;
-        videoA.src = videoUrl(data.video_a);
-        videoB.src = videoUrl(data.video_b);
-        empty.style.display = "none";
+        const hasA = Boolean(data.video_a);
+        const hasB = Boolean(data.video_b);
+        comparing = hasA && hasB;
+        videoA.removeAttribute("src");
+        videoB.removeAttribute("src");
+        if (hasA) videoA.src = videoUrl(data.video_a);
+        else if (hasB) videoA.src = videoUrl(data.video_b);
+        if (hasA && hasB) videoB.src = videoUrl(data.video_b);
+        videoA.style.display = hasA || hasB ? "block" : "none";
+        videoB.style.display = hasA && hasB ? "block" : "none";
+        labelA.style.display = hasA || hasB ? "block" : "none";
+        labelB.style.display = hasA && hasB ? "block" : "none";
+        empty.style.display = hasA || hasB ? "none" : "flex";
         applySplit();
         updateTime();
         videoA.muted = true;
         muteButton.textContent = "🔇";
-        Promise.all([
+        if (hasA && hasB) Promise.all([
             new Promise((resolve) => videoA.addEventListener("canplay", resolve, { once: true })),
             new Promise((resolve) => videoB.addEventListener("canplay", resolve, { once: true })),
         ]).then(playBoth);
@@ -390,18 +431,21 @@ function createImageCompareUI(node) {
         if (!comparing) {
             imageA.style.inset = "0";
             imageA.style.width = "100%";
+            imageA.style.height = "100%";
             imageA.style.clipPath = "none";
             divider.style.display = "none";
             opacityRow.style.display = "none";
             return;
         }
         const value = Math.max(0, Math.min(100, Number(split) || 0));
-        if (direction === "左右图平铺") {
+        if (direction === "左右平铺" || direction === "左右图平铺") {
             imageA.style.inset = "0 50% 0 0";
             imageA.style.width = "50%";
+            imageA.style.height = "100%";
             imageA.style.clipPath = "none";
             imageB.style.inset = "0 0 0 50%";
             imageB.style.width = "50%";
+            imageB.style.height = "100%";
             imageB.style.clipPath = "none";
             imageB.style.opacity = "1";
             divider.style.display = "none";
@@ -413,11 +457,29 @@ function createImageCompareUI(node) {
             opacityRow.style.display = "none";
             return;
         }
+        if (direction === "上下平铺") {
+            imageA.style.inset = "0 0 50% 0";
+            imageA.style.width = "100%";
+            imageA.style.height = "50%";
+            imageA.style.clipPath = "none";
+            imageB.style.inset = "50% 0 0 0";
+            imageB.style.width = "100%";
+            imageB.style.height = "50%";
+            imageB.style.clipPath = "none";
+            imageB.style.opacity = "1";
+            divider.style.display = "none";
+            labelB.style.top = "auto";
+            labelB.style.bottom = "8px";
+            opacityRow.style.display = "none";
+            return;
+        }
         imageA.style.inset = "0";
         imageA.style.width = "100%";
+        imageA.style.height = "100%";
         imageA.style.clipPath = "none";
         imageB.style.inset = "0";
         imageB.style.width = "100%";
+        imageB.style.height = "100%";
         divider.style.display = "block";
         opacityRow.style.display = "grid";
         if (direction === "上下") {
@@ -449,7 +511,7 @@ function createImageCompareUI(node) {
 
     const applyOpacity = (value) => {
         const opacity = Math.max(0, Math.min(1, Number(value) || 0));
-        imageB.style.opacity = direction === "左右图平铺" ? "1" : String(opacity);
+        imageB.style.opacity = ["左右平铺", "上下平铺", "左右图平铺"].includes(direction) ? "1" : String(opacity);
         opacitySlider.value = String(opacity);
         opacityValue.textContent = `${Math.round(opacity * 100)}%`;
     };
@@ -467,7 +529,7 @@ function createImageCompareUI(node) {
         node.setDirtyCanvas?.(true, true);
     };
     stage.addEventListener("pointerdown", (event) => {
-        if (!comparing || direction === "左右图平铺" || event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) return;
+        if (!comparing || ["左右平铺", "上下平铺", "左右图平铺"].includes(direction) || event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) return;
         splitPointerId = event.pointerId;
         event.preventDefault();
         event.stopPropagation();

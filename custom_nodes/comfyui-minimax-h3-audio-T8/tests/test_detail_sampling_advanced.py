@@ -362,16 +362,12 @@ def test_h3_stg_zero_scale_is_identity_and_patch_conflicts_fail_closed():
             rescale=0.0,
         )
 
-    with pytest.raises(ValueError, match="requires a native ComfyUI MiniMax H3"):
-        apply_h3_spatiotemporal_guidance(
-            _FakePatchModel(diffusion_model=object()),
-            scale=0.6,
-            double_blocks="25",
-            start_progress=0.25,
-            end_progress=0.85,
-            shift_video=12.0,
-            rescale=0.0,
-        )
+    selected = _FakePatchModel(diffusion_model=object())
+    patched, _ = apply_h3_spatiotemporal_guidance(
+        selected, scale=0.6, double_blocks="25", start_progress=0.25,
+        end_progress=0.85, shift_video=12.0, rescale=0.0,
+    )
+    assert patched.model.diffusion_model is selected.model.diffusion_model
 
 
 def test_h3_stg_rechecks_runtime_replacement_conflicts():

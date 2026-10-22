@@ -384,8 +384,8 @@ class text_mul_Join:
         return {
             "required": {
                 "join_rule": (
-                    ["None", "Custom", "Line", "Space", "Comma", "Period", "Semicolon", "Tab", "Pipe"],
-                    {"default": "Comma"}
+                    ["Custom", "Line", "Space", "Comma", "Period", "Semicolon", "Tab", "Pipe"],
+                    {"default": "Custom"}
                 ),
                 "custom_pattern": ("STRING", {
                     "multiline": True,
@@ -401,7 +401,6 @@ class text_mul_Join:
     CATEGORY = "Apt_Preset/prompt"
     DESCRIPTION = """
     文本合并预设说明
-    None：直接拼接所有文本（无分隔符）。
     Line：按行分隔（\\n）。
     Space：按空格分隔。
     Comma：按逗号分隔（支持中英文逗号）。
@@ -419,7 +418,6 @@ class text_mul_Join:
 
     def _get_separator_template(self, join_rule: str) -> str:
         rule_template_map = {
-            "None": "",
             "Line": "\n",
             "Space": " ",
             "Comma": "{sep}",

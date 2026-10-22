@@ -123,7 +123,7 @@ def test_corrupted_payload_with_fresh_file_sha_still_rejected(saved, tmp_path, k
     if kind == "truncated":
         target.write_bytes(b"bad")
     elif kind == "header":
-        target.write_bytes(struct.pack("<Q", results.MAX_JSON + 1) + b"a" * 32)
+        target.write_bytes(struct.pack("<Q", 33) + b"a" * 32)
     else:
         if kind == "unused":
             tensors["not_referenced"] = torch.zeros(2)

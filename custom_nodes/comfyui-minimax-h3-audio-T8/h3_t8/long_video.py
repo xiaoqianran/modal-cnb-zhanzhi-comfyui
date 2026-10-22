@@ -1090,7 +1090,7 @@ def patch_long_video_model(model):
     if type(base_model).__name__ != "MiniMaxH3":
         diffusion_name = type(getattr(base_model, "diffusion_model", None)).__name__
         if diffusion_name != "MiniMaxH3Model":
-            raise ValueError("MiniMax H3 Long Video Conditioning requires a MiniMax H3 MODEL")
+            warn_patch_stack("Long Video Conditioning received another MODEL class; retaining its extra_conds")
 
     def _patched_extra_conds(_self, **kwargs):
         out = original(**kwargs)

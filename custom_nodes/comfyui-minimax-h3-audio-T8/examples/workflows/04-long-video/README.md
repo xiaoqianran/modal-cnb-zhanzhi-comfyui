@@ -1,5 +1,7 @@
 # 长视频与断点续跑
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#04-long-video)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 旧 Stock20 对话时间线示例改用短名：[完整图](H3_Dialogue_Relay_EAV_Stock20_EXP.json)／[手动二采图](H3_Dialogue_Relay_EAV_Stock20_Pass2_EXP.json)。只改文件名、原JSON字节保持，不改变原各自验收范围；完整对照见[文件名映射](../filename-map.tsv)。
 
 ## HyperFlow 0.6 MP / 8 秒实验工作流（2026-09-22）

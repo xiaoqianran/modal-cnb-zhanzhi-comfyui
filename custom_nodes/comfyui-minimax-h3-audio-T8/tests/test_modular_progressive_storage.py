@@ -113,7 +113,7 @@ def test_malformed_artifact_never_becomes_a_completed_boundary(tmp_path, saved, 
     if kind == "truncated":
         path.write_bytes(b"bad")
     elif kind == "header":
-        path.write_bytes(struct.pack("<Q", storage.MAX_JSON + 1) + b"a" * 32)
+        path.write_bytes(struct.pack("<Q", 33) + b"a" * 32)
     else:
         tensors = dict(boundary.tensors)
         payload = {"schema": storage.SCHEMA, "receipt_json": boundary.receipt_json}
@@ -180,11 +180,11 @@ def test_query_missing_does_not_create_storage(tmp_path):
     assert not absent.exists()
 
 
-def test_metadata_bounds_checked_before_commit(tmp_path, monkeypatch):
-    monkeypatch.setattr(storage, "MAX_JSON", 16)
-    with pytest.raises(ValueError, match="size limit"):
-        storage.save_boundary(low_only(inputs()), tmp_path)
-    assert not list(tmp_path.rglob(storage.FILENAME))
+def test_metadata_type_still_checked_without_size_cap():
+    with pytest.raises(ValueError):
+        storage._payload(None)
+    payload = storage.canonical({"schema": storage.SCHEMA, "receipt_json": "x" * (4 * 1024 * 1024 + 1)})
+    assert storage._payload(payload)["receipt_json"].startswith("x")
 
 
 def test_tensor_archive_cannot_be_saved_as_wrong_public_type(tmp_path):

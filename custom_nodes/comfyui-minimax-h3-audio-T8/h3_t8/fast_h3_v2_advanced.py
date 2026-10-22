@@ -52,7 +52,7 @@ def _gates(model):
     from comfy.ldm.minimax.model import MiniMaxH3Model
     diffusion = model.get_model_object("diffusion_model")
     if not isinstance(diffusion, MiniMaxH3Model):
-        raise ValueError("FastH3 V2 requires native MiniMaxH3Model, not an OpenVDN architecture")
+        warn_patch_stack("FastH3 V2 received another MODEL class; checking actual learned-gate shapes")
     if not diffusion.blocks:
         raise ValueError("FastH3 V2 has no live H3 blocks")
     for i, block in enumerate(diffusion.blocks):

@@ -21,7 +21,7 @@ from comfy_extras.nodes_custom_sampler import Guider_Basic, SamplerCustomAdvance
 from .. import fast_h3_v2_advanced as v2
 from ..long_video_dual_identity import stage_model_identity, _original_state, _v2_sampling_identity
 from ..patch_stack_policy import (UnverifiedModelStack, model_identity_matches,
-                                  nonportable_model_identity, _execution_selection)
+                                  nonportable_model_identity, _execution_selection, warn_patch_stack)
 from ..progressive_continuation_runtime import _input_identity as _native_input_identity
 from .contracts import StageContext
 from .eav import validate_stage
@@ -326,9 +326,18 @@ def execution_identity(model, initial_sampling):
                 continue
             module = modules.get(module_path)
             current = None if module is None else vars(module).get("forward")
-            if (not isinstance(current, MethodType) or current.__self__ is not module
-                    or current.__func__ is not expected_method.__func__):
-                raise ValueError("Authenticated T8 memory forward changed during sampling")
+            native_forward = None if module is None else inspect.getattr_static(type(module), "forward")
+            native_pending = module is not None and (current is None or (
+                type(current) is MethodType and current.__self__ is module
+                and current.__func__ is native_forward))
+            installed = (isinstance(current, MethodType) and current.__self__ is module
+                         and current.__func__ is expected_method.__func__)
+            if not native_pending and not installed:
+                # A pre-existing user forward is not a sampling-time mutation.
+                # Preserve its exact snapshot; the before/after comparison below
+                # still detects real changes without certifying this selection.
+                identity.setdefault("unverified_memory_forwards", []).append(module_path)
+                continue
             # Only the authenticated forward is derived from load-time
             # installation. Live hooks remain execution inputs even here.
             pre_hooks, hooks = module._forward_pre_hooks, module._forward_hooks
@@ -407,6 +416,11 @@ def sample_stage(noise, guider, sampler, sigmas, latent_image, stage_context):
     initial_sampling = model.model.model_sampling
     execution_before = execution_identity(model, initial_sampling)
     portable = model_identity.get("portable_cache_reuse", True) and noise_operator["portable"]
+    if execution_before.get("unverified_memory_forwards"):
+        portable = False
+        observations["unverified_memory_forwards"] = execution_before["unverified_memory_forwards"]
+        warn_patch_stack("Stage retains user-selected memory forwards; composition is unverified, "
+                         "not rejected. Cross-run cache certification is disabled.")
     try:
         condition_identity = _conditions(guider.original_conds)
         bound_conditions = request_conditions(guider.original_conds)

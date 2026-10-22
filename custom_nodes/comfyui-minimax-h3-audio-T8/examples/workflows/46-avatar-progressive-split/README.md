@@ -1,5 +1,7 @@
 # S12 Avatar 原录音驱动分离式二采（EXP）
 
+普通提示词副本：[本目录原版→普通版对照](../PLAIN_PROMPTS.md#46-avatar-progressive-split)。本目录 `*_普通提示词.json` 按原功能、采样和阶段命名，与原图同目录。完整描述一次填写，各阶段可分别编辑；原图保留。
+
 本目录的 120 张可导入实验图有两组配方。80 张通用图覆盖 T2VA／I2VA × 10 种已实现效果配置（无效果，或 EAV／Prompt Relay／组合分别作用于 LOW、HIGH、两段）× 四种操作；文件名含 `LegacyAvatar512x768` 的另外 40 张，仅对应[旧 Avatar I2VA 图](../36-avatar-voice/README.md)明确使用的高画布 512×768、LOW 半尺寸、总8步 LOW4＋HIGH4、两阶段 EMA B 和旧 seed 20260918。旧配方图仍使用可编辑通用提示词／素材占位，**不宣称旧图成片逐帧相等**。两组都提供独立 LOW→原 learned3D→HIGH；旧一体图和节点保持原样。
 
 - `Full_NoSave`：运行两个独立阶段，不保存。
