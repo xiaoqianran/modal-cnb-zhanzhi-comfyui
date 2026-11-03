@@ -1,5 +1,9 @@
 // Persistent D1 services; UI drafts are separate from saved server revisions.
 import { radarCandidateInputState } from './radar_state.mjs';
+import {middleAssetIds,middleInputState,remapMiddleAsset,requiresMiddleProtocol,assertMiddleProtocol,validateMiddleDraft} from './keyframes_state.mjs';
+import {controlAssetIds,controlInputState,controlSamplingMode,remapControlAsset,requiresControlProtocol,assertControlProtocol,validateControlProject} from './control_state.mjs';
+import {sha256UTF8} from './content_hash.mjs';
+import {configurationEvidenceText} from './candidate_diagnostics.mjs';
 export function directorServiceBase(moduleURL) {
     const local = new URL('.', moduleURL);
     return /^\/(?:api\/)?minimax_h3_t8\/director\/$/.test(local.pathname)
@@ -73,6 +77,12 @@ export function directorShotInputKey(doc, shot, assets = []) {
     const mode = sampling?.mode || 'single';
     const activeSampling = Object.fromEntries(Object.entries(sampling || {mode:'single'}).filter(([key])=>!['single','two_pass','hyperflow'].includes(key)));
     if(mode==='hyperflow' && sampling.variant==='single8')delete activeSampling.high_loras;
+    if(mode==='hyperflow' && sampling.variant==='continuous4plus4separate' && sampling.stage_checkpoint?.mode==='resume_tail'){
+        delete activeSampling.low_loras;
+        for(const key of ['stage_relay','stage_eav'])if(activeSampling[key]){
+            activeSampling[key]={...activeSampling[key]};delete activeSampling[key].head;
+        }
+    }
     const generation = {...doc.generation};
     if(mode!=='single')for(const key of ['resolution_mp','lora','loras','lora_mode','lora_strength'])delete generation[key];
     else if(sampling){
@@ -81,11 +91,17 @@ export function directorShotInputKey(doc, shot, assets = []) {
     }
     // Row IDs/source labels and disabled drafts are editing metadata, not sampling inputs.
     for(const holder of [activeSampling,generation])for(const key of ['loras','low_loras','high_loras']){
-        if(Array.isArray(holder[key]))holder[key]=holder[key].filter(row=>row.enabled!==false).map(row=>({name:row.name,strength:row.strength??1}));
+        if(Array.isArray(holder[key]))holder[key]=holder[key].filter(row=>row.enabled!==false).map(row=>{
+            const input={name:row.name,strength:row.strength??1};
+            for(const [field,legacy] of [['file_alpha_policy','legacy_tensor_only'],['prefix_policy','legacy']])
+                if(row[field]!==undefined&&row[field]!==legacy)input[field]=row[field];
+            return input;
+        });
     }
     if(activeSampling.lora_mode==='none')activeSampling.loras=[];
     if(generation.lora_mode==='none')generation.loras=[];
-    const ids = [...new Set([...(doc.sharedRefs || []),...(shot.tray || []),shot.first,shot.last,...(shot.refs || []),shot.audio].filter(Boolean))];
+    const controlMode=controlSamplingMode(doc,shot);
+    const ids = [...new Set([...(doc.sharedRefs || []),...(shot.tray || []),shot.first,shot.last,...(shot.refs || []),shot.audio,...middleAssetIds(shot,true),...controlAssetIds(shot,true,controlMode)].filter(Boolean))];
     const media = new Map(assets.map(item=>[item.id,item]));
     const value = {
         global:doc.global || '', sharedRefs:doc.sharedRefs || [], mode:shot.mode, sound:shot.sound,
@@ -102,6 +118,10 @@ export function directorShotInputKey(doc, shot, assets = []) {
         assets:ids.map(id=>{const a=media.get(id)||{};return {id,sha256:a.sha256,kind:a.kind,width:a.width,height:a.height,duration:a.duration,has_audio:a.has_audio};}),
     };
     const candidate = radarCandidateInputState(doc, shot, assets);
+    const middle = middleInputState(shot);
+    if (middle !== undefined) value.middleKeyframes = middle;
+    const controls=controlInputState(shot,controlMode);
+    if(controls!==undefined)value.controlRegions=controls;
     if (candidate !== undefined) value.radarCandidate = candidate;
     const sorted=v=>Array.isArray(v)?v.map(sorted):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(key=>[key,sorted(v[key])])):v;
     return JSON.stringify(sorted(value));
@@ -140,7 +160,7 @@ export function makeDirectorServices(ctx) {
     let projectEpoch = 0;
     let resultRequest = 0, compileRequest = 0, d3Request = 0, projectLoadRequest = 0, editEpoch = 0;
     let reconnectTarget = null, lastJobDialog = null;
-    let activeBatch = null, pauseBatch = false, versionRequest = 0, tasksRequest = 0, versionCopy = null;
+    let activeBatch = null, pauseBatch = false, versionRequest = 0, tasksRequest = 0, versionCopy = null, configurationRequest = 0;
     let externalTakeDialog = null;
     const completedResults = new Map();
     const contextToken = () => `${projectId}:${projectEpoch}`;
@@ -346,6 +366,8 @@ export function makeDirectorServices(ctx) {
     }
     function hydrate(p) {
         if (p.schema !== "t8.minimax_h3.director_project" || ![0, 1, 2].includes(p.version) || !Array.isArray(p.doc?.shots) || !p.doc.shots.length) throw Error("不是支持的导演台项目，保留原文件");
+        p.doc.shots.forEach(validateMiddleDraft);
+        validateControlProject(p);
         // Never use client-supplied URLs, filesystem paths or executable code.
         projectEpoch++;
         completedResults.clear();
@@ -480,6 +502,8 @@ export function makeDirectorServices(ctx) {
         const result = await request("compile", { project: p, shot_id: p.current });
         // Changing project, shot or draft invalidates this preview, not the new context.
         if (epoch !== projectEpoch || sequence !== compileRequest || snapshot !== JSON.stringify(envelope())) return result;
+        assertMiddleProtocol(p,result,[p.current]);
+        assertControlProtocol(p,result,[p.current]);
         const shot = result.shots?.find(s => s.id === p.current);
         if (!shot?.canvas) throw Error("预检响应缺少请求镜头的画布信息，请重试。");
         latest = result;
@@ -536,11 +560,25 @@ export function makeDirectorServices(ctx) {
                     return;
                 }
                 unknownPolls = 0;
-                if (state && data.state !== "success" && data.state !== "error") {
+                if (data.state === "needs_review") {
+                    finish("needs_review");
+                    activeJobId = null;
+                    forgetJob(promptId);
+                    const belongsHere = owner === projectId && ctx.doc().shots.some(shot => shot.id === shotId);
+                    if (belongsHere) ctx.recordResult({project_id:owner,shot_id:shotId,prompt_id:promptId,
+                        state:"needs_review",outputs:{},recipe,integrity_error:data.integrity_error,submitted_at:Date.now()/1000});
+                    const body=`<p>${esc(data.integrity_error || "原请求回执或输出需要核对。")}</p><p>已停止跟踪；没有自动重采样、覆盖已接受成片或修改草稿。</p><details><summary>任务详情</summary><pre>${esc(JSON.stringify({prompt_id:promptId,state:data.state,integrity_error:data.integrity_error},null,2))}</pre></details>`;
+                    lastJobDialog=[promptId,"任务回执需要核对",body];
+                    $("[data-service=\"job-status\"]").hidden=false;
+                    showJobDialog(...lastJobDialog);
+                    notify(belongsHere?"任务回执需要核对；原记录和编辑保留，没有自动重采样。":"原项目任务回执需要核对；当前项目未改动，没有自动重采样。");
+                    return;
+                }
+                if (state && !["success", "error", "cancelled"].includes(data.state)) {
                     const progress = data.progress?.fraction == null ? "" : ` · ${Math.round(data.progress.fraction * 100)}%`;
                     state.textContent = "Core 状态：" + directorTaskLabel(data.state) + progress + " · 任务 ID " + promptId;
                 }
-                if (data.state === "success" || data.state === "error") {
+                if (["success", "error", "cancelled"].includes(data.state)) {
                     finish(data.state);
                     activeJobId = null;
                     forgetJob(promptId);
@@ -548,9 +586,17 @@ export function makeDirectorServices(ctx) {
                     const belongsHere = owner === projectId && ctx.doc().shots.some(shot => shot.id === shotId);
                     if (belongsHere) {
                         const record = { project_id: owner, shot_id: shotId, prompt_id: promptId, state: data.state, outputs: data.outputs || {}, recipe, submitted_at: Date.now() / 1000 };
-                        if (videos.length) completedResults.set(shotId, record);
+                        if (data.state === "success" && videos.length) completedResults.set(shotId, record);
                         ctx.recordResult(record);
-                        loadResults(owner, false).catch(error => notify("成片已在当前页面，跨次打开的记录暂无法同步：" + error.message));
+                        loadResults(owner, false).catch(error => notify("任务记录已在当前页面，跨次打开的记录暂无法同步：" + error.message));
+                    }
+                    if (data.state === "cancelled") {
+                        const body=`<p>Core 已取消此任务；原记录与编辑保留，没有自动重采样。</p><details><summary>任务详情</summary><pre>${esc(JSON.stringify({prompt_id:promptId,state:data.state,status:data.status},null,2))}</pre></details>`;
+                        lastJobDialog=[promptId,"导演台任务已取消",body];
+                        $("[data-service=\"job-status\"]").hidden=false;
+                        showJobDialog(...lastJobDialog);
+                        notify(belongsHere?"任务已取消；原记录和编辑保留，没有自动重采样。":"原项目任务已取消；当前项目未改动，没有自动重采样。");
+                        return;
                     }
                     const failure = (data.status?.messages || []).filter(item => item[0] === "execution_error").at(-1)?.[1];
                     const reason = failure ? `<div class="o-warn"><strong>失败节点：${esc(failure.node_type || failure.node_id || "未知")}</strong><p>${esc(failure.exception_message || "请展开任务详情查看错误")}</p></div>` : "";
@@ -705,6 +751,88 @@ export function makeDirectorServices(ctx) {
         if(origin!==contextToken())return null;
         return {...job,target,download_url:new URL(path+'/file',base).href};
     }
+    const captionRequests=new Map();
+    function captionUrls(result,target) {
+        const path=`films/${encodeURIComponent(result.project_id)}/${encodeURIComponent(result.film_id)}/captions/${encodeURIComponent(result.id)}`;
+        return {...result,target,manifest_url:new URL(path,base).href,
+            srt_url:new URL(path+'/file/srt',base).href,vtt_url:new URL(path+'/file/vtt',base).href};
+    }
+    async function prepareFilmCaptions(film,payload) {
+        if(film.project_id!==projectId)throw Error('字幕属于之前的项目，请回到对应项目再保存');
+        const origin=contextToken(),key='t8director.filmCaption:'+projectId;
+        const input=structuredClone(payload);
+        let target=captionRequests.get(key);
+        if(!target)try{target=JSON.parse(storageRead('localStorage',key)||'null');}catch{target=null;}
+        if(!target||target.project_id!==projectId||target.film_id!==film.id||stableJSON(target.input)!==stableJSON(input)){
+            target={project_id:projectId,film_id:film.id,caption_id:id(),input};
+            captionRequests.set(key,target);
+            if(!storageWrite('localStorage',key,JSON.stringify(target)))notify('浏览器无法记住字幕任务，请下载字幕稿保留输入；任务 ID：'+target.caption_id);
+        }
+        const path=`films/${encodeURIComponent(target.project_id)}/${encodeURIComponent(target.film_id)}/captions/${encodeURIComponent(target.caption_id)}`;
+        const result=await request(path,input);
+        if(origin!==contextToken())return null;
+        return captionUrls(result,target);
+    }
+    async function filmCaptionStatus(target=null) {
+        if(!target){target=captionRequests.get('t8director.filmCaption:'+projectId);if(!target)try{target=JSON.parse(storageRead('localStorage','t8director.filmCaption:'+projectId)||'null');}catch{return null;}}
+        if(!target||target.project_id!==projectId)return null;
+        const origin=contextToken(),path=`films/${encodeURIComponent(target.project_id)}/${encodeURIComponent(target.film_id)}/captions/${encodeURIComponent(target.caption_id)}`;
+        const result=await request(path);
+        if(origin!==contextToken())return null;
+        return captionUrls(result,target);
+    }
+    async function importFilmSpeechTrack(film,shotId,report,confirmed) {
+        if(film.project_id!==projectId)throw Error('冻结整片不属于当前项目');
+        const origin=contextToken();
+        const result=await request(`films/${encodeURIComponent(projectId)}/${encodeURIComponent(film.id)}/captions/speech-track`,
+            {shot_id:shotId,report,confirm_media_match:confirmed});
+        return origin===contextToken()?result:null;
+    }
+    function maskPath(film,index,authorId){
+        if(film.project_id!==projectId)throw Error('遮罩属于之前的项目，请回到对应采用版本');
+        return `films/${encodeURIComponent(projectId)}/${encodeURIComponent(film.id)}/masks/${index}/${encodeURIComponent(authorId)}`;
+    }
+    const maskAuthor={
+        async load(film,index,authorId){const token=contextToken(),result=await request(maskPath(film,index,authorId));return token===contextToken()?result:null;},
+        async save(film,index,authorId,draft){const token=contextToken(),result=await request(maskPath(film,index,authorId),draft);return token===contextToken()?result:null;},
+        async frame(film,index,frame){if(film.project_id!==projectId)throw Error('项目已切换');const token=contextToken(),result=await request(`films/${encodeURIComponent(projectId)}/${encodeURIComponent(film.id)}/mask-frames/${index}/${frame}`);return token===contextToken()?result:null;},
+        async export(film,index,authorId){const path=maskPath(film,index,authorId),token=contextToken(),result=await request(path+'/export',{});const url=new URL(path+'/file',base);url.searchParams.set('sha',result.author_sha256);return token===contextToken()?url.href:null;}
+    };
+    function captionASRPath(target){return `films/${encodeURIComponent(target.project_id)}/${encodeURIComponent(target.film_id)}/captions/asr/${encodeURIComponent(target.job_id)}`;}
+    const captionASR={
+        models:()=>request('caption-asr/models'),
+        async start(film,shotId,options){
+            if(film.project_id!==projectId)throw Error('冻结整片不属于当前项目');
+            const origin=contextToken(),target={project_id:projectId,film_id:film.id,job_id:id()};
+            storageWrite('localStorage','t8director.captionASR:'+projectId,JSON.stringify(target));
+            const result=await request(captionASRPath(target),{film_sha256:film.sha256,shot_id:shotId,...options});
+            return origin===contextToken()?{...result,target}:null;
+        },
+        async status(target){const origin=contextToken(),result=await request(captionASRPath(target));return origin===contextToken()?{...result,target}:null;},
+        cancel:target=>request(captionASRPath(target)+'/cancel',{}),
+        async last(){let target;try{target=JSON.parse(storageRead('localStorage','t8director.captionASR:'+projectId)||'null');}catch{return null;}return target?this.status(target):null;}
+    };
+    async function configurationEvidence(record) {
+        const project=envelope(),baseJSON=JSON.stringify(project),context=contextToken(),current=ctx.current();
+        const sequence=++configurationRequest,key=directorResultKey(record);
+        const selected=()=>typeof ctx.selectedResultKey==='function'?ctx.selectedResultKey():key;
+        const fresh=()=>context===contextToken()&&current===ctx.current()&&sequence===configurationRequest&&
+            baseJSON===JSON.stringify(envelope())&&selected()===key;
+        const completed=record?structuredClone(record):null;
+        let draft=null,frozen=null,draft_error=null,frozen_error=null;
+        try{
+            const digest=await sha256UTF8(baseJSON);
+            if(!fresh())return null;
+            draft=await request('radar/inspect',{project,shot_id:current,base_json:baseJSON,base_sha256:digest});
+        }catch(error){draft_error=error.message;}
+        if(!fresh())return null;
+        if(completed?.snapshot_available&&completed.request_id&&completed.origin!=='external'){
+            try{frozen=await request(`snapshots/${encodeURIComponent(project.id)}/${encodeURIComponent(completed.request_id)}`);}
+            catch(error){frozen_error=error.message;}
+            if(!fresh())return null;
+        }
+        return {draft,frozen,completed,draft_error,frozen_error};
+    }
     async function showVersion(record) {
         const sequence = ++versionRequest;
         versionCopy=null;
@@ -721,7 +849,7 @@ export function makeDirectorServices(ctx) {
         if (context !== contextToken() || current !== ctx.current() || sequence !== versionRequest) return;
         if ($('[data-dialog]').open||otherModalOpen()) { notify('版本配置已读取；请关闭当前编辑窗口后再次查看。'); return; }
         showDialog("版本配置快照", result.complete
-            ? `<p>生成时保存的只读配置，不是当前草稿。种子：${esc(result.snapshot.seed)}；配方：${esc(result.snapshot.recipe)}。</p><button data-service="copy-version">复制此版设置为新草稿</button><p>新建独立工程，不覆盖当前页；只还原此镜实际种子，其它镜头保留当时草稿。模型文件或环境变化可能使结果不同。</p><details><summary>完整项目、素材身份与实际编译图</summary><pre>${esc(JSON.stringify(result.snapshot, null, 2))}</pre></details>`
+            ? `<p>生成时保存的只读配置，不是当前草稿。种子：${esc(result.snapshot.seed)}；配方：${esc(result.snapshot.recipe)}。</p><pre>${esc(configurationEvidenceText({frozen:result,completed:record}))}</pre><button data-service="copy-version">复制此版设置为新草稿</button><p>新建独立工程，不覆盖当前页；只还原此镜实际种子，其它镜头保留当时草稿。模型文件或环境变化可能使结果不同。</p><details><summary>完整项目、素材身份与实际编译图</summary><pre>${esc(JSON.stringify(result.snapshot, null, 2))}</pre></details>`
             : `<p>${esc(result.reason)}</p>`);
         if(result.complete)versionCopy={owner:projectId,request:record.request_id,target:id(),context,sequence};
     }
@@ -771,6 +899,7 @@ export function makeDirectorServices(ctx) {
         }finally{button.disabled=false;}
     }
     async function submitGenerate(project, shotId, seed) {
+        const submissionOrigin=contextToken();
         const input = {project, shot_id:shotId, seed};
         const encoded = JSON.stringify(input);
         const fingerprintBytes = crypto.subtle ? await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded)) : null;
@@ -803,6 +932,12 @@ export function makeDirectorServices(ctx) {
         const cached = storageWrite('sessionStorage',key,JSON.stringify(pending));
         if (!cached) notify('无法持久保护生成请求；本页内仍可安全重试，请勿刷新，任务 ID 将在响应后显示。');
         try {
+            if(requiresMiddleProtocol(pending.input.project,[shotId])||requiresControlProtocol(pending.input.project,[shotId])){
+                const report=await request('compile',{project:pending.input.project,shot_id:shotId});
+                assertMiddleProtocol(pending.input.project,report,[shotId]);
+                assertControlProtocol(pending.input.project,report,[shotId]);
+                if(submissionOrigin!==contextToken())throw Error('项目已切换，没有提交原关键帧任务；原请求身份保留。');
+            }
             const data = await request('generate', {...pending.input,client_id:tab,request_id:pending.request_id});
             pendingRequests.delete(key); storageRemove('sessionStorage',key);
             return data;
@@ -962,6 +1097,8 @@ export function makeDirectorServices(ctx) {
             const seed_map=Object.fromEntries(shots.map(shot=>[shot.id,directorSeed(shot)]));
             const report = scope==='all' ? await request("compile", { project: batch }) : await request("compile", { project: batch, shot_ids });
             if(origin!==contextToken()){notify('项目已切换，尚未提交批次。');return;}
+            assertMiddleProtocol(batch,report,shot_ids);
+            assertControlProtocol(batch,report,shot_ids);
             if (!report.ready) {
                 const issues = report.errors.map(error => {
                     const index = batch.doc.shots.findIndex(shot => shot.id === error.shot_id);
@@ -1220,6 +1357,8 @@ export function makeDirectorServices(ctx) {
             for (const s of doc.shots) {
                 for (const key of ["first", "last", "audio", "selected"]) if (s[key] === target.id) s[key] = next.id;
                 for (const key of ["refs", "tray"]) s[key] = (s[key] || []).map(a => a === target.id ? next.id : a);
+                remapMiddleAsset(s,target.id,next.id);
+                remapControlAsset(s,target.id,next.id);
                 if (s.audio === next.id) { s.start = 0; s.end = next.duration; }
                 s.rev++;
             }
@@ -1274,5 +1413,13 @@ export function makeDirectorServices(ctx) {
         catch (error) { notify("节点快照未载入，原JSON保留：" + error.message); }
     });
     const checkedCanvas = () => latest && latestSnapshot === JSON.stringify(envelope()) ? latest.shots?.find(shot=>shot.id===ctx.current())?.canvas : null;
-    return { draft, upload, restore, envelope, editorRecovery, compile, loadModels, showVersion, showExternalTake, taskSnapshot, prepareFilm, prepareComparison, prepareFrame, extractFrame, prepareBundle, buildBundle, uploadBundle, applyBundle, lastBundleImport, startFilmExport, filmExportStatus, contextToken, checkedCanvas, cancelUpload: () => activeUpload?.abort() };
+    async function refreshControlCanvas(){
+        const project=envelope(),epoch=projectEpoch,snapshot=JSON.stringify(project),sequence=++compileRequest;
+        const report=await request('compile',{project,shot_id:project.current});
+        if(epoch!==projectEpoch||sequence!==compileRequest||snapshot!==JSON.stringify(envelope()))return null;
+        const canvas=report.shots?.find(row=>row.id===project.current)?.canvas;
+        if(!Number.isInteger(canvas?.width)||!Number.isInteger(canvas?.height)||canvas.width<=0||canvas.height<=0)throw Error('服务端未返回有效画布，暂用比例示意；请重新预检。');
+        latest=report;latestSnapshot=snapshot;ctx.refreshSummary?.();return canvas;
+    }
+    return { draft, upload, restore, envelope, editorRecovery, compile, loadModels, showVersion, configurationEvidence, showExternalTake, taskSnapshot, prepareFilm, prepareComparison, prepareFrame, extractFrame, prepareBundle, buildBundle, uploadBundle, applyBundle, lastBundleImport, startFilmExport, filmExportStatus, prepareFilmCaptions, filmCaptionStatus, importFilmSpeechTrack, captionASR, maskAuthor, contextToken, checkedCanvas, refreshControlCanvas, cancelUpload: () => activeUpload?.abort() };
 }

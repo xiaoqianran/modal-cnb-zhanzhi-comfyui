@@ -21,7 +21,11 @@ import {
   importIndividualNodesInnerOnDragDrop,
   importIndividualNodesInnerOnDragOver,
 } from "./feature_import_individual_nodes.js";
-import {defineProperty, moveArrayItem} from "rgthree/common/shared_utils.js";
+import {
+  defineProperty,
+  findPrototypePropertyDescriptor,
+  moveArrayItem,
+} from "rgthree/common/shared_utils.js";
 
 /**
  * A base node with standard methods, directly extending the LGraphNode.
@@ -93,18 +97,80 @@ export abstract class RgthreeBaseNode extends LGraphNode {
       this.checkAndRunOnConstructed();
     });
 
+    // Newer ComfyUI frontends track `mode` through an accessor on LGraphNode (backed by
+    // `_state.mode`, which is what gets serialized), so our override must delegate to it.
+    // On legacy frontends `mode` is a plain data property and this is null.
+    const protoMode = findPrototypePropertyDescriptor(this, "mode");
+    const readMode = (): LGraphEventMode | undefined =>
+      protoMode?.get ? protoMode.get.call(this) : this.rgthree_mode;
+
     defineProperty(this, "mode", {
-      get: () => {
-        return this.rgthree_mode;
-      },
+      get: () => readMode(),
       set: (mode: LGraphEventMode) => {
-        if (this.rgthree_mode != mode) {
-          const oldMode = this.rgthree_mode;
+        const oldMode = readMode();
+        if (protoMode?.set) {
+          // Newer frontends: write through so `_state.mode` (used by serialization) stays in sync.
+          protoMode.set.call(this, mode);
+        } else {
+          // Legacy frontends: keep the original behavior.
           this.rgthree_mode = mode;
+        }
+        if (oldMode != mode) {
           this.onModeChange(oldMode, mode);
         }
       },
     });
+  }
+
+  /**
+   * Returns the string property. If no fallback is provided, this will throw if the property
+   * is not contained in the list. The fallback can be null or a string.
+   */
+  getPropString(key: string, fallback: string): string;
+  getPropString(key: string, fallback: null): string | null;
+  getPropString(key: string, fallback?: string|null): string | null {
+    let prop = this.properties?.[key];
+    if (typeof prop !== 'string') {
+      if (fallback === undefined) {
+        throw new Error(`Property ${key} is not string`);
+      }
+      prop = fallback;
+    }
+    return prop;
+  }
+
+  /**
+   * Returns the number property. If no fallback is provided, this will throw if the property
+   * is not contained in the list. The fallback can be null or a number.
+   */
+  getPropNumber(key: string, fallback: number): number;
+  getPropNumber(key: string, fallback: null): number | null;
+  getPropNumber(key: string, fallback?: number|null): number | null {
+    let prop = this.properties?.[key];
+    if (typeof prop !== 'number') {
+      if (fallback === undefined) {
+        throw new Error(`Property ${key} is not number`);
+      }
+      prop = fallback;
+    }
+    return prop;
+  }
+
+  /**
+   * Returns the number property. If no fallback is provided, this will throw if the property
+   * is not contained in the list. The fallback can be null or a number.
+   */
+  getPropBool(key: string, fallback: boolean): boolean;
+  getPropBool(key: string, fallback: null): boolean | null;
+  getPropBool(key: string, fallback?: boolean|null): boolean | null {
+    let prop = this.properties?.[key];
+    if (typeof prop !== 'boolean') {
+      if (fallback === undefined) {
+        throw new Error(`Property ${key} is not boolean`);
+      }
+      prop = fallback;
+    }
+    return prop;
   }
 
   private checkAndRunOnConstructed() {
@@ -164,12 +230,12 @@ export abstract class RgthreeBaseNode extends LGraphNode {
     if (cloned?.properties && !!window.structuredClone) {
       cloned.properties = structuredClone(cloned.properties);
     }
-    // [🤮] https://github.com/Comfy-Org/ComfyUI_frontend/issues/5037
-    // ComfyUI started throwing errors when some of our nodes wanted to remove inputs when cloning
-    // (like our dynamic inputs) because the disconnect method that's automatically called assumes
-    // there should be a graph. For now, I _think_ we can simply assign the current graph to avoid
-    // the error, which would then be overwritten when placed...
-    cloned.graph = this.graph;
+    // NOTE: We used to assign `cloned.graph = this.graph` here to work around
+    // https://github.com/Comfy-Org/ComfyUI_frontend/issues/5037 (removing inputs on a graph-less
+    // clone threw). That is no longer needed since subclasses now trim their clone's slot arrays
+    // directly, and it became harmful: the clone keeps the original's id, and newer frontends
+    // resolve slot links from the graph's link store by node id, so a graph-attached clone both
+    // serializes the original's links and disconnects them when its slots are removed.
     return cloned;
   }
 
@@ -231,7 +297,7 @@ export abstract class RgthreeBaseNode extends LGraphNode {
   /**
    * A default version of the logive when a node does not set `getSlotMenuOptions`. This is
    * necessary because child nodes may want to define getSlotMenuOptions but LiteGraph then won't do
-   * it's default logic. This bakes it so child nodes can call this instead (and this doesn't set
+   * it's default logic. This makes it so child nodes can call this instead (and this doesn't set
    * getSlotMenuOptions for all child nodes in case it doesn't exist).
    */
   defaultGetSlotMenuOptions(slot: IFoundSlot): IContextMenuValue[] {
@@ -339,7 +405,7 @@ export class RgthreeBaseVirtualNode extends RgthreeBaseNode {
  */
 export class RgthreeBaseServerNode extends RgthreeBaseNode {
   static nodeType: LGraphNodeConstructor | null = null;
-  static nodeData: ComfyNodeDef | null = null;
+  static nodeDef: ComfyNodeDef | null = null;
 
   // Drop is enabled by default for server nodes.
   override isDropEnabled = true;
@@ -361,18 +427,18 @@ export class RgthreeBaseServerNode extends RgthreeBaseNode {
    * shouldn't break as often when it modifyies widgets and types.
    */
   async setupFromServerNodeData() {
-    const nodeData = (this.constructor as any).nodeData;
-    if (!nodeData) {
+    const nodeDef = (this.constructor as any).nodeDef || (this.constructor as any).nodeData;
+    if (!nodeDef) {
       throw Error("No node data");
     }
 
     // Necessary for serialization so Comfy backend can check types.
     // Serialized as `class_type`. See app.js#graphToPrompt
-    this.comfyClass = nodeData.name;
+    this.comfyClass = nodeDef.name;
 
-    let inputs = nodeData["input"]["required"];
-    if (nodeData["input"]["optional"] != undefined) {
-      inputs = Object.assign({}, inputs, nodeData["input"]["optional"]);
+    let inputs = nodeDef["input"]["required"];
+    if (nodeDef["input"]["optional"] != undefined) {
+      inputs = Object.assign({}, inputs, nodeDef["input"]["optional"]);
     }
 
     const WIDGETS = this.getWidgets();
@@ -423,11 +489,11 @@ export class RgthreeBaseServerNode extends RgthreeBaseNode {
       }
     }
 
-    for (const o in nodeData["output"]) {
-      let output = nodeData["output"][o];
+    for (const o in nodeDef["output"]) {
+      let output = nodeDef["output"][o];
       if (output instanceof Array) output = "COMBO";
-      const outputName = nodeData["output_name"][o] || output;
-      const outputShape = nodeData["output_is_list"][o]
+      const outputName = nodeDef["output_name"][o] || output;
+      const outputShape = nodeDef["output_is_list"][o]
         ? LiteGraph.GRID_SHAPE
         : LiteGraph.CIRCLE_SHAPE;
       this.addOutput(outputName, output, {shape: outputShape});
@@ -464,6 +530,9 @@ export class RgthreeBaseServerNode extends RgthreeBaseNode {
       rgthreeClass.__registeredForOverride__ = true;
       rgthreeClass.nodeType = comfyClass;
       rgthreeClass.nodeData = nodeData;
+      // At some point, ComfyUI defined a `nodeData` that may or may not be the nodeDef. I think
+      // it's just lazily typed, but just in case, we'll compy the nodeData to our own field to use.
+      rgthreeClass.nodeDef = nodeData;
       rgthreeClass.onRegisteredForOverride(comfyClass, rgthreeClass);
     }
   }

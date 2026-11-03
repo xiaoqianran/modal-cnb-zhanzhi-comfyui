@@ -2,12 +2,14 @@ import ast
 import unittest
 from pathlib import Path
 
+from builder_source import read_builder_source, read_builder_backend_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
-BUILDER_UI = (ROOT / "web" / "VRGDG_MusicVideoBuilderUI.js").read_text(encoding="utf-8")
-PROMPT_CREATOR_UI = (ROOT / "web" / "VRGDG_MusicVideoPromptCreatorUI.js").read_text(encoding="utf-8")
-BUILDER_BACKEND = (ROOT / "VRGDG_MusicVideoBuilderNodes.py").read_text(encoding="utf-8")
-PROMPT_CREATOR_BACKEND = (ROOT / "VRGDG_MusicVideoPromptCreatorNodes.py").read_text(encoding="utf-8")
+BUILDER_UI = read_builder_source()
+PROMPT_CREATOR_UI = (ROOT / "web" / "music_video_builder" / "prompt_creator.mjs").read_text(encoding="utf-8")
+BUILDER_BACKEND = read_builder_backend_source()
+PROMPT_CREATOR_BACKEND = (ROOT / "prompt_creator/nodes.py").read_text(encoding="utf-8")
 
 
 def load_token_helpers():
@@ -15,17 +17,22 @@ def load_token_helpers():
         "_llm_runner_from_payload",
         "_normalized_token_limit",
         "_runner_output_token_limit",
+        "_gemma_local_context_limit",
         "_lm_studio_context_limit",
         "_lm_studio_api_root",
         "_lm_studio_native_output_text",
+        "_estimate_prompt_tokens",
+        "_fit_output_to_context",
+        "_runner_supports_json_schema",
     }
+    constants = {"_LM_STUDIO_DEFAULT_BASE_URL", "_JSON_SCHEMA_RUNNERS", "_CONTEXT_TEMPLATE_MARGIN_TOKENS", "_MIN_OUTPUT_TOKENS", "GEMMA_LOCAL_MIN_TOKENS"}
     tree = ast.parse(BUILDER_BACKEND)
     nodes = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name in wanted:
             nodes.append(node)
         elif isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "_LM_STUDIO_DEFAULT_BASE_URL"
+            isinstance(target, ast.Name) and target.id in constants
             for target in node.targets
         ):
             nodes.append(node)
@@ -69,9 +76,35 @@ class BuilderLlmRunnerTokenLimitTests(unittest.TestCase):
 
     def test_lm_studio_receives_context_and_output_limits(self):
         self.assertIn('f"{api_root}/api/v1/chat"', BUILDER_BACKEND)
-        self.assertIn('"context_length": _lm_studio_context_limit(payload)', BUILDER_BACKEND)
-        self.assertIn('"max_output_tokens": _runner_output_token_limit(payload, max_new_tokens)', BUILDER_BACKEND)
+        self.assertIn("context_limit = _lm_studio_context_limit(payload)", BUILDER_BACKEND)
+        self.assertIn("output_limit = _runner_output_token_limit(payload, max_new_tokens)", BUILDER_BACKEND)
+        self.assertIn('"context_length": context_limit', BUILDER_BACKEND)
+        self.assertIn('"max_output_tokens": output_limit', BUILDER_BACKEND)
         self.assertIn('"type": "image",', BUILDER_BACKEND)
+
+    def test_output_budget_is_capped_to_fit_the_context_window(self):
+        fit = TOKEN_HELPERS["_fit_output_to_context"]
+        margin = TOKEN_HELPERS["_CONTEXT_TEMPLATE_MARGIN_TOKENS"]
+        self.assertEqual(4000, fit(4000, 3000, 32768, "LM Studio"))
+        self.assertEqual(8000 - 6000 - margin, fit(32768, 6000, 8000, "GGUF model"))
+        with self.assertRaisesRegex(ValueError, "Raise the context limit in LLM Runner"):
+            fit(2000, 7900, 8000, "GGUF model")
+
+    def test_prompt_estimate_errs_high_for_remote_runners(self):
+        estimate = TOKEN_HELPERS["_estimate_prompt_tokens"]
+        text = "A fox girl with fennec ears sings on a neon rooftop. " * 40
+        self.assertGreaterEqual(estimate(text), len(text) // 4)
+        self.assertEqual(1, estimate(""))
+
+    def test_json_schema_runners_exclude_the_hosted_api_runner(self):
+        supports = TOKEN_HELPERS["_runner_supports_json_schema"]
+        for runner in ("builtin", "qwen_local", "lm_studio", "own_server"):
+            self.assertTrue(supports({"text_runner": runner}), runner)
+        self.assertFalse(supports({"text_runner": "llm_api"}))
+
+    def test_gguf_calls_are_sized_with_the_loaded_model_tokenizer(self):
+        self.assertIn('prompt_tokens = len(model.tokenize(str(instruction_text or "").encode("utf-8")))', BUILDER_BACKEND)
+        self.assertIn('_fit_output_to_context(int(max_new_tokens), prompt_tokens, model.n_ctx(), "GGUF model")', BUILDER_BACKEND)
 
     def test_configured_limits_override_old_task_defaults(self):
         output_limit = TOKEN_HELPERS["_runner_output_token_limit"]
@@ -79,7 +112,7 @@ class BuilderLlmRunnerTokenLimitTests(unittest.TestCase):
         self.assertEqual(
             64000,
             output_limit(
-                {"text_runner": "builtin", "gemma_output_token_limit": 64000},
+                {"text_runner": "builtin", "n_ctx": 65536, "gemma_output_token_limit": 64000},
                 180,
             ),
         )
@@ -95,11 +128,24 @@ class BuilderLlmRunnerTokenLimitTests(unittest.TestCase):
             context_limit({"lmstudio_context_limit": 65536}),
         )
 
+    def test_gemma_local_limits_never_go_below_16384_or_output_past_the_context(self):
+        output_limit = TOKEN_HELPERS["_runner_output_token_limit"]
+        context_limit = TOKEN_HELPERS["_gemma_local_context_limit"]
+        self.assertEqual(16384, context_limit({"n_ctx": 8000}))
+        self.assertEqual(16384, context_limit({}))
+        self.assertEqual(32768, context_limit({"n_ctx": 32768}))
+        self.assertEqual(16384, output_limit({"text_runner": "builtin", "n_ctx": 8000, "gemma_output_token_limit": 4096}, 180))
+        self.assertEqual(16384, output_limit({"text_runner": "builtin", "n_ctx": 8000}, 180))
+        self.assertEqual(32768, output_limit({"text_runner": "builtin", "n_ctx": 32768, "gemma_output_token_limit": 64000}, 180))
+        # Qwen Local shares the fields but keeps its own limits.
+        self.assertEqual(180, output_limit({"text_runner": "qwen_local", "n_ctx": 8000}, 180))
+        self.assertIn('if _llm_runner_from_payload(payload) == "builtin":\n        n_ctx = _gemma_local_context_limit(payload)', BUILDER_BACKEND)
+
     def test_pr_114_legacy_limit_migrates_but_api_runner_ignores_it(self):
         output_limit = TOKEN_HELPERS["_runner_output_token_limit"]
         self.assertEqual(
-            12000,
-            output_limit({"text_runner": "builtin", "llm_max_tokens": 12000}, 180),
+            20000,
+            output_limit({"text_runner": "builtin", "n_ctx": 32768, "llm_max_tokens": 20000}, 180),
         )
         self.assertEqual(
             12000,

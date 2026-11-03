@@ -17,8 +17,9 @@ import urllib.parse
 import html
 import comfy.utils
 from comfy_extras.nodes_textgen import (
-    TextGenerateLTX2Prompt,
+    TextGenerate,
 )
+from comfy_api.latest import io
 
 
 try:
@@ -1698,20 +1699,19 @@ class text_StrMatrix:
 class text_clip_Generate:
     @classmethod
     def INPUT_TYPES(cls):
+        images_input = io.Autogrow.Input("images", template=io.Autogrow.TemplatePrefix(
+            io.Image.Input("image", optional=True), prefix="image", min=1, max=9,
+        ), optional=True)
+        images_schema = images_input.as_dict()
+        images_schema.pop("optional", None)
         return {
             "required": {
                 "clip": ("CLIP",),
+                "system_prompt": ("STRING", {"default": "You are a helpful assistant.", "multiline": True}),
                 "prompt": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": True}),
             },
             "optional": {
-                "image1": ("IMAGE",),
-                "image2": ("IMAGE",),
-                "image3": ("IMAGE",),
-                "image4": ("IMAGE",),
-                "image5": ("IMAGE",),
-                "video": ("IMAGE", {"tooltip": "Video frames as image batch."}),
-                "audio": ("AUDIO",),
-                "system_prompt": ("STRING", {"forceInput": True}),
+                "images": (images_input.get_io_type(), images_schema),
             },
         }
 
@@ -1735,12 +1735,19 @@ class text_clip_Generate:
                     image.movedim(-1, 1), width, height, "lanczos", "disabled"
                 ).movedim(1, -1)
             batch.append(image)
-        return torch.cat(batch, dim=0)
+        batch = torch.cat(batch, dim=0)
+        if len(images) > 1 and max(height, width) > 768:
+            scale = 768 / max(height, width)
+            batch = comfy.utils.common_upscale(
+                batch.movedim(-1, 1), round(width * scale), round(height * scale), "lanczos", "disabled"
+            ).movedim(1, -1)
+        return batch
 
-    def generate(self, clip, prompt, image1=None, image2=None, image3=None, image4=None, image5=None,
-                 video=None, audio=None, system_prompt=""):
-        image = self._image_batch(image1, image2, image3, image4, image5)
-        output = TextGenerateLTX2Prompt.execute(
+    def generate(self, clip, prompt, images=None, system_prompt="You are a helpful assistant.", **kwargs):
+        images = dict(images or {})
+        images.update({name.removeprefix("images."): value for name, value in kwargs.items() if name.startswith("images.image")})
+        image = self._image_batch(*(images[name] for name in sorted(images, key=lambda name: int(name.removeprefix("image")))))
+        output = TextGenerate.execute(
             clip,
             prompt,
             4096,
@@ -1748,12 +1755,10 @@ class text_clip_Generate:
             image=image,
             thinking=False,
             use_default_template=True,
-            video=video,
-            audio=audio,
             mtp="auto",
             system_prompt=system_prompt,
         )
-        return (output.args[0] or prompt,)
+        return (output.args[0],)
 
 
 class text_MinimaxH3:

@@ -2290,6 +2290,12 @@ function findImageWidget(node) {
     return node.widgets?.find((w) => w.name === "image");
 }
 
+function addImageWidgetOption(widget, value) {
+    // Remote combos can return "Loading..." until their file list is ready.
+    const values = widget.options?.values;
+    if (Array.isArray(values) && !values.includes(value)) values.push(value);
+}
+
 function isEmptyImageValue(value) {
     const normalized = String(value ?? "").trim();
     return !normalized || normalized === "无";
@@ -2339,9 +2345,7 @@ function persistLoadImageState(node) {
     if (transparentWidget) {
         node.properties.guhaiPreserveAlpha = !!transparentWidget.value;
     }
-    if (imageWidget.value && imageWidget.options?.values && !imageWidget.options.values.includes(imageWidget.value)) {
-        imageWidget.options.values.push(imageWidget.value);
-    }
+    if (imageWidget.value) addImageWidgetOption(imageWidget, imageWidget.value);
 }
 
 function restoreLoadImageState(node) {
@@ -2394,6 +2398,10 @@ function nodeHasMask(node) {
 }
 
 function findTransparentWidget(node) {
+    // The alpha-preserve toggle only exists on the Goohai loader. Official
+    // loaders (including LoadImageOutput) may carry their own boolean widgets
+    // such as "Auto-refresh after generation"; never treat those as ours.
+    if (!isLoadImageGoohaiNode(node)) return null;
     return node.widgets?.find((w) => {
         const type = String(w.type || "").toLowerCase();
         return w.name !== "guhai_mask_icon_controls"
@@ -3040,6 +3048,9 @@ function isOfficialLoadImageNode(node) {
         node.comfyClass === "LoadImage"
         || node.type === "LoadImage"
         || node.constructor?.type === "LoadImage"
+        || node.comfyClass === "LoadImageOutput"
+        || node.type === "LoadImageOutput"
+        || node.constructor?.type === "LoadImageOutput"
     );
 }
 
@@ -3115,9 +3126,7 @@ function clearMaskForNode(node) {
     const originalValue = originalValueFromMaskValue(imageWidget.value);
     if (!originalValue) return false;
     imageWidget.value = originalValue;
-    if (imageWidget.options?.values && !imageWidget.options.values.includes(originalValue)) {
-        imageWidget.options.values.push(originalValue);
-    }
+    addImageWidgetOption(imageWidget, originalValue);
     if (typeof imageWidget.callback === "function") imageWidget.callback(originalValue);
     try {
         setNodePreview(node, imageUrlFromParts(parseImageValue(originalValue)));
@@ -3181,9 +3190,6 @@ async function uploadSelectedImageForNode(node, file) {
     if (!imageWidget) return;
     imageWidget.value = value;
     persistLoadImageState(node);
-    if (imageWidget.options?.values && !imageWidget.options.values.includes(value)) {
-        imageWidget.options.values.push(value);
-    }
     if (typeof imageWidget.callback === "function") imageWidget.callback(value);
     try {
         setNodePreview(node, imageUrlFromParts(parseImageValue(value)));
@@ -3490,9 +3496,6 @@ function openEditorForNode(node) {
                 if (outputState) targetNode.properties.guhaiMaskOutputState = outputState;
                 targetWidget.value = value;
                 persistLoadImageState(targetNode);
-                if (targetWidget.options?.values && !targetWidget.options.values.includes(value)) {
-                    targetWidget.options.values.push(value);
-                }
                 // Persist the saved value without asking the stock legacy
                 // image widget to load the black alpha-mask as a preview.
                 targetNode._guhaiSkipOriginalImageCallback = true;
@@ -3605,14 +3608,16 @@ app.registerExtension({
         }, 0);
     },
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        if (nodeData.name !== "LoadImageGoohai" && nodeData.name !== "LoadImage") return;
+        if (nodeData.name !== "LoadImageGoohai"
+            && nodeData.name !== "LoadImage"
+            && nodeData.name !== "LoadImageOutput") return;
         if (nodeData.name === "LoadImageGoohai") {
             // Initial size for newly-created nodes; users can still resize
             // them freely and imported workflow dimensions remain untouched.
             nodeData.size = [350, 500];
         }
         installMaskEditorMenu(nodeType);
-        if (nodeData.name === "LoadImage") {
+        if (nodeData.name === "LoadImage" || nodeData.name === "LoadImageOutput") {
             const origCreated = nodeType.prototype.onNodeCreated;
             const origConfigure = nodeType.prototype.onConfigure;
             nodeType.prototype.onConfigure = function () {

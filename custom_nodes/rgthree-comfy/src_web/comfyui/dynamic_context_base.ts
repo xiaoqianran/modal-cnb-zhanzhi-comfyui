@@ -1,4 +1,4 @@
-import type {ComfyNodeDef, INodeInputSlot, LGraphNodeConstructor} from "@comfyorg/frontend";
+import type {ComfyNodeDef, INodeInputSlot, LGraphNodeConstructor, LinkId} from "@comfyorg/frontend";
 
 import {app} from "scripts/app.js";
 import {BaseContextNode} from "./context.js";
@@ -16,14 +16,6 @@ const OWNED_PREFIX = "+";
 const REGEX_OWNED_PREFIX = /^\+\s*/;
 const REGEX_EMPTY_INPUT = /^\+\s*$/;
 
-export type InputLike = {
-  name: string;
-  type: number | string;
-  label?: string;
-  link: number | null;
-  removable?: boolean;
-  boundingRect: any;
-};
 
 /**
  * The base context node that contains some shared between DynamicContext nodes. Not labels
@@ -32,7 +24,7 @@ export type InputLike = {
 export class DynamicContextNodeBase extends BaseContextNode {
   protected readonly hasShadowInputs: boolean = false;
 
-  getContextInputsList(): InputLike[] {
+  getContextInputsList() {
     return this.inputs;
   }
 
@@ -97,15 +89,14 @@ export class DynamicContextNodeBase extends BaseContextNode {
   }
   override clone() {
     const cloned = super.clone()! as DynamicContextNodeBase;
-    while (cloned.inputs.length > 1) {
-      cloned.removeInput(cloned.inputs.length - 1);
-    }
+    // Trim slot arrays directly rather than calling `removeInput()`/`removeOutput()`. The clone
+    // shares the original's id, and newer frontends resolve slot links from the graph's link store
+    // by node id, so those calls on a graph-attached clone disconnect the ORIGINAL node's links.
+    cloned.inputs.splice(1);
     while (cloned.widgets.length > 1) {
       cloned.removeWidget(cloned.widgets.length - 1);
     }
-    while (cloned.outputs.length > 1) {
-      cloned.removeOutput(cloned.outputs.length - 1);
-    }
+    cloned.outputs.splice(1);
     return cloned;
   }
 
@@ -128,7 +119,7 @@ export class DynamicContextNodeBase extends BaseContextNode {
   addContextInput(name: string, type: string, slot = -1) {
     const inputs = this.getContextInputsList();
     if (this.hasShadowInputs) {
-      inputs.push({name, type, link: null, boundingRect: null});
+      inputs.push({name, type, link: null, boundingRect: [0,0,0,0]});
     } else {
       this.addInput(name, type);
     }
@@ -204,8 +195,8 @@ export class DynamicContextNodeBase extends BaseContextNode {
       const inputs = this.getContextInputsList();
       for (let index = inputs.length - 1; index > 0; index--) {
         const input = inputs[index]!;
-        if ((input === null || input === void 0 ? void 0 : input.link) != null) {
-          app.graph.links[input.link!]!.target_slot = index;
+        if (input?.link != null) {
+          app.graph.links[input.link]!.target_slot = index;
         }
       }
     }

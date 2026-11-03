@@ -1,6 +1,5 @@
 import type {
   ComfyNodeDef,
-  Vector2,
   LGraphCanvas as TLGraphCanvas,
   LLink,
   LGraph,
@@ -23,6 +22,7 @@ import type {
   NodeId,
   Subgraph,
   SubgraphNode,
+  LinkId,
 } from "@comfyorg/frontend";
 import type {ComfyApiPrompt} from "typings/comfy";
 import type {Constructor} from "typings/rgthree";
@@ -53,7 +53,7 @@ const PADDING = 0;
 
 type LiteGraphDir =
   typeof LiteGraph.LEFT | typeof LiteGraph.RIGHT | typeof LiteGraph.UP | typeof LiteGraph.DOWN;
-export const LAYOUT_LABEL_TO_DATA: {[label: string]: [LiteGraphDir, Vector2, Vector2]} = {
+export const LAYOUT_LABEL_TO_DATA: {[label: string]: [LiteGraphDir, Point, Point]} = {
   Left: [LiteGraph.LEFT, [0, 0.5], [PADDING, 0]],
   Right: [LiteGraph.RIGHT, [1, 0.5], [-PADDING, 0]],
   Top: [LiteGraph.UP, [0.5, 0], [0, PADDING]],
@@ -238,15 +238,15 @@ export function addConnectionLayoutSupport(
 
   // [🤮] This is deprecated in a https://github.com/Comfy-Org/litegraph.js/pull/716 @v0.9.9 and
   // replaced by getInputPos and getOutputPos conveniently added below.
-  node.prototype.getConnectionPos = function (isInput: boolean, slotNumber: number, out: Vector2) {
+  node.prototype.getConnectionPos = function (isInput: boolean, slotNumber: number, out: Point) {
     // Purposefully do not need to call the old one.
     return getConnectionPosForLayout(this, isInput, slotNumber, out);
   };
-  node.prototype.getInputPos = function (slotNumber: number): Vector2 {
+  node.prototype.getInputPos = function (slotNumber: number): Point {
     // Purposefully do not need to call the existing one because we're overriding.
     return getConnectionPosForLayout(this, true, slotNumber, [0, 0]);
   };
-  node.prototype.getOutputPos = function (slotNumber: number): Vector2 {
+  node.prototype.getOutputPos = function (slotNumber: number): Point {
     // Purposefully do not need to call the existing one because we're overriding.
     return getConnectionPosForLayout(this, false, slotNumber, [0, 0]);
   };
@@ -281,7 +281,7 @@ export function getConnectionPosForLayout(
   node: TLGraphNode,
   isInput: boolean,
   slotNumber: number,
-  out: Vector2,
+  out: Point,
 ) {
   out = out || new Float32Array(2);
   node.properties = node.properties || {};
@@ -552,7 +552,7 @@ export function getConnectedNodesInfo(
   currentNode = currentNode || startNode;
   let rootNodes: ConnectedNodeInfo[] = [];
   if (startNode === currentNode || shouldPassThrough(currentNode, passThroughFollowing)) {
-    let linkIds: Array<number | undefined | null>;
+    let linkIds: Array<LinkId | undefined | null>;
 
     slot = slot != null && slot > -1 ? slot : undefined;
     if (dir == IoDirection.OUTPUT) {
@@ -772,7 +772,7 @@ export async function replaceNode(
   return newNode;
 }
 
-export function getOriginNodeByLink(linkId?: number | null) {
+export function getOriginNodeByLink(linkId?: LinkId | null) {
   let node: TLGraphNode | null = null;
   if (linkId != null) {
     const link = getLinkById(linkId);
@@ -784,7 +784,7 @@ export function getOriginNodeByLink(linkId?: number | null) {
 /**
  * Gets a link by id across all graphs and subgraphs.
  */
-export function getLinkById(linkId?: number | null) {
+export function getLinkById(linkId?: LinkId | null) {
   if (linkId == null) return null;
   let link: LLink | null = app.graph.links[linkId] ?? null;
   link = link ?? app.canvas.getCurrentGraph()?.links[linkId] ?? null;
@@ -934,7 +934,7 @@ export async function matchLocalSlotsToServer(
       : (serverNodeData.output_name ?? []);
   const serverSlotTypes =
     direction == IoDirection.INPUT
-      ? (Object.values(serverNodeData.input?.optional || {}).map((i) => i[0]) as string[])
+      ? (Object.values(serverNodeData.input?.optional || {}).map((i: any) => i[0]) as string[])
       : serverNodeData.output;
   const slots = direction == IoDirection.INPUT ? node.inputs : node.outputs;
 

@@ -1,10 +1,7 @@
 import { app } from "../../../scripts/app.js";
 
 const NODE_NAMES = new Set([
-  "VRGDG_Qwen3.5",
-  "VRGDG_Qwen2.5",
-  "VRGDG_GeneralVLM",
-  "VRGDG_GeneralGGUF",
+  "VRGDG_QwenGGUF",
   "VRGDG_SuperGemmaGGUFChat",
 ]);
 
@@ -138,6 +135,7 @@ function refreshAdvancedWidgets(node) {
   const advancedNames = [
     "n_ctx",
     "n_gpu_layers",
+    "gpu_device",
     "n_threads",
     "chat_format",
     "temperature",

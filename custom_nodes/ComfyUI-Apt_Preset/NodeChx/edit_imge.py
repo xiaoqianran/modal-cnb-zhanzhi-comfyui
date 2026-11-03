@@ -8,7 +8,7 @@ import comfy
 import node_helpers
 import comfy.utils
 from comfy_api.latest import io
-from nodes import common_ksampler, CLIPTextEncode
+from nodes import common_ksampler, CLIPTextEncode, ConditioningZeroOut
 import torch.nn.functional as F
 from comfy_extras.nodes_flux import EmptyFlux2LatentImage
 
@@ -1164,7 +1164,6 @@ class sum_Flux3_Image(io.ComfyNode):
                 io.Custom("RUN_CONTEXT").Input("context"),
                 io.Model.Input("model", optional=True),
                 io.String.Input("prompt", default="", multiline=True, dynamic_prompts=True),
-                io.String.Input("negative_prompt", default="blur", multiline=False, dynamic_prompts=True),
                 io.DynamicCombo.Input("resolution", tooltip="keep resolution：保持原尺寸；resize：统一分辨率。", options=[
                     io.DynamicCombo.Option("keep resolution", []),
                     io.DynamicCombo.Option("resize", [
@@ -1184,14 +1183,13 @@ class sum_Flux3_Image(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, context, prompt, negative_prompt, resolution: io.DynamicCombo.Type,
+    def execute(cls, context, prompt, resolution: io.DynamicCombo.Type,
                 model=None, images: io.Autogrow.Type = None) -> io.NodeOutput:
         clip = context.get("clip")
         vae = context.get("vae")
         if model is None:
             model = context.get("model")
         prompt = prompt or context.get("pos") or ""
-        negative_prompt = negative_prompt or "blur"
 
         ref_latents = []
         for name in sorted(images or {}, key=lambda name: int(name.removeprefix("image"))):
@@ -1208,7 +1206,7 @@ class sum_Flux3_Image(io.ComfyNode):
                 ref_latents.append(vae.encode(image))
 
         positive = CLIPTextEncode().encode(clip, prompt)[0]
-        negative = CLIPTextEncode().encode(clip, negative_prompt)[0]
+        negative = ConditioningZeroOut().zero_out(positive)[0]
         if ref_latents:
             positive = node_helpers.conditioning_set_values(positive, {"reference_latents": ref_latents}, append=True)
             negative = node_helpers.conditioning_set_values(negative, {"reference_latents": ref_latents}, append=True)
@@ -1220,7 +1218,7 @@ class sum_Flux3_Image(io.ComfyNode):
             latent = EmptyFlux2LatentImage.execute(size, size, 1)[0]
 
         context = new_context(context, model=model, positive=positive, negative=negative, latent=latent,
-                              pos=prompt, neg=negative_prompt)
+                              pos=prompt, neg="")
         return io.NodeOutput(context, positive, negative, latent)
 
 

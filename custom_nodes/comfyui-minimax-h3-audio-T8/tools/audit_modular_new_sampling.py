@@ -240,6 +240,307 @@ def reviewed_model_choice_sites(root, sites):
     return [dict(new) if _key(site) == _key(old) else site for site in sites]
 
 
+def reviewed_h21_sites(root, sites):
+    """Finite human-reviewed release delta; never recapture a passing baseline.
+
+    PTD same-canvas HEAD/TAIL has no invented cold/upscale contract. New source
+    identities are admitted only by an explicit per-release ledger, full source
+    hashes and saved approved-source workflows. Future/altered calls still fail.
+    This is a source tripwire, not universal GPU/effect/performance certification.
+    """
+    root = Path(root).resolve()
+    path = root / 'tests/fixtures/h21_reviewed_sampling_1_102.json'
+    if not path.is_file():
+        return sites
+    review = json.loads(path.read_text(encoding='utf8'))
+    required = {'schema', 'previous_sites', 'reviewed_sites', 'files', 'accepted_media_sha256',
+                'accepted_video_groups', 'registered_nodes', 'scope', 'unverified'}
+    if (set(review) != required or review['schema'] != 't8.h21.reviewed_sampling_release.v1'
+            or review['accepted_video_groups'] != 94 or review['registered_nodes'] != 768
+            or not review['scope'] or not review['unverified']):
+        raise ValueError('Invalid bounded H21 release review')
+    previous, selected = review['previous_sites'], review['reviewed_sites']
+    if len(previous) != 6 or len(selected) != 9:
+        raise ValueError('H21 reviewed site delta differs')
+    for rows in (previous, selected):
+        if len({_key(row) for row in rows}) != len(rows):
+            raise ValueError('Duplicate H21 reviewed sampling identity')
+        for row in rows:
+            if (set(row) != {'path', 'symbol', 'callee', 'call_sha256'}
+                    or not re.fullmatch(r'[0-9a-f]{64}', row['call_sha256'])):
+                raise ValueError('Malformed H21 sampling identity')
+    if (not isinstance(review['files'], dict) or not review['files']
+            or not review['accepted_media_sha256']
+            or any(not re.fullmatch(r'[0-9a-f]{64}', value) for value in review['accepted_media_sha256'])):
+        raise ValueError('Missing H21 source/media binding')
+    h24 = _h24_review(root)
+    h27 = _h27_review(root)
+    for relative, expected in review['files'].items():
+        if h24 is not None and relative in h24['previous_files']:
+            if h24['previous_files'][relative] != expected:
+                raise ValueError('H24 review cannot replace a different H21 source binding')
+            expected = h24['files'][relative]
+        expected = _h27_expected(h27, relative, expected)
+        target = root / relative
+        if (Path(relative).is_absolute() or '..' in Path(relative).parts or target.is_symlink()
+                or not target.resolve().is_relative_to(root) or not target.is_file()
+                or not re.fullmatch(r'[0-9a-f]{64}', expected)
+                or hashlib.sha256(target.read_bytes()).hexdigest() != expected):
+            raise ValueError('Reviewed H21 source/workflow changed: ' + relative)
+    if not {row['path'] for row in selected} <= set(review['files']):
+        raise ValueError('H21 sampling module lacks a full source binding')
+    old_keys = {_key(row) for row in previous}
+    if not old_keys <= {_key(row) for row in sites}:
+        raise ValueError('H21 release review cannot relabel a different baseline')
+    return [row for row in sites if _key(row) not in old_keys] + selected
+
+
+def _h24_review(root):
+    """Explicit successor identities, not a discovery-based baseline refresh."""
+    root = Path(root).resolve()
+    path = root / 'tests/fixtures/h24_reviewed_sampling_source.json'
+    if not path.is_file():
+        return None
+    review = json.loads(path.read_text(encoding='utf8'))
+    required = {'schema', 'previous_sites', 'reviewed_sites', 'previous_files', 'files',
+                'workflow_files', 'accepted_media_sha256', 'human_feedback_sha256',
+                'accepted_video_groups', 'registered_nodes', 'scope', 'unverified'}
+    if (set(review) != required or review['schema'] != 't8.h24.reviewed_sampling_source.v1'
+            or review['accepted_video_groups'] != 3 or review['registered_nodes'] != 774
+            or not review['scope'] or not review['unverified']):
+        raise ValueError('Invalid bounded H24 source review')
+    expected_previous = {'h3_t8/director_generation.py', 'h3_t8/director_hyperflow.py',
+                         'h3_t8/director_two_pass.py', 'tests/test_h21_append_registry.py',
+                         'tests/test_h21_sampling_admission_ci.py'}
+    if set(review['previous_files']) != expected_previous:
+        raise ValueError('H24 previous source set differs')
+    h21 = json.loads((root / 'tests/fixtures/h21_reviewed_sampling_1_102.json').read_text(encoding='utf8'))
+    if any(h21['files'].get(name) != value for name, value in review['previous_files'].items()):
+        raise ValueError('H24 review cannot replace a different H21 source binding')
+    for rows in (review['previous_sites'], review['reviewed_sites']):
+        if len(rows) != 3 or len({_key(row) for row in rows}) != 3:
+            raise ValueError('H24 reviewed site delta differs')
+        for row in rows:
+            if (set(row) != {'path', 'symbol', 'callee', 'call_sha256'}
+                    or not re.fullmatch(r'[0-9a-f]{64}', row['call_sha256'])):
+                raise ValueError('Malformed H24 sampling identity')
+    if ({_key(row)[:3] for row in review['previous_sites']}
+            != {_key(row)[:3] for row in review['reviewed_sites']}):
+        raise ValueError('H24 review may only replace the three reviewed Director builders')
+    if (not set(review['previous_files']) <= set(review['files'])
+            or not {row['path'] for row in review['reviewed_sites']} <= set(review['files'])):
+        raise ValueError('H24 source binding is incomplete')
+    h27 = _h27_review(root)
+    for relative, expected in review['files'].items():
+        expected = _h27_expected(h27, relative, expected)
+        target = root / relative
+        if (Path(relative).is_absolute() or '..' in Path(relative).parts or target.is_symlink()
+                or not target.resolve().is_relative_to(root) or not target.is_file()
+                or not re.fullmatch(r'[0-9a-f]{64}', expected)
+                or hashlib.sha256(target.read_bytes()).hexdigest() != expected):
+            raise ValueError('Reviewed H24 source/workflow changed: ' + relative)
+    if (len(review['accepted_media_sha256']) != 6
+            or any(not re.fullmatch(r'[0-9a-f]{64}', value) for value in review['accepted_media_sha256'])
+            or not re.fullmatch(r'[0-9a-f]{64}', review['human_feedback_sha256'])):
+        raise ValueError('H24 human/media binding is incomplete')
+    index_name = 'examples/workflows/91-h24-reviewed/index.json'
+    if not set(review['workflow_files']) <= set(review['files']) or index_name not in review['workflow_files']:
+        raise ValueError('H24 workflow binding is incomplete')
+    index = json.loads((root / index_name).read_text(encoding='utf8'))
+    if (index['human_feedback_sha256'] != review['human_feedback_sha256']
+            or {row['case_id'] for row in index['workflows']} != {'r2-compact', 'r3-loop', 'r4-structure'}
+            or {value for row in index['workflows'] for value in row['source_media_sha256']}
+               != set(review['accepted_media_sha256'])):
+        raise ValueError('H24 reviewed workflows refer to different human media')
+    return review
+
+
+def reviewed_h24_sites(root, sites):
+    review = _h24_review(root)
+    if review is None:
+        return sites
+    old_keys = {_key(row) for row in review['previous_sites']}
+    if not old_keys <= {_key(row) for row in sites}:
+        raise ValueError('H24 source review cannot relabel a different baseline')
+    return [row for row in sites if _key(row) not in old_keys] + review['reviewed_sites']
+
+
+def _h27_expected(review, relative, expected):
+    if review is not None and relative in review['previous_files']:
+        if review['previous_files'][relative] != expected:
+            raise ValueError('H27 review cannot replace a different prior source binding')
+        return review['files'][relative]
+    return expected
+
+
+def _pika_review(root, predecessor):
+    """Finite append-only registration successor; no H27 media is reaccepted."""
+    path = root / 'tests/fixtures/pika_flex_source.json'
+    if not path.is_file():
+        return predecessor
+    review = json.loads(path.read_text(encoding='utf8'))
+    changed = {'__init__.py', 'tools/audit_modular_new_sampling.py',
+               'tests/test_h21_sampling_admission_ci.py', 'tests/test_h24_sampling_admission_ci.py',
+               'tests/test_h27_sampling_admission_ci.py'}
+    added = {'h3_t8/pika_flex.py', 'h3_t8/nodes_pika_flex.py'}
+    if (set(review) != {'schema', 'previous_files', 'files', 'scope', 'preserved_nodes', 'appended_nodes'}
+            or review['schema'] != 't8.pika_flex.source.v1'
+            or set(review['previous_files']) != changed or set(review['files']) != changed | added
+            or review['preserved_nodes'] != 778
+            or review['appended_nodes'] != ['MiniMaxH3PikaFlexSetupEXPT8'] or not review['scope']
+            or any(predecessor['files'].get(name) != digest
+                   for name, digest in review['previous_files'].items())
+            or any(not re.fullmatch(r'[0-9a-f]{64}', digest) for digest in review['files'].values())):
+        raise ValueError('Invalid bounded Pika successor or different H27 source binding')
+    # The original path/SHA loop checks all successor files. Historical media,
+    # workflows and callsites remain bound to the untouched predecessor ledger.
+    return {**predecessor, 'files': {**predecessor['files'], **review['files']}}
+
+
+def _pika_dual_review(root, predecessor):
+    """Exact six-step bridge successor; never recapture the historical ledger.
+
+    This local code review binds the seven concrete AST sites, including two
+    coordinate conversions. It grants no trained-media/human acceptance and no
+    generic EAV/Relay, disk-resume, or future sampler admission.
+    """
+    path = root / 'tests/fixtures/pika_two_pass_source.json'
+    if not path.is_file():
+        return predecessor
+    review = json.loads(path.read_text(encoding='utf8'))
+    changed = {'__init__.py', 'tools/audit_modular_new_sampling.py',
+               'tests/test_h21_sampling_admission_ci.py', 'tests/test_h24_sampling_admission_ci.py',
+               'tests/test_h27_sampling_admission_ci.py'}
+    added = {'h3_t8/pika_two_pass.py', 'h3_t8/nodes_pika_two_pass.py'}
+    expected = Counter({
+        ('h3_t8/nodes_pika_two_pass.py', 'MiniMaxH3PikaTwoPassSamplerEXPT8.execute', 'sample_pika_two_pass'): 1,
+        ('h3_t8/pika_two_pass.py', 'sample_pika_two_pass', 'runtime._native_stage'): 2,
+        ('h3_t8/pika_two_pass.py', 'sample_pika_two_pass.low_solver', 'sample_lcm'): 1,
+        ('h3_t8/pika_two_pass.py', 'sample_pika_two_pass.low_solver', 'base.process_latent_out'): 1,
+        ('h3_t8/pika_two_pass.py', 'sample_pika_two_pass.high_solver', 'sample_lcm'): 1,
+        ('h3_t8/pika_two_pass.py', 'sample_pika_two_pass.high_solver', 'base.process_latent_in'): 1,
+    })
+    required = {'schema', 'previous_files', 'files', 'scope', 'preserved_nodes',
+                'appended_nodes', 'reviewed_sites', 'human_quality_accepted'}
+    if (set(review) != required or review['schema'] != 't8.pika_two_pass.source.v1'
+            or set(review['previous_files']) != changed or set(review['files']) != changed | added
+            or review['preserved_nodes'] != 779
+            or review['appended_nodes'] != ['MiniMaxH3PikaTwoPassSamplerEXPT8']
+            or review['human_quality_accepted'] is not False or not review['scope']
+            or any(predecessor['files'].get(name) != digest for name, digest in review['previous_files'].items())
+            or any(not re.fullmatch(r'[0-9a-f]{64}', digest) for digest in review['files'].values())
+            or any(set(row) != {'path', 'symbol', 'callee', 'call_sha256'}
+                   or not re.fullmatch(r'[0-9a-f]{64}', row['call_sha256']) for row in review['reviewed_sites'])
+            or Counter((row['path'], row['symbol'], row['callee']) for row in review['reviewed_sites']) != expected
+            or len({_key(row) for row in review['reviewed_sites']}) != 7):
+        raise ValueError('Invalid bounded Pika two-pass source review')
+    return {**predecessor, 'files': {**predecessor['files'], **review['files']},
+            'reviewed_sites': [*predecessor['reviewed_sites'], *review['reviewed_sites']]}
+
+
+def _core_compat_review(root, predecessor):
+    """Finite identity-only successor; no sampling site or media relabelling."""
+    path = root / 'tests/fixtures/core_compat_20261031_source.json'
+    if not path.is_file():
+        return predecessor
+    review = json.loads(path.read_text(encoding='utf8'))
+    changed = {'h3_t8/long_video_dual_identity.py', 'tools/audit_modular_new_sampling.py',
+               'tests/test_h21_sampling_admission_ci.py', 'tests/test_h24_sampling_admission_ci.py',
+               'tests/test_h27_sampling_admission_ci.py', '.github/workflows/modular-sampling-admission.yml'}
+    h24 = json.loads((root / 'tests/fixtures/h24_reviewed_sampling_source.json').read_text(encoding='utf8'))
+    prior = {**h24['files'], **predecessor['files']}
+    if (set(review) != {'schema', 'previous_files', 'files', 'scope', 'sampling_site_delta',
+                       'registered_nodes', 'human_quality_accepted'}
+            or review['schema'] != 't8.core_compat.source.v1'
+            or set(review['files']) != changed or set(review['previous_files']) != changed
+            or review['sampling_site_delta'] != [] or review['registered_nodes'] != 780
+            or review['human_quality_accepted'] is not False or not review['scope']
+            or any(prior.get(name) != digest for name, digest in review['previous_files'].items())
+            or any(not re.fullmatch(r'[0-9a-f]{64}', digest) for digest in review['files'].values())):
+        raise ValueError('Invalid bounded Core compatibility source review or different prior source binding')
+    identity = 'h3_t8/long_video_dual_identity.py'
+    return {**predecessor,
+            'previous_files': {**predecessor['previous_files'], identity: review['previous_files'][identity]},
+            'files': {**predecessor['files'], **review['files']}}
+
+
+def _h27_review(root):
+    """Two explicitly reviewed builder replacements; historical ledgers stay fixed."""
+    root = Path(root).resolve()
+    path = root / 'tests/fixtures/h27_reviewed_sampling_source.json'
+    if not path.is_file():
+        return None
+    review = json.loads(path.read_text(encoding='utf8'))
+    required = {'schema', 'previous_sites', 'reviewed_sites', 'previous_files', 'files',
+                'workflow_files', 'accepted_media_sha256', 'human_feedback_sha256',
+                'accepted_video_groups', 'registered_nodes', 'scope', 'unverified'}
+    if (set(review) != required or review['schema'] != 't8.h27.reviewed_sampling_source.v1'
+            or review['accepted_video_groups'] != 7 or review['registered_nodes'] != 778
+            or not review['scope'] or not review['unverified']):
+        raise ValueError('Invalid bounded H27 source review')
+    h21 = json.loads((root / 'tests/fixtures/h21_reviewed_sampling_1_102.json').read_text(encoding='utf8'))
+    h24 = json.loads((root / 'tests/fixtures/h24_reviewed_sampling_source.json').read_text(encoding='utf8'))
+    prior = {**h21['files'], **h24['files']}
+    expected_previous = {'__init__.py', 'h3_t8/director_generation.py', 'h3_t8/director_two_pass.py',
+                         'h3_t8/director_project.py', 'h3_t8/director_routes.py', 'h3_t8/timing.py',
+                         'tests/test_h21_sampling_admission_ci.py'}
+    if (set(review['previous_files']) != expected_previous
+            or any(prior.get(name) != value for name, value in review['previous_files'].items())):
+        raise ValueError('H27 review cannot replace a different prior source binding')
+    expected_builders = {('h3_t8/director_generation.py', 'build_director_generation_prompt', '<director_graph_builder>'),
+                         ('h3_t8/director_two_pass.py', 'apply_two_pass_graph', '<director_graph_builder>')}
+    for rows in (review['previous_sites'], review['reviewed_sites']):
+        if len(rows) != 2 or {_key(row)[:3] for row in rows} != expected_builders:
+            raise ValueError('H27 may only replace the two reviewed Director builders')
+        if any(set(row) != {'path', 'symbol', 'callee', 'call_sha256'}
+               or not re.fullmatch(r'[0-9a-f]{64}', row['call_sha256']) for row in rows):
+            raise ValueError('Malformed H27 sampling identity')
+    if not {_key(row) for row in review['previous_sites']} <= {_key(row) for row in h24['reviewed_sites']}:
+        raise ValueError('H27 cannot relabel different H24 callsites')
+    if (not set(review['previous_files']) <= set(review['files'])
+            or not set(review['workflow_files']) <= set(review['files'])):
+        raise ValueError('H27 source/workflow binding incomplete')
+    review = _pika_review(root, review)
+    review = _pika_dual_review(root, review)
+    review = _core_compat_review(root, review)
+    for relative, expected in review['files'].items():
+        target = root / relative
+        if (Path(relative).is_absolute() or '..' in Path(relative).parts or target.is_symlink()
+                or not target.resolve().is_relative_to(root) or not target.is_file()
+                or not re.fullmatch(r'[0-9a-f]{64}', expected)
+                or hashlib.sha256(target.read_bytes()).hexdigest() != expected):
+            raise ValueError('Reviewed H27 source/workflow changed: ' + relative)
+    if (len(set(review['accepted_media_sha256'])) != 8
+            or len(set(review['human_feedback_sha256'])) != 2
+            or any(not re.fullmatch(r'[0-9a-f]{64}', value)
+                   for value in [*review['accepted_media_sha256'], *review['human_feedback_sha256']])):
+        raise ValueError('H27 human/media binding incomplete')
+    index_name = 'examples/workflows/93-director-reviewed/index.json'
+    if index_name not in review['workflow_files']:
+        raise ValueError('H27 workflow index missing')
+    index = json.loads((root / index_name).read_text(encoding='utf8'))
+    rows = index['workflows']
+    if ({row['case_id'] for row in rows} != {'single', 'two_pass', 'hyperflow-v2', 'record',
+                                          'author3', 'custom8', 'hyperflow8_refine3'}
+            or len(rows) != 7
+            or {value for row in rows for value in row['source_media_sha256']} != set(review['accepted_media_sha256'])
+            or {row['human_feedback_sha256'] for row in rows} != set(review['human_feedback_sha256'])
+            or any(row['path'] not in review['workflow_files']
+                   or row['workflow_sha256'] != review['files'].get(row['path']) for row in rows)):
+        raise ValueError('H27 workflows refer to different human media or saved graph')
+    return review
+
+
+def reviewed_h27_sites(root, sites):
+    review = _h27_review(root)
+    if review is None:
+        return sites
+    old_keys = {_key(row) for row in review['previous_sites']}
+    if not old_keys <= {_key(row) for row in sites}:
+        raise ValueError('H27 source review cannot relabel a different baseline')
+    return [row for row in sites if _key(row) not in old_keys] + review['reviewed_sites']
+
+
 def _reaches(edges, source, target):
     pending, seen = [source], set()
     while pending:
@@ -353,6 +654,9 @@ def audit(root, baseline, admissions, routes, live_ids=None):
     current = discover(root)
     baseline_sites, layout_omissions = reviewed_layout_sites(root, baseline)
     baseline_sites = reviewed_model_choice_sites(root, baseline_sites)
+    baseline_sites = reviewed_h21_sites(root, baseline_sites)
+    baseline_sites = reviewed_h24_sites(root, baseline_sites)
+    baseline_sites = reviewed_h27_sites(root, baseline_sites)
     old = Counter(_key(site) for site in baseline_sites)
     now = Counter(_key(site) for site in current)
     new = now - old

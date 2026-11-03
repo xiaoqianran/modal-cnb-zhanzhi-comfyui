@@ -3591,10 +3591,13 @@ class Image_mask_crop_visual:
     def get_mask_bounding_box(self, mask):
         mask_np = mask[0].cpu().numpy()
         mask_np = np.squeeze(mask_np)
-        mask_np = (mask_np > 0.5).astype(np.uint8)
         if mask_np.ndim != 2:
             raise ValueError(f"Mask must be 2D array, got {mask_np.ndim}D instead")
-        coords = cv2.findNonZero(mask_np)
+        mask_np = (mask_np > 0).astype(np.uint8)
+        contours, _ = cv2.findContours(mask_np, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        filled_mask = np.zeros_like(mask_np)
+        cv2.drawContours(filled_mask, contours, -1, 1, cv2.FILLED)
+        coords = cv2.findNonZero(filled_mask)
         if coords is None:
             # 如果遮罩为空，返回全图
             h, w = mask_np.shape
@@ -3646,7 +3649,7 @@ class Image_mask_crop_visual:
             processed_mask = mask
 
         # 获取遮罩边界框
-        mask_w, mask_h, mask_x, mask_y = self.get_mask_bounding_box(processed_mask)
+        mask_w, mask_h, mask_x, mask_y = self.get_mask_bounding_box(mask)
         if not crop_by_scale:
             min_w = int(max(1, int(mask_w)))
             min_h = int(max(1, int(mask_h)))

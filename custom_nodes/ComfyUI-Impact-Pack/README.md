@@ -262,6 +262,8 @@ NOTE: The UltralyticsDetectorProvider node is not part of the ComfyUI-Impact-Pac
   * `ImpactWildcardEncode` - Similar to ImpactWildcardProcessor, this provides the loading functionality of LoRAs (e.g. `<lora:some_awesome_lora:0.7:1.2>`). Populated prompts are encoded using the clip after all the lora loading is done.
     * If the `Inspire Pack` is installed, you can use **Lora Block Weight** in the form of `LBW=lbw spec;`
     * `<lora:chunli:1.0:1.0:LBW=B11:0,0,0,0,0,0,0,0,0,0,A,0,0,0,0,0,0;A=0.;>`, `<lora:chunli:1.0:1.0:LBW=0,0,0,0,0,0,0,0,0,0,A,B,0,0,0,0,0;A=0.5;B=0.2;>`, `<lora:chunli:1.0:1.0:LBW=SD-MIDD;>`
+  * `LoraWildcardSource` - Select LoRA entries from `.txt` categories in the configured custom wildcard directory, apply their LoRAs and encode the prompt. Supports `fixed`, `random`, `sequential`, and `batch` modes. Optional samples are kept outside the scanned directories to preserve existing wildcards. (See [Detailed Documentation](docs/LORA_WILDCARD_SOURCE.md))
+
 
 
 ### Regional Sampling
@@ -402,10 +404,12 @@ NOTE: The UltralyticsDetectorProvider node is not part of the ComfyUI-Impact-Pac
   * sam_editor_model: Specify the SAM model for the SAM editor.
     * You can download various SAM models using ComfyUI-Manager.
     * Path to SAM model: `ComfyUI/models/sams`
+  * `gpu_gaussian_blur` - defaults to `False` (CPU), also when absent. Keep it disabled when VRAM is not ample for the models you intend to use. If there is sufficient memory to spare beyond those models, set it to `True` to run mask blur on ComfyUI's selected compute device. Blur's temporary memory requirements depend on mask dimensions, kernel size and the convolution backend ([#1260](https://github.com/ltdrdata/ComfyUI-Impact-Pack/issues/1260)). Restart ComfyUI after changing this setting.
 ```
 [default]
 sam_editor_cpu = False
 sam_editor_model = sam_vit_b_01ec64.pth
+gpu_gaussian_blur = False
 ```
 
 

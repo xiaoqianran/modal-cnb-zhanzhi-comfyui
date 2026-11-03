@@ -1,0 +1,102 @@
+# CLAUDE.md
+
+## Primary Directive: Follow AGENT_GUIDE.md
+
+Before modifying, designing, or debugging any code in this repository, you **MUST** read and adhere to the guidelines, architectural boundaries, and recipes documented in [AGENT_GUIDE.md](AGENT_GUIDE.md).
+
+`AGENT_GUIDE.md` is the primary ground-truth technical specification for this repository. It defines:
+- The dual execution paradigms (ComfyUI canvas node graph vs. headless API prompt execution via the Video Builder).
+- The complete project map across all active core modules (`core/`, `builder/`, `runner/`, `llm/`, `minimax/`, `post_process/`, `storyboard/`, `prompt_creator/`, `general/`, `browser/`, `web/`, `agent_api/`, `mcp_server/`).
+- Strict separation of concerns (SoC) rules.
+- PEP 8 coding standards and repository-specific conventions.
+- Developer recipes for adding nodes, routes, runner pipelines, and frontend features.
+
+### Operating the app through the API or MCP (not editing code)
+
+If the task is to *use* the Video Builder through `/vrgdg/api/v1` or the MCP server rather than change this repository:
+- Read [Api_Endpoints.md](Api_Endpoints.md) first. It lists every endpoint and what it does.
+- Follow [MUSIC_VIDEO_AGENT_PROMPT.md](MUSIC_VIDEO_AGENT_PROMPT.md) to turn a song into a finished video.
+- Never load, unload or switch the LLM model in LM Studio. Call `llm_active` and use what is loaded.
+- Run one GPU job at a time and wait for each job (`job_wait` or `GET /jobs/{id}`) before the next.
+
+---
+
+## Critical Rules & Invariants
+
+1. **Keep standalone nodes in their separate repository**:
+   - Standalone node packs are maintained in [VRGDG_CustomNodePack](https://github.com/vrgamegirl19/VRGDG_CustomNodePack). Do not vendor them back into this repository or import their implementation from the core runtime.
+   - Work strictly within the active core submodules defined in `_VRGDG_SUBMODULES` in [__init__.py](__init__.py).
+
+2. **Atomic Disk Operations**:
+   - **Never** write state files (e.g., `vrgdg_builder_session.json`, `storyboard.json`, settings) using raw `open(path, 'w')`.
+   - **Always** use `atomic_write_json` or `atomic_write_text` from `core.atomic_write` to prevent corruption on unexpected termination.
+
+3. **No Blocking on Event Loop**:
+   - Server routes on `PromptServer.instance.routes` are asynchronous.
+   - Never run blocking I/O, heavy CPU/GPU calculations, or synchronous subprocesses (`ffmpeg`, `nvidia-smi`) directly on the event loop. Always offload via `await asyncio.to_thread(...)`.
+
+4. **Globally Unique Node Names**:
+   - Node class names in `NODE_CLASS_MAPPINGS` must be globally unique across all submodules.
+   - Always run the node registration test after touching node mappings:
+     ```bash
+     ..\..\..\python_embeded\python.exe tests/test_node_registration.py
+     ```
+
+5. **Separation of Concerns**:
+   - **Canvas Nodes** (`nodes.py`): Only handle socket IO (`INPUT_TYPES`, `RETURN_TYPES`, `FUNCTION`). Delegate business logic to services.
+   - **HTTP Routes** (`routes.py`): Only parse payloads, validate parameters, invoke services, and return standard JSON envelopes (`{"ok": True, ...}` / `{"ok": False, "error": str(exc)}`).
+   - **Services** (`project.py`, `audio.py`, `media.py`, etc.): Implement pure business logic and disk operations.
+   - **Graph Compiler** (`runner/*.py`): Build ComfyUI `/prompt` API graph dictionaries independently of UI state.
+   - **Agent API** (`agent_api/`): Headless REST surface (`/vrgdg/api/v1`), background job manager, SSE progress streaming, and full pipeline orchestrator.
+   - **MCP Server** (`mcp_server/`, local-only and git-ignored): Standard I/O bridge exposing tools (T1–T67), resources, and prompt templates to LLM coding assistants.
+   - **Web UI** (`web/**/*.mjs`): Interact with the backend strictly via REST APIs and WebSockets; never directly access the filesystem.
+
+6. **Consistent Logging**:
+   - Prefix all stdout/stderr messages with `[VRGDG]` or `[VRGDG <Subsystem>]` (e.g., `[VRGDG Latent]`, `[VRGDG Clear Memory]`, `[VRGDG API]`).
+
+7. **Agent API & MCP Server Invariants**:
+   - **Agent API** is served at `/vrgdg/api/v1` and returns standard envelopes (`api_success` / `api_error`).
+   - Structural timeline mutations must preserve on-disk file numbering (`image_NNNN.png`, `video_NNNN.mp4`) using `TimelineJournal` rollback protection and `_renumber_scene_assets_after_insert` / `_removal`.
+   - Concurrency is protected via optimistic revision checking (`If-Match` header).
+   - **Keep the Python twins of UI logic in sync.** After changing a route, schema or error code run `..\..\..\python_embeded\python.exe scripts/export_openapi.py`. For a new or changed route also add its description to `DESCRIPTIONS` in `scripts/export_api_endpoints.py` and run it to refresh `Api_Endpoints.md`. After adding or renaming a MiniMax H3 setting in `web/music_video_builder/minimax_h3.mjs` run `node scripts/export_minimax_defaults.mjs`, and add any new render payload key to `minimax/settings_payload.py`. The contract and payload-parity tests fail until you do.
+   - **Every route needs a description.** Add `"METHOD /path": "what it does"` to `DESCRIPTIONS` in `scripts/export_api_endpoints.py`, then run it. It writes `Api_Endpoints.md` and `agent_api/endpoints.json`, stops if a route has no description, and `tests/test_api_endpoints_doc.py` fails while either file is stale. The MCP server builds an `api_*` tool for every endpoint without a named tool from `endpoints.json`, so the new route is reachable by agents with no further work.
+   - **MCP tools must call real routes.** A named tool in `mcp_server/tools.py` has to use a method and path that exist in the router. `tests/test_mcp_endpoints.py` checks this and that every endpoint has a tool.
+   - **Never change the LLM model.** API code uses the model that is already loaded in LM Studio (`agent_api/llm_runtime.py`). Naming a model that is not loaded makes LM Studio load it and unload the current one. Do not add code that loads, unloads or switches models.
+   - **API-written project files must match the Video Builder's.** Finish a scene render by trimming to the exact timeline length (`minimax_exact`, marked as the audio video) and then collecting `video_NNNN-audio.mp4`. Record it on the segment with `agent_api/scene_video.apply_scene_video()` so the timeline gets its picture and history. Reuse the Builder's own functions for naming and files. A project must open in the Video Builder as if it had been built there.
+   - Agent code must read and write the same session keys as the UI (`audio_path`, `minimax_h3_settings`, `flux_reference_builder.*_scene_map`). Never invent a parallel top-level key.
+   - The standalone `mcp_server/` uses zero external dependencies (Python stdlib only) and communicates over stdio JSON-RPC 2.0 with actionable Rule 5 error handling (`isError=True`, `next_steps`). Launch it with the entry file, `..\..\..\python_embeded\python.exe mcp_server\__main__.py` (or `start_mcp_server.bat`): the portable Python ignores the current folder, so `-m mcp_server` fails with it.
+
+---
+
+## Testing & Validation Commands
+
+Run tests using the portable Python environment located at `..\..\..\python_embeded\python.exe`:
+
+- **Verify node name uniqueness (no collisions)**:
+  ```bash
+  ..\..\..\python_embeded\python.exe tests/test_node_registration.py
+  ```
+
+- **Verify atomic write integrity**:
+  ```bash
+  ..\..\..\python_embeded\python.exe tests/test_atomic_write.py
+  ```
+
+- **Refresh the generated API files** after changing routes:
+  ```bash
+  ..\..\..\python_embeded\python.exe scripts/export_openapi.py
+  ..\..\..\python_embeded\python.exe scripts/export_api_endpoints.py
+  ```
+
+- **Run all unit tests**:
+  ```bash
+  ..\..\..\python_embeded\python.exe -m unittest discover -s tests -p "test_*.py"
+  ```
+
+---
+
+## Code Quality & Style
+
+- **Python**: Strict PEP 8 compliance. 4 spaces indentation, type annotations on function signatures, Google/Sphinx style docstrings, 3-block import ordering (standard library, third-party, local package).
+- **JavaScript**: Modern ES Modules (`.mjs`). Modular single-responsibility files in `web/music_video_builder/` and `web/storyboard_builder/`. Use `api.fetchApi(...)` for backend communication.
+- **Media Streaming**: Append `video_cache_bust` query parameters when serving scene videos or images so browser cache reuses unchanged frames during timeline scrubbing.

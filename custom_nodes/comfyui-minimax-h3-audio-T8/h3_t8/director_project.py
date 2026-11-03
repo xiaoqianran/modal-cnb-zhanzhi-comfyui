@@ -10,7 +10,12 @@ import os
 from pathlib import Path
 import re
 import threading
+import time
 import uuid
+
+from .director_keyframes import FIELD as KEYFRAME_FIELD, keyframe_asset_ids, resolve_keyframes, shot_clock, validate_keyframes
+from .director_controls import FIELD as CONTROL_FIELD, control_asset_ids, resolve_controls, validate_controls
+from .director_sampling_settings import lora_interpretation, lora_strength
 
 SCHEMA = "t8.minimax_h3.director_project"
 VERSION = 2
@@ -73,7 +78,18 @@ def atomic_json(path, value):
             stream.write(canonical(value))
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        # Windows readers can briefly deny DELETE sharing even though they do
+        # not modify the destination. Keep the same fsynced temporary payload
+        # and atomic replace; at most 250ms scheduled backoff, never an unlink
+        # or non-atomic write. Persistent ACL denials and other errors still fail.
+        for delay in (0.01, 0.02, 0.04, 0.08, 0.1, None):
+            try:
+                os.replace(temporary, path)
+                break
+            except OSError as error:
+                if delay is None or getattr(error, 'winerror', None) not in (5, 32, 33):
+                    raise
+                time.sleep(delay)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -180,12 +196,12 @@ def generation_settings(doc):
     for row in rows:
         if not isinstance(row, dict) or not isinstance(row.get("name"), str) or not isinstance(row.get("enabled", True), bool):
             raise ValueError("LoRA 条目需要模型名称、强度和启用开关")
-        strength = _number(row.get("strength", 1.0), "LoRA 强度", -2)
-        if strength > 2:
-            raise ValueError("LoRA 强度必须在 -2–2 之间")
+        strength = lora_strength(row.get("strength", 1.0))
         if mode == "manual" and row.get("enabled", True) and not row["name"]:
             raise ValueError("请选择已启用条目的 LoRA 文件")
-        result["loras"].append({"name": row["name"], "strength": strength, "enabled": row.get("enabled", True)})
+        result["loras"].append({"name": row["name"], "strength": strength, "enabled": row.get("enabled", True),
+                                **({"id": deepcopy(row["id"])} if "id" in row else {}),
+                                **lora_interpretation(row)})
     mp = raw.get("resolution_mp", "auto")
     if mp != "auto":
         try:
@@ -277,15 +293,15 @@ def validate_project(value):
             if not isinstance(value, (str, list)) or (isinstance(value, list) and not all(isinstance(item, str) for item in value)):
                 raise ValueError("模型配置 lora 必须是文字或文字列表")
         if "lora_strength" in generation:
-            _number(generation["lora_strength"], "lora_strength", 0)
-            if generation["lora_strength"] > 2:
-                raise ValueError("lora_strength 必须 ≤ 2")
+            lora_strength(generation["lora_strength"])
         generation_settings(doc)
     from .director_sampling_settings import effective_sampling, normalize_sampling
     normalize_sampling(doc.get("sampling"))
     ids = []
     for shot in doc["shots"]:
         ids.append(identity(shot.get("id")))
+        validate_keyframes(shot.get(KEYFRAME_FIELD), identity)
+        validate_controls(shot.get(CONTROL_FIELD), identity)
         effective_sampling(doc, shot)
         if shot.get("mode") not in {"text", "first", "ends", "refs"} or shot.get(
             "sound"
@@ -359,13 +375,20 @@ def validate_project(value):
     return project
 
 
-def referenced_assets(project, *, evidence_context=None):
+def referenced_assets(project, *, evidence_context=None, include_controls=True):
     result = set(project["doc"]["sharedRefs"])
     for shot in project["doc"]["shots"]:
         result.update(shot["tray"] + shot["refs"])
-        result.update(
-            shot[key] for key in ("first", "last", "audio", "selected") if shot.get(key)
-        )
+        result.update(keyframe_asset_ids(shot))
+        if include_controls:
+            result.update(control_asset_ids(shot))
+        result.update(shot[key] for key in ("first", "last", "audio") if shot.get(key))
+        selected = shot.get("selected")
+        # Previewing a control-only draft must not turn it into an ordinary
+        # generation dependency. Genuine first/ref/tray/audio uses above stay
+        # strict, and old projects without controls keep their exact behavior.
+        if selected and (include_controls or selected not in control_asset_ids(shot)):
+            result.add(selected)
         if shot.get('sourceEvidence'):
             from .director_radar import _packet_media
             result.update(row['asset_id'] for row in _packet_media(shot['sourceEvidence']['packet']))
@@ -567,7 +590,10 @@ class ProjectStore:
                 from .director_radar import validate_history_progress
                 validate_history_progress(previous, project)
             # Client metadata is never trusted as a filesystem or media authority.
-            referenced = referenced_assets(project)
+            # Control selections are editable drafts, not executable authority.
+            # Preserve missing control-only sources for explicit reconnection;
+            # a simultaneous first/ref/tray use retains its existing checks.
+            referenced = referenced_assets(project, include_controls=False)
 
             def saved_asset(asset):
                 try:
@@ -599,6 +625,21 @@ class ProjectStore:
         return project
 
 
+def _control_stages(doc, shot):
+    from .director_sampling_settings import effective_sampling
+    sampling = effective_sampling(doc, shot)
+    if sampling["mode"] == "single" or (
+        sampling["mode"] == "hyperflow" and sampling["variant"] == "single8"
+    ):
+        return ("single",)
+    if sampling["mode"] == "hyperflow" and sampling.get(
+        "stage_checkpoint", {}
+    ).get("mode") == "resume_tail":
+        # The frozen HEAD owns LOW; only the current TAIL is executed.
+        return ("high",)
+    return ("low", "high")
+
+
 def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
     from .director_sampling_settings import effective_sampling
     project = validate_project(value)
@@ -619,7 +660,10 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
         project["current"] = shot_id
     assets = {a["id"]: a for a in project["assets"]}
     errors, warnings, shots = [], [], []
-    referenced = referenced_assets(project, evidence_context=candidate_project)
+    referenced = referenced_assets(project, evidence_context=candidate_project, include_controls=False)
+    for selected_shot in project["doc"]["shots"]:
+        for stage in _control_stages(project["doc"], selected_shot):
+            referenced.update(control_asset_ids(selected_shot, active=True, stage=stage))
     for asset_id in assets:
         if store:
             try:
@@ -642,7 +686,20 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
             number, name = shot_positions[sid]
             errors.append({"shot_id": sid, "shot_number": number, "shot_name": name, "field": field, "message": message})
 
+        try:
+            clock = shot_clock(shot, assets)
+        except ValueError as error:
+            fail(str(error), "timing")
+            clock = shot_clock({**shot, "manualDuration": .001, "autoDuration": False, "sound": "native"})
+        duration = clock["requested_seconds"]
+        active_events = shot["events"] if shot["writingMode"] == "advanced" else []
         shared = list(dict.fromkeys(doc["sharedRefs"]))
+        middle = []
+        if shot.get(KEYFRAME_FIELD):
+            try:
+                middle = resolve_keyframes(shot, assets, clock=clock)
+            except ValueError as error:
+                fail(str(error), KEYFRAME_FIELD)
         tray = list(
             dict.fromkeys(
                 shared
@@ -650,6 +707,7 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
                 + [x for x in (shot.get("first"), shot.get("last")) if x]
                 + shot["refs"]
                 + ([shot["audio"]] if shot.get("audio") else [])
+                + keyframe_asset_ids(shot)
             )
         )
         if any(x not in assets for x in tray):
@@ -670,11 +728,14 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
         )
         first = shot.get("first") if shot["mode"] in {"first", "ends"} else None
         last = shot.get("last") if shot["mode"] == "ends" else None
+        recording_middle = shot["sound"] == "record" and shot["mode"] == "first" and first
+        if middle and not (first and (last or recording_middle)):
+            fail("中间关键帧需要首尾模式的首帧和尾帧，或原音驱动的首帧模式；请补全端点或关闭中间图", KEYFRAME_FIELD)
         if shot["mode"] == "first" and not first:
             fail("请添加首帧")
         if shot["mode"] == "ends" and not last:
             fail("请添加尾帧（首帧可留空作仅尾帧）")
-        if shot["mode"] == "refs" and not refs and shot["sound"] != "voice":
+        if shot["mode"] == "refs" and not refs and shot["sound"] not in {"voice", "record"}:
             fail("请分配参考素材")
         selected_audio = shot.get("audio") if shot["sound"] != "native" else None
         if shot["sound"] != "native" and (
@@ -694,10 +755,9 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
             refs.append(selected_audio)
         if shot["sound"] == "record":
             refs = [aid for aid in refs if aid != first]
-            if not first or last or refs:
-                fail(
-                    "原音驱动使用已验收的Avatar单段首帧配方；需一张首帧，不叠加尾帧或其他参考。复杂组合请回高级画布"
-                )
+            # The native factory accepts source audio alongside exact frames
+            # and reference media. Visual-mode endpoints and actual media
+            # contracts remain checked independently of this audio choice.
         typed = {"image": [], "video": [], "audio": []}
         for aid in refs:
             kind = assets.get(aid, {}).get("kind")
@@ -718,20 +778,21 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
                     }
                 )
         media, id_to_native = [], {}
-        pictures = [x for x in (first, last) if x] + typed["image"]
-        for index, aid in enumerate(pictures, 1):
+        timeline_images = ([(first, "first_frame", None, clock["delivery_start_frame"])] if first else [])
+        timeline_images += [(item["asset_id"], "middle_keyframe", item["id"], item["frame_index"]) for item in middle]
+        timeline_images += ([(last, "last_frame", None, clock["delivery_end_frame"] - 1)] if last else [])
+        timeline_images.sort(key=lambda item: item[3])
+        picture_entries = [(aid, role, uid) for aid, role, uid, _ in timeline_images]
+        picture_entries += [(aid, "ref_image", None) for aid in typed["image"]]
+        pictures = [aid for aid, _, _ in picture_entries]
+        for index, (aid, role, keyframe_id) in enumerate(picture_entries, 1):
             if assets.get(aid, {}).get("kind") != "image":
                 fail("首尾或图片参考不是图片")
-            role = (
-                "first_frame"
-                if aid == first and index == 1
-                else "last_frame"
-                if aid == last and index <= int(bool(first)) + 1
-                else "ref_image"
-            )
             native = f"<Picture {index}>"
             id_to_native.setdefault(aid, native)
             media.append({"asset_id": aid, "role": role, "native": native})
+            if keyframe_id:
+                media[-1]["keyframe_id"] = keyframe_id
         audio_ordinal = 0
         for index, aid in enumerate(typed["video"], 1):
             native = f"<Video {index}>"
@@ -785,18 +846,6 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
                     fail(f"{match.group(0)} 没有对应的生效素材槽，请核对引用", "prompt")
             return translated
 
-        duration = shot["manualDuration"]
-        active_events = shot["events"] if shot["writingMode"] == "advanced" else []
-        if shot["autoDuration"]:
-            if active_events:
-                duration = max(e["end"] for e in active_events)
-            elif shot["sound"] == "record" and selected_audio:
-                duration = shot["end"] - shot["start"]
-        if duration <= 0:
-            fail("时长必须大于0", "timing")
-            duration = 0.001
-        requested = max(5, math.ceil(duration * 24))
-        frames = requested + ((5 - requested) % 17)
         events = []
         for event in active_events:
             if event["end"] <= event["start"] or event["end"] > duration:
@@ -921,11 +970,21 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
         )
         recipe = (
             "avatar_single_segment_progressive_lock_source"
+            if shot["sound"] == "record" and first and not last and not refs
+            else "native_reference_lock_source"
             if shot["sound"] == "record"
             else "native_ref_voice_stock20"
             if shot["sound"] == "voice"
             else "native_h3"
         )
+        controls = []
+        if shot.get(CONTROL_FIELD) is not None:
+            for stage in _control_stages(doc, shot):
+                try:
+                    controls.extend(resolve_controls(shot, assets, stage=stage,
+                        asset_root=store.input_root if store is not None else None))
+                except (ValueError, OSError) as error:
+                    fail(f"{stage.upper()}：{error}", CONTROL_FIELD)
         shots.append(
             {
                 "id": sid,
@@ -943,14 +1002,7 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
                 "events": events,
                 "timeline_start": timeline_start,
                 "timeline_end": timeline_start + duration,
-                "time": {
-                    "fps": 24,
-                    "requested_seconds": duration,
-                    "requested_frames": requested,
-                    "aligned_frames": frames,
-                    "generated_seconds": frames / 24,
-                    "delivery_trim_frames": math.ceil(duration * 24),
-                },
+                "time": dict(clock),
                 "canvas": {
                     "ratio": ratio,
                     "requested_megapixels": resolution_mp,
@@ -983,6 +1035,18 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
                 ],
             }
         )
+        if first or last:
+            shots[-1]["keyframe_endpoints"] = {
+                "first_frame_index": clock["delivery_start_frame"] if first else -1,
+                "last_frame_index": clock["delivery_end_frame"] - 1 if last else -1}
+        if shot.get(KEYFRAME_FIELD) is not None:
+            shots[-1]["middle_keyframes"] = middle
+            for item in middle:
+                if not item["visible_in_delivery"]:
+                    warnings.append({"shot_id": sid, "field": KEYFRAME_FIELD,
+                        "message": f"关键帧{item['id']}位于生成帧{item['frame_index']}，不在最终交付范围；保留显式生成时轴选择"})
+        if controls:
+            shots[-1]["control_regions"] = controls
         timeline_start += duration
     report = {
         "schema": "t8.minimax_h3.director_compilation.v1",
@@ -997,5 +1061,9 @@ def compile_project(value, store=None, *, shot_id=None, candidate_context=None):
         "gpu_queued": False,
         "scope": "Project compilation contract; generation is submitted only by the explicit D2 route",
     }
+    if any("middle_keyframes" in shot for shot in shots):
+        report["extensions"] = {"middle_keyframes": 1}
+    if any(shot.get("control_regions") for shot in shots):
+        report.setdefault("extensions", {})["control_regions_v1"] = True
     report["compilation_sha256"] = sha(report)
     return report

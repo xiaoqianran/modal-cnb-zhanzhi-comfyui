@@ -125,7 +125,8 @@ class LogSession {
 }
 class Rgthree extends EventTarget {
     constructor() {
-        var _a, _b, _c, _d;
+        var _a, _b, _c;
+        var _d;
         super();
         this.api = api;
         this.settingsDialog = null;
@@ -178,9 +179,9 @@ class Rgthree extends EventTarget {
         var _a;
         const response = await rgthreeApi.fetchJson("/incompatible-extensions");
         console.log(response);
-        if ((_a = response === null || response === void 0 ? void 0 : response.extensions) === null || _a === void 0 ? void 0 : _a.includes('ComfyUI_Swwan')) {
+        if ((_a = response === null || response === void 0 ? void 0 : response.extensions) === null || _a === void 0 ? void 0 : _a.includes("ComfyUI_Swwan")) {
             setTimeout(() => {
-                rgthreeApi.print('COMFYUI_SWWAN');
+                rgthreeApi.print("COMFYUI_SWWAN");
                 rgthree.showMessage({
                     id: "bad-ComfyUI_Swwan",
                     type: "warn",
@@ -195,8 +196,8 @@ class Rgthree extends EventTarget {
                                 event.stopPropagation();
                                 event.preventDefault();
                                 rgthree.hideMessage("bad-ComfyUI_Swwan");
-                            }
-                        }
+                            },
+                        },
                     ],
                 });
             }, 5000);
@@ -233,7 +234,7 @@ class Rgthree extends EventTarget {
                         const nodeId = (_a = this.progressBarEl) === null || _a === void 0 ? void 0 : _a.currentNodeId;
                         if (nodeId) {
                             const [canvas, graph] = await Promise.all([waitForCanvas(), waitForGraph()]);
-                            const node = graph.getNodeById(Number(nodeId));
+                            const node = graph.getNodeById(String(nodeId));
                             if (node) {
                                 canvas.centerOnNode(node);
                                 e.stopPropagation();
@@ -559,7 +560,7 @@ class Rgthree extends EventTarget {
             clean && clean.apply(app, [...arguments]);
         };
         const loadGraphData = app.loadGraphData;
-        app.loadGraphData = function (graph) {
+        app.loadGraphData = function (graph, ...args) {
             if (rgthree.monitorLinkTimeout) {
                 clearTimeout(rgthree.monitorLinkTimeout);
                 rgthree.monitorLinkTimeout = null;
@@ -576,8 +577,9 @@ class Rgthree extends EventTarget {
                 var _a, _b, _c;
                 const wasLoadingAborted = (_b = (_a = document
                     .querySelector(".comfy-modal-content")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.includes("Loading aborted due");
-                const graphToUse = wasLoadingAborted ? graphCopy || graph : app.graph;
-                const fixer = WorkflowLinkFixer.create(graphToUse);
+                const fixer = wasLoadingAborted
+                    ? WorkflowLinkFixer.create(graphCopy || graph)
+                    : WorkflowLinkFixer.create(app.graph);
                 const fixBadLinksResult = fixer.check();
                 if (fixBadLinksResult.hasBadLinks) {
                     const [n, v] = rgthree.logParts(LogLevel.WARN, `The workflow you've loaded has corrupt linking data. Open ${new URL(location.href).origin}/rgthree/link_fixer to try to fix.`);
@@ -604,7 +606,8 @@ class Rgthree extends EventTarget {
                                                 if (!fixBadLinksResult.hasBadLinks) {
                                                     rgthree.hideMessage("bad-links");
                                                     alert("Success! It's possible some valid links may have been affected. Please check and verify your workflow.");
-                                                    wasLoadingAborted && app.loadGraphData(fixBadLinksResult.graph);
+                                                    wasLoadingAborted &&
+                                                        app.loadGraphData(fixBadLinksResult.graph);
                                                     if (CONFIG_SERVICE.getConfigValue("features.monitor_for_corrupt_links") ||
                                                         CONFIG_SERVICE.getConfigValue("features.monitor_bad_links")) {
                                                         rgthree.monitorLinkTimeout = setTimeout(() => {
@@ -636,7 +639,8 @@ class Rgthree extends EventTarget {
         };
     }
     getNodeFromInitialGraphToPromptSerializedWorkflowBecauseComfyUIBrokeStuff(node) {
-        var _a, _b, _c;
+        var _a, _b;
+        var _c;
         return ((_c = (_b = (_a = this.initialGraphToPromptSerializedWorkflowBecauseComfyUIBrokeStuff) === null || _a === void 0 ? void 0 : _a.nodes) === null || _b === void 0 ? void 0 : _b.find((n) => n.id === node.id)) !== null && _c !== void 0 ? _c : null);
     }
     async showMessage(data) {

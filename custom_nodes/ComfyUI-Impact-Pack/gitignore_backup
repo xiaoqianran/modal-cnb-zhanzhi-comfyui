@@ -10,3 +10,11 @@ impact_subpack
 !requirements.txt
 !LICENSE.txt
 .claude/
+.pair-cowork
+!tests/pytest.ini
+!tests/wildcards/samples/아름다운색.txt
+!tests/wildcards/samples/test_encoding_emoji.txt
+!tests/wildcards/samples/test_encoding_special.txt
+!tests/wildcards/lora_samples/*.txt
+!tests/wildcards/model_samples/*.txt
+!example_workflows/wildcards/styles.txt

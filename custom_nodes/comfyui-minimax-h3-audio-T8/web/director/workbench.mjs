@@ -14,6 +14,9 @@ import { createStoryboardDialog } from './storyboard_ui.mjs';
 import { createCreationLibrary } from './creation_ui.mjs';
 import { createRadarDialog } from './radar_ui.mjs';
 import { directorTaskLabel } from './session.mjs';
+import { configurationEvidenceText } from './candidate_diagnostics.mjs';
+import {middleAssetIds,middleRows} from './keyframes_state.mjs';
+import {controlAssetIds} from './control_state.mjs';
 export function createDirectorWorkbench(ctx) {
     const { root, doc, shot, assets, results, videos } = ctx;
     const $ = selector => root.querySelector(selector);
@@ -121,6 +124,31 @@ export function createDirectorWorkbench(ctx) {
     readiness.innerHTML='<summary data-draft-status></summary><p class="o-tip">自动检查仅看当前草稿，不读取模型、不提交任务。文件与尺寸请手动预检；依赖另查。</p><ul data-draft-issues></ul><div class="o-row"><button type="button" data-action="check">文件与尺寸预检</button><button type="button" data-service="d3-preflight">依赖检查</button></div>';
     readiness.querySelector('[data-draft-issues]').addEventListener('click',e=>{const button=e.target.closest('[data-draft-field]');if(button)focusIssue(button.dataset.draftField);});
     editor.append(readiness);
+    const configuration=document.createElement('details');
+    configuration.className='w-readiness w-configuration';
+    configuration.innerHTML='<summary>本镜配置与证据</summary><p class="o-tip">分开查看草稿计划、选中版本冻结配置和结果记录。只读，不保存、不采用、不排队。</p><button type="button" data-configuration-refresh>更新只读摘要</button><pre data-configuration-text role="status">点击更新，读取当前镜头及选中版本。</pre>';
+    let configurationSequence=0,configurationSignature=null;
+    const configurationIdentity=()=>JSON.stringify([ctx.radar.context(),ctx.radar.snapshot(),ctx.resultKey(results().get(shot().id)),results().get(shot().id)]);
+    const configurationText=configuration.querySelector('[data-configuration-text]');
+    function invalidateConfiguration(){
+        if(configurationSignature!==null&&configurationSignature!==configurationIdentity()){
+            configurationSequence++;configurationSignature=null;
+            configurationText.textContent='草稿或所选版本已变化，请更新只读摘要；旧报告未沿用。';
+        }
+    }
+    configuration.addEventListener('toggle',()=>{
+        if(!configuration.open){configurationSequence++;configurationSignature=null;configurationText.textContent='点击更新，读取当前镜头及选中版本。';}
+    });
+    configuration.querySelector('[data-configuration-refresh]').addEventListener('click',async()=>{
+        const sequence=++configurationSequence,signature=configurationIdentity();configurationSignature=signature;
+        configurationText.textContent='读取当前草稿与所选版本…';
+        try{
+            const report=await ctx.configurationEvidence(results().get(shot().id));
+            if(sequence!==configurationSequence||!configuration.open||signature!==configurationIdentity())return;
+            configurationText.textContent=report?configurationEvidenceText(report):'上下文已变化，请重新更新；旧报告未显示。';
+        }catch(error){if(sequence===configurationSequence&&configuration.open&&signature===configurationIdentity())configurationText.textContent='未读取：'+error.message;}
+    });
+    editor.append(configuration);
     workspace.prepend(shots, editor);
 
     const mediaWorkbench = $('.o-media-workbench');
@@ -165,7 +193,7 @@ export function createDirectorWorkbench(ctx) {
     const compareButton=document.createElement('button');compareButton.type='button';compareButton.dataset.compareOpen='';compareButton.textContent='A/B 对比';
     compareButton.addEventListener('click',()=>comparison.open(ctx.resultKey(results().get(shot().id))));versionBar.querySelector('.o-row').append(compareButton);
     const tabs = $('.o-viewbar .o-tabs');
-    const film=createFilmViewer({root,prepare:ctx.prepareFilm,notify:ctx.notify,locate:ctx.locateShot,escape:ctx.esc,startExport:ctx.startFilmExport,exportStatus:ctx.filmExportStatus});
+    const film=createFilmViewer({root,prepare:ctx.prepareFilm,notify:ctx.notify,locate:ctx.locateShot,escape:ctx.esc,startExport:ctx.startFilmExport,exportStatus:ctx.filmExportStatus,saveCaptions:ctx.prepareFilmCaptions,captionStatus:ctx.filmCaptionStatus,importSpeechTrack:ctx.importFilmSpeechTrack,captionASR:ctx.captionASR,maskAuthor:ctx.maskAuthor});
     const filmButton=document.createElement('button');filmButton.type='button';filmButton.dataset.filmOpen='';filmButton.textContent='整片串播';filmButton.addEventListener('click',()=>film.open());tabs.append(filmButton);
     tabs.prepend($('[data-view="output"]'));
     $('[data-view="input"]').textContent = '输入预览';
@@ -225,11 +253,13 @@ export function createDirectorWorkbench(ctx) {
         syncSummary(); syncPanels();
     }
     function syncSummary() {
+        invalidateConfiguration();
         const s=shot();
         const seedField=$('[data-shot-seed]');
         if(document.activeElement!==seedField){seedField.value=String(s.seed??26091901);seedField.setCustomValidity('');}
         $('[data-workbench-heading]').textContent='第 '+String(doc().shots.indexOf(s)+1).padStart(2,'0')+' 镜';
-        const mode={text:'文字',first:'首帧',ends:'首尾',refs:'参考素材'}[s.mode];
+        const count=middleRows(s,true).length;
+        const mode={text:'文字',first:'首帧',ends:'首尾',refs:'参考素材'}[s.mode]+(count?` · ${count} 中间帧`:'');
         const audio={native:'模型生成声音',record:'音频驱动',voice:'参考音色'}[s.sound];
         const samplingSummary=directorSamplingSummary(doc(),s);
         const tiles=[['source','画面来源',mode],['audio','声音',audio],['timing','时长',s.duration+' 秒'],['timing','画幅',s.ratio+(doc().sharedRatio?' · 全片共用':' · 本镜')]];
@@ -303,6 +333,7 @@ export function createDirectorWorkbench(ctx) {
         const button=$('[data-service="generate-selected"]');button.textContent='生成选中镜头（'+count+'）';button.disabled=!count;
     }
     function syncPreview() {
+        invalidateConfiguration();
         const view=ctx.view();
         $$('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===view)));
         // Background completions update only the result pane, not the prompt editor.
@@ -312,7 +343,7 @@ export function createDirectorWorkbench(ctx) {
         const select=versionBar.querySelector('[data-result-version]');
         const options=records.map((item,index)=>{
             const date=item.submitted_at?new Date(item.submitted_at*1000).toLocaleString():'时间未记录';
-            const state=item.origin==='external'&&item.state==='success'?'外部成片 · 不可重采样':({success:'已生成',error:'失败',pending:'生成中',cancelled:'已取消'}[item.state]||'待核对');
+            const state=item.origin==='external'&&item.state==='success'?'外部成片 · 不可重采样':(item.state==='success'?'已生成':directorTaskLabel(item.state));
             return `<option value="${ctx.esc(ctx.resultKey(item))}">${ctx.esc(`${records.length-index} · ${date} · ${state}`)}</option>`;
         }).join('');
         if(select.dataset.options!==options){select.innerHTML='<option value="" disabled>选择一个版本</option>'+options;select.dataset.options=options;}
@@ -338,7 +369,11 @@ export function createDirectorWorkbench(ctx) {
     }
     function focusIssue(field) {
         let target;
-        if(['source','audio','timing','d3'].includes(field)){
+        if(field==='controlRegions'){
+            activePanel='source';syncPanels();target=$('[data-control-editor]');
+        }else if(field==='middleKeyframes'){
+            activePanel='source';syncPanels();target=$('[data-middle-editor]');
+        }else if(['source','audio','timing','d3'].includes(field)){
             activePanel=field;syncPanels();
             target=$(`[data-workbench-section="${field}"]`);
         }else if(field==='global')target=$('[data-global-zone]');
@@ -352,6 +387,6 @@ export function createDirectorWorkbench(ctx) {
     createDirectorLayout(root,layoutMenu.querySelector('.w-menu-body'));
     createReferenceCandidates(root,{context:ctx.referenceContext,choices:ctx.referenceChoices,insert:ctx.insertReference});
     const tasks=createTaskDrawer(root,{context:ctx.taskContext,load:ctx.loadTasks,shots:()=>doc().shots,escape:ctx.esc,label:directorTaskLabel,notify:ctx.notify,locate:ctx.locateTask});
-    function filterLibrary(){createLibraryFilters($('[data-dialog]'),{assets,shared:()=>doc().sharedRefs||[],bound:()=>[...new Set([...(doc().sharedRefs||[]),...(shot().tray||[]),...(shot().refs||[]),shot().first,shot().last,shot().audio].filter(Boolean))]});}
+    function filterLibrary(){createLibraryFilters($('[data-dialog]'),{assets,shared:()=>doc().sharedRefs||[],bound:()=>[...new Set([...(doc().sharedRefs||[]),...(shot().tray||[]),...(shot().refs||[]),shot().first,shot().last,shot().audio,...middleAssetIds(shot()),...controlAssetIds(shot())].filter(Boolean))]});}
     return {syncInspector,syncSummary,syncAssets,syncShots,syncPreview,focusIssue,filterLibrary,openTasks:tasks.open};
 }

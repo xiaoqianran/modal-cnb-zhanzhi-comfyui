@@ -1,5 +1,45 @@
 # Changelog
 
+## v1.4.29
+
+- Motion transfer: Motion Collect now queues the film's next segment itself, right behind the running prompt at the front of the queue. A task queued during a film waits until the film is finished instead of running in between and mixing up the run state, and switching workflow tabs no longer queues the wrong workflow. The browser only queues as a fallback, and progress updates only touch the workflow the run belongs to.
+- Media node: several files dropped onto a card (or picked at once) fill that card and the ones after it in file-name order (2 before 10); files of another type are skipped and files past the last card are dropped.
+
+## v1.4.28
+
+- Media video cards now default to 720P: a source whose short edge is above 720 is read at 720P, a smaller one keeps its own size. This also applies to cards whose settings were never opened. A card explicitly set to 原始 keeps the original size; Media Bridge and linked videos are not limited.
+- Short-edge presets now land exactly on their value (1080p at 720P gives 1280x720 instead of 1280x704), and a source at or below the preset is no longer resized.
+
+## v1.4.27
+
+- Removes GGUF transformer and text encoder support, so Easy H3 no longer needs ComfyUI-GGUF. Workflows that selected a `.gguf` model need a `.safetensors` model instead. Local GGUF prompt-optimizer models are unaffected.
+- Motion transfer: audio cards can follow each shot block's time range.
+- Fixes old video-card players that kept playing after a card was replaced or removed, which caused overlapping sound.
+
+## v1.4.26
+
+- The LoRA loader no longer needs rgthree-comfy: its widgets, row drawing and LoRA list are now built in, so it no longer shows up blank when rgthree-comfy is missing.
+- Corrects the example workflow notes and guide: rgthree-comfy is only needed by the rgthree nodes kept in Two-Stage Sampling v8.
+
+## v1.4.25
+
+- Adds two example workflows: **Two-Stage Sampling v8** and **One-Click Long Video Replacement v1**. Reference media and previews are cleared; each workflow has notes for node and model downloads and for usage.
+- Updates the workflow guide with the required nodes, the KJNodes version note, and the cloud drive, Bilibili and YouTube links.
+
+## v1.4.24
+
+- Adds motion transfer / person swap from a shot md: **FeiHou Easy H3 Shot Prompts** (drop or pick a md, `start` 自动续接 / 从头开始 / 手动设置, 镜号 widget, md path remembered), **Motion Segment** and **Motion Collect**. One queue runs every block, saves each block and joins the film; interrupted runs resume. Run state lives in `input/feihou_h3_motion` (with an in-memory fallback); a finished film drops its tails and state, and files older than 48 h are pruned (`segment_*.mp4` are never deleted).
+- Shot md directives: `@range`, `@pictures`, `@continue`, `@split` (in-block segments of at most 15 s), `@passthrough` / `@原片` (source frames, no sampling), `@sound 原声/生成`, `@video none`, header `@hold` (hold the reference video's first frame, silent) and `@first N`.
+- Motion Segment: one or two passes is detected from the graph (its `h3_context` output feeding a 2nd Sample Enhancer means two-pass, with `first_steps`); `frame_window` switch (off = the whole video in one run); `segment_frames` shown with seconds; `reference_soundtrack` 送入模型 / 不送入模型; seed removed (noise comes from the workflow). Context-window sampling is in the code but switched off for now.
+- Motion Collect outputs the joined film audio at 48 kHz stereo and can colour-match to the source per shot.
+- Media node: per-type external sockets (`image_N`, `video_N` + `video_N_audio`, `audio_N`) that grow as you connect and renumber on disconnect; a connected input overrides the card of the same number. Video cards get 媒体设置 (frame window, frame rate); image previews are top-aligned; the node no longer grows on tab switches.
+- Prompt templates: the motion template is split into 小肥猴H3人物替换 (background stays the video's and is described explicitly) and 小肥猴H3动作迁移 (background from the scene picture, the user's text or the person picture, described in detail; the video's framing and camera move are copied), each in English and Chinese.
+- Windows: serves files without aiohttp sendfile, which stalls on some machines (Media cards stuck at 上传中, previews and scripts never arriving).
+
+- Adds the shot-md directive `@first N` (`@首帧 N`): picture card N becomes the block's first frame (a keyframe at frame 0, kept in the output) when the block has no previous tail, e.g. a dance block run on its own. The card is only a keyframe, not a reference picture, so it need not be in `@pictures`. A continued block with a tail keeps the tail; both passes and context windows (first window) get the anchor.
+- Adds Motion Segment `segmentation` (分段方式) = 上下文窗口 with `context_window_frames` / `context_overlap_frames`: a long shot block with reference video is denoised in one sampler run; at every step overlapping 17-frame-aligned windows are predicted with their own reference-video window (pictures and prompt in every window) and blended over the overlaps, so no window continues from decoded frames. Works for single sampling and for both passes of the two-pass chain (2nd Sample Enhancer rebuilds the same windows at its canvas). Talk blocks without reference video keep 接续; the default stays 接续.
+- Motion Collect decodes such a block in clip-aligned pieces (identical frames) and keeps 8-bit frames meanwhile.
+
 ## v1.4.23
 
 - Expands automatic duration alignment to Video 1-3 and Audio 1-3, using each selected source's trimmed duration.

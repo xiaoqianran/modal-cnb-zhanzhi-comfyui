@@ -5,7 +5,7 @@ import { LogLevel, rgthree } from "./rgthree.js";
 import { addHelpMenuItem } from "./utils.js";
 import { RgthreeHelpDialog } from "../../rgthree/common/dialog.js";
 import { importIndividualNodesInnerOnDragDrop, importIndividualNodesInnerOnDragOver, } from "./feature_import_individual_nodes.js";
-import { defineProperty, moveArrayItem } from "../../rgthree/common/shared_utils.js";
+import { defineProperty, findPrototypePropertyDescriptor, moveArrayItem, } from "../../rgthree/common/shared_utils.js";
 export class RgthreeBaseNode extends LGraphNode {
     constructor(title = RgthreeBaseNode.title, skipOnConstructedCall = true) {
         super(title);
@@ -32,18 +32,56 @@ export class RgthreeBaseNode extends LGraphNode {
             }
             this.checkAndRunOnConstructed();
         });
+        const protoMode = findPrototypePropertyDescriptor(this, "mode");
+        const readMode = () => (protoMode === null || protoMode === void 0 ? void 0 : protoMode.get) ? protoMode.get.call(this) : this.rgthree_mode;
         defineProperty(this, "mode", {
-            get: () => {
-                return this.rgthree_mode;
-            },
+            get: () => readMode(),
             set: (mode) => {
-                if (this.rgthree_mode != mode) {
-                    const oldMode = this.rgthree_mode;
+                const oldMode = readMode();
+                if (protoMode === null || protoMode === void 0 ? void 0 : protoMode.set) {
+                    protoMode.set.call(this, mode);
+                }
+                else {
                     this.rgthree_mode = mode;
+                }
+                if (oldMode != mode) {
                     this.onModeChange(oldMode, mode);
                 }
             },
         });
+    }
+    getPropString(key, fallback) {
+        var _a;
+        let prop = (_a = this.properties) === null || _a === void 0 ? void 0 : _a[key];
+        if (typeof prop !== 'string') {
+            if (fallback === undefined) {
+                throw new Error(`Property ${key} is not string`);
+            }
+            prop = fallback;
+        }
+        return prop;
+    }
+    getPropNumber(key, fallback) {
+        var _a;
+        let prop = (_a = this.properties) === null || _a === void 0 ? void 0 : _a[key];
+        if (typeof prop !== 'number') {
+            if (fallback === undefined) {
+                throw new Error(`Property ${key} is not number`);
+            }
+            prop = fallback;
+        }
+        return prop;
+    }
+    getPropBool(key, fallback) {
+        var _a;
+        let prop = (_a = this.properties) === null || _a === void 0 ? void 0 : _a[key];
+        if (typeof prop !== 'boolean') {
+            if (fallback === undefined) {
+                throw new Error(`Property ${key} is not boolean`);
+            }
+            prop = fallback;
+        }
+        return prop;
     }
     checkAndRunOnConstructed() {
         var _a;
@@ -86,7 +124,6 @@ export class RgthreeBaseNode extends LGraphNode {
         if ((cloned === null || cloned === void 0 ? void 0 : cloned.properties) && !!window.structuredClone) {
             cloned.properties = structuredClone(cloned.properties);
         }
-        cloned.graph = this.graph;
         return cloned;
     }
     onModeChange(from, to) {
@@ -219,15 +256,16 @@ export class RgthreeBaseServerNode extends RgthreeBaseNode {
         return ComfyWidgets;
     }
     async setupFromServerNodeData() {
-        var _a, _b, _c, _d, _e;
-        const nodeData = this.constructor.nodeData;
-        if (!nodeData) {
+        var _a, _b, _c;
+        var _d, _e;
+        const nodeDef = this.constructor.nodeDef || this.constructor.nodeData;
+        if (!nodeDef) {
             throw Error("No node data");
         }
-        this.comfyClass = nodeData.name;
-        let inputs = nodeData["input"]["required"];
-        if (nodeData["input"]["optional"] != undefined) {
-            inputs = Object.assign({}, inputs, nodeData["input"]["optional"]);
+        this.comfyClass = nodeDef.name;
+        let inputs = nodeDef["input"]["required"];
+        if (nodeDef["input"]["optional"] != undefined) {
+            inputs = Object.assign({}, inputs, nodeDef["input"]["optional"]);
         }
         const WIDGETS = this.getWidgets();
         const config = {
@@ -268,12 +306,12 @@ export class RgthreeBaseServerNode extends RgthreeBaseNode {
                 }
             }
         }
-        for (const o in nodeData["output"]) {
-            let output = nodeData["output"][o];
+        for (const o in nodeDef["output"]) {
+            let output = nodeDef["output"][o];
             if (output instanceof Array)
                 output = "COMBO";
-            const outputName = nodeData["output_name"][o] || output;
-            const outputShape = nodeData["output_is_list"][o]
+            const outputName = nodeDef["output_name"][o] || output;
+            const outputShape = nodeDef["output_is_list"][o]
                 ? LiteGraph.GRID_SHAPE
                 : LiteGraph.CIRCLE_SHAPE;
             this.addOutput(outputName, output, { shape: outputShape });
@@ -293,6 +331,7 @@ export class RgthreeBaseServerNode extends RgthreeBaseNode {
             rgthreeClass.__registeredForOverride__ = true;
             rgthreeClass.nodeType = comfyClass;
             rgthreeClass.nodeData = nodeData;
+            rgthreeClass.nodeDef = nodeData;
             rgthreeClass.onRegisteredForOverride(comfyClass, rgthreeClass);
         }
     }
@@ -300,7 +339,7 @@ export class RgthreeBaseServerNode extends RgthreeBaseNode {
     }
 }
 RgthreeBaseServerNode.nodeType = null;
-RgthreeBaseServerNode.nodeData = null;
+RgthreeBaseServerNode.nodeDef = null;
 RgthreeBaseServerNode.__registeredForOverride__ = false;
 const OVERRIDDEN_SERVER_NODES = new Map();
 const oldregisterNodeType = LiteGraph.registerNodeType;

@@ -37,6 +37,9 @@ from .director_generation import (
     queue_director_prompt,
 )
 from .director_workflow_export import export_director_split_workflow
+from .director_outcomes import (
+    AmbiguousPrompt, receipt_owner, require_unique_prompt, scan_request_receipts, terminal_payload,
+)
 from .director_capabilities import inspect_director_capabilities
 from .director_d3 import export_d3_package, handoff_d3_route, inspect_d3_routes
 from .director_batch import (
@@ -51,30 +54,77 @@ _GENERATE_LOCK = asyncio.Lock()
 _CORE_EPOCH = str(uuid.uuid4())
 _FILM_EXPORT_LOCK = asyncio.Lock()
 _FILM_EXPORT_TASKS = {}
+_FILM_ASR_TASKS = {}
+_FILM_ASR_LOCK = asyncio.Lock()
 _DIRECTOR_UI_MODULES = frozenset((
-    "assets_ui.mjs", "bundle_ui.mjs", "candidate_diagnostics.mjs", "compare_ui.mjs",
+    "assets_ui.mjs", "bundle_ui.mjs", "candidate_diagnostics.mjs", "caption_ui.mjs", "compare_ui.mjs",
     "content_hash.mjs", "continuity_recipes.mjs", "creation_library.mjs", "creation_ui.mjs",
-    "film_ui.mjs", "frame_ui.mjs", "layout_ui.mjs", "modal_ui.mjs", "preflight_ui.mjs",
+    "control_state.mjs", "control_ui.mjs", "control_ui.css",
+    "film_ui.mjs", "mask_author_ui.mjs", "frame_ui.mjs", "layout_ui.mjs", "modal_ui.mjs", "preflight_ui.mjs",
+    "keyframes_state.mjs", "keyframes_ui.mjs", "keyframes_ui.css",
     "radar_state.mjs", "radar_ui.mjs", "references_ui.mjs", "sampling_ui.mjs", "session.mjs",
     "storyboard_ui.mjs", "tasks_ui.mjs", "trim_ui.mjs", "workbench.mjs", "workbench.css",
 ))
 
 
+def _director_prompt_receipt(store, prompt_id):
+    """Find one original owner; completed or ambiguous matches still count."""
+    records, prompts = scan_request_receipts(store)
+    if not prompts.get(prompt_id):
+        return None
+    require_unique_prompt(prompts, prompt_id)
+    path, receipt = next((path, receipt) for path, receipt in records.items()
+                         if isinstance(receipt, dict) and receipt.get("prompt_id") == prompt_id)
+    if receipt.get("state") != "queued":
+        return None
+    receipt_owner(receipt)
+    return path, receipt
+
+
+def _observe_director_job(store, prompt_id):
+    """Observe and persist under the caller's generation lock, not UI ownership.
+
+    No tracker, generation or project edit is performed. Missing/ambiguous
+    receipts do not acquire an inferred owner. Atomic write failures propagate.
+    """
+    try:
+        match = _director_prompt_receipt(store, prompt_id)
+    except ValueError as error:
+        return {"prompt_id": prompt_id, "state": "needs_review", "outputs": {}, "integrity_error": str(error)}
+    if match is not None:
+        path, receipt = match
+        terminal = receipt.get("terminal")
+        if terminal is not None:
+            payload = terminal_payload(terminal)
+            if payload is None:
+                return {"prompt_id": prompt_id, "state": "needs_review", "outputs": {},
+                        "integrity_error": "已保存终态损坏；没有用当前 Core 状态覆盖原回执。"}
+            return {"prompt_id": prompt_id, **payload, "progress": None,
+                    "recovered_by": "request_receipt"}
+    observed = director_job_status(prompt_id)
+    state = observed.get("state") if isinstance(observed, dict) else None
+    if isinstance(state, str) and state in {"success", "error", "cancelled"}:
+        payload = terminal_payload(observed)
+        if payload is None:
+            return {"prompt_id": prompt_id, "state": "needs_review", "outputs": {},
+                    "integrity_error": "Core 终态输出形状损坏；没有写入完成回执。"}
+        if match is not None:
+            receipt["terminal"] = payload
+            atomic_json(path, receipt)
+    return observed
+
+
 def _record_deleted_queue_receipt(store, prompt_id):
     """Persist only a confirmed queue deletion, never a running interruption."""
-    matches = []
-    request_dir = contained(store.root, "requests")
-    for path in request_dir.glob("*.json") if request_dir.is_dir() else ():
-        try:
-            receipt = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError):
-            continue
-        if (isinstance(receipt, dict) and receipt.get("prompt_id") == prompt_id
-                and receipt.get("state") == "queued" and receipt.get("terminal") is None):
-            matches.append((path, receipt))
-    if len(matches) != 1:
+    try:
+        match = _director_prompt_receipt(store, prompt_id)
+    except AmbiguousPrompt:
         return False
-    path, receipt = matches[0]
+    if match is None:
+        return False
+    path, receipt = match
+    if receipt.get("terminal") is not None:
+        return False
     receipt["terminal"] = {"state": "cancelled", "outputs": {}}
     receipt["cancelled_at"] = time.time()
     atomic_json(path, receipt)
@@ -82,6 +132,10 @@ def _record_deleted_queue_receipt(store, prompt_id):
 
 
 def _resolve_director_resource(folder, name):
+    if folder == "fun_control_selection":
+        from .h3_fun_control_advanced import _resolve_fun_control_path
+
+        return _resolve_fun_control_path(name)[0]
     if folder == "hyperflow_selection":
         from .nodes_hyperflow_advanced import _resolve
 
@@ -179,7 +233,8 @@ def director_result_snapshot(store, project_id, request_id):
     if (snapshot.get("project", {}).get("id") != project_id
             or snapshot.get("shot_id") != receipt.get("shot_id")):
         raise ValueError("版本配置快照身份不匹配")
-    return {"complete": True, "sha256": receipt["snapshot_sha256"], "snapshot": snapshot}
+    return {"complete": True, "sha256": receipt["snapshot_sha256"], "snapshot": snapshot,
+            "project_id": project_id, "request_id": request_id, "prompt_id": receipt.get("prompt_id")}
 
 
 def copy_version_project(store, project_id, request_id, new_project_id):
@@ -231,34 +286,63 @@ def director_project_results(store, project_id, status_lookup=director_job_statu
     in Core's output directory and is served by Core's normal /view route.
     """
     project_id = identity(project_id)
+    receipts, prompts = scan_request_receipts(store)
     from .director_bundle import imported_results
     records = imported_results(store, project_id, output_root)
     from .director_external import external_results
     records.extend(external_results(store, project_id, output_root))
-    for path in (store.root / "requests").glob("*.json"):
+    for path, receipt in receipts.items():
+        pending_write = None
         try:
-            receipt = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(receipt, dict):
+                continue
             result = receipt.get("result") or {}
+            if not isinstance(result, dict):
+                continue
             report = result.get("report") or {}
+            if not isinstance(report, dict):
+                continue
             owner = receipt.get("project_id") or report.get("project_id")
             if owner != project_id or receipt.get("state") != "queued":
                 continue
-            shot_id = receipt.get("shot_id") or (report.get("selection") or {}).get("shot_id")
+            selection = report.get("selection") or {}
+            shot_id = receipt.get("shot_id") or (selection.get("shot_id") if isinstance(selection, dict) else None)
             if not shot_id:
                 continue
             prompt_id = identity(receipt["prompt_id"])
+            owner_error = None
+            try:
+                require_unique_prompt(prompts, prompt_id)
+                receipt_owner(receipt)
+            except ValueError as error:
+                owner_error = str(error)
             terminal = receipt.get("terminal")
-            if terminal is None:
-                current = status_lookup(prompt_id)
-                if current.get("state") in {"success", "error"}:
-                    terminal = {"state": current["state"], "outputs": current.get("outputs") or {}}
-                    receipt["terminal"] = terminal
-                    atomic_json(path, receipt)
+            observed = None if owner_error else (terminal if terminal is not None else status_lookup(prompt_id))
+            state, outputs = "needs_review" if owner_error else "unknown", {}
+            terminal_states = {"success", "error", "cancelled"}
+            if isinstance(observed, dict):
+                observed_state = observed.get("state")
+                if isinstance(observed_state, str) and observed_state in terminal_states:
+                    raw_outputs = observed.get("outputs", {})
+                    if isinstance(raw_outputs, dict):
+                        state, outputs = observed_state, raw_outputs
+                    else:
+                        state = "needs_review"
+                elif terminal is None and isinstance(observed_state, str) and observed_state in {"queued", "running"}:
+                    state = observed_state
+                elif terminal is not None:
+                    state = "needs_review"
+            elif terminal is not None:
+                state = "needs_review"
+            if terminal is None and state in terminal_states:
+                terminal = terminal_payload(observed)
+                receipt["terminal"] = terminal
+                pending_write = receipt
             records.append({
                 "shot_id": shot_id,
                 "prompt_id": prompt_id,
-                "state": terminal["state"] if terminal else "pending",
-                "outputs": terminal.get("outputs", {}) if terminal else {},
+                "state": state,
+                "outputs": outputs,
                 "recipe": result.get("recipe", "director"),
                 "submitted_at": receipt.get("submitted_at") or path.stat().st_mtime,
                 "shot_rev": receipt.get("shot_rev"),
@@ -266,9 +350,19 @@ def director_project_results(store, project_id, status_lookup=director_job_statu
                 "seed": result.get("seed"),
                 "snapshot_available": isinstance(receipt.get("snapshot"), dict),
             })
-        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            if state == "needs_review":
+                records[-1]["integrity_error"] = owner_error or "生成回执的终态结构需核对；没有自动重发或把它当作可播放的成功片。"
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
             # A damaged unrelated receipt must not hide the remaining films.
             continue
+        if pending_write is not None:
+            # Reading an unrelated bad receipt may be skipped; failure to save
+            # an actually observed terminal must not masquerade as success.
+            atomic_json(path, pending_write)
+            if not receipt.get("submitted_at"):
+                # Preserve the legacy mtime sorting behavior after the atomic
+                # write, as before; do not invent a request timestamp.
+                records[-1]["submitted_at"] = path.stat().st_mtime
     if output_root is not None:
         # Older Director tasks predate request receipts. Their SafeAVSave prefix
         # is deterministic: T8_Director/<project UUID first 8>/<shot UUID first 8>.
@@ -282,8 +376,9 @@ def director_project_results(store, project_id, status_lookup=director_job_statu
             for record in records
             for output in record["outputs"].values()
             if isinstance(output, dict)
-            for item in (output.get("images") or [])
-            if isinstance(item, dict)
+            for item in (output["images"] if isinstance(output.get("images"), (list, tuple)) else ())
+            if isinstance(item, dict) and isinstance(item.get("filename"), str)
+            and (item.get("subfolder") is None or isinstance(item.get("subfolder"), str))
         }
         for raw_shot_id in shot_ids:
             shot_id = identity(raw_shot_id)
@@ -408,7 +503,7 @@ def register_director_routes():
         import hashlib
         import json
         from .director_project import canonical
-        from .director_radar import candidate_diagnostics
+        from .director_radar import candidate_diagnostics, configuration_plan
         if request.content_length is None or request.content_length > 2 * 1024**2:
             raise ValueError('只读检查请求需要已知长度且不超过2MiB')
         body = await request.json()
@@ -428,6 +523,7 @@ def register_director_routes():
         preview = compile_project(project, shot_id=shot['id'])
         selected = next((row for row in preview['shots'] if row['id'] == shot['id']), {})
         return web.json_response({'candidate': candidate_diagnostics(project, shot),
+            'effective_config': configuration_plan(project, selected),
             'reference_slots': [{key: row.get(key) for key in ('asset_id', 'role', 'native', 'sha256')}
                                 for row in selected.get('media_map', [])],
             'reference_aliases': selected.get('aliases', []), 'time_plan': selected.get('time'),
@@ -713,9 +809,11 @@ def register_director_routes():
     @routes.get(PREFIX + "/jobs/{prompt_id}")
     @guarded
     async def job(request):
-        return web.json_response(
-            director_job_status(request.match_info["prompt_id"])
-        )
+        async with _GENERATE_LOCK:
+            observed = await asyncio.to_thread(
+                _observe_director_job, get_store(), request.match_info["prompt_id"],
+            )
+        return web.json_response(observed)
 
     @routes.get(PREFIX + "/results/{project_id}")
     @guarded
@@ -757,8 +855,9 @@ def register_director_routes():
         body = await request.json()
         project = validate_project(body['project'])
         store, output = get_store(), folder_paths.get_output_directory()
-        records = await asyncio.to_thread(director_project_results, store, project['id'],
-                                         shot_ids=[shot['id'] for shot in project['doc']['shots']], output_root=output)
+        async with _GENERATE_LOCK:
+            records = await asyncio.to_thread(director_project_results, store, project['id'],
+                                             shot_ids=[shot['id'] for shot in project['doc']['shots']], output_root=output)
         result = await asyncio.to_thread(prepare_bundle, store, project, records['results'], output,
                                          body.get('include_results', True), include_radar=body.get('include_radar', False))
         return web.json_response(result)
@@ -854,6 +953,171 @@ def register_director_routes():
                                          request.match_info['film_id'], body['index'], body['frame'])
         return web.json_response(result)
 
+    @routes.get(PREFIX + "/films/{project_id}/{film_id}/mask-frames/{index}/{frame}")
+    @guarded
+    async def mask_author_frame_route(request):
+        from .director_mask_author import preview_frame
+        info = request.match_info
+        result = await asyncio.to_thread(preview_frame, get_store(), info['project_id'], info['film_id'],
+                                         int(info['index']), int(info['frame']))
+        return web.json_response(result)
+
+    @routes.get(PREFIX + "/films/{project_id}/{film_id}/masks/{index}/{author_id}")
+    @guarded
+    async def mask_author_load_route(request):
+        from .director_mask_author import load_author
+        info = request.match_info
+        result = await asyncio.to_thread(load_author, get_store(), info['project_id'], info['film_id'],
+                                         int(info['index']), info['author_id'])
+        return web.json_response(result)
+
+    @routes.post(PREFIX + "/films/{project_id}/{film_id}/masks/{index}/{author_id}")
+    @guarded
+    async def mask_author_save_route(request):
+        from .director_mask_author import save_author
+        info = request.match_info
+        body = await request.json()
+        result = await asyncio.to_thread(save_author, get_store(), info['project_id'], info['film_id'],
+                                         int(info['index']), info['author_id'], body)
+        return web.json_response(result)
+
+    @routes.post(PREFIX + "/films/{project_id}/{film_id}/masks/{index}/{author_id}/export")
+    @guarded
+    async def mask_author_export_route(request):
+        from .director_mask_author import export_author
+        from .director_project import file_sha
+        info = request.match_info
+        path = await asyncio.to_thread(export_author, get_store(), info['project_id'], info['film_id'],
+                                       int(info['index']), info['author_id'])
+        receipt = json.loads(path.with_suffix('.json').read_text(encoding='utf-8'))
+        return web.json_response({'ready': True, 'sha256': await asyncio.to_thread(file_sha, path),
+                                  'author_sha256': receipt['author_sha256']})
+
+    @routes.get(PREFIX + "/films/{project_id}/{film_id}/masks/{index}/{author_id}/file")
+    @guarded
+    async def mask_author_download_route(request):
+        from .director_mask_author import export_file
+        info = request.match_info
+        path = await asyncio.to_thread(export_file, get_store(), info['project_id'], info['film_id'],
+                                       int(info['index']), info['author_id'], request.query.get('sha'))
+        return web.FileResponse(path, headers={'Content-Disposition': 'attachment; filename="frame-masks.zip"'})
+
+    @routes.get(PREFIX + "/caption-asr/models")
+    @guarded
+    async def caption_asr_models(request):
+        from .director_caption_asr import model_catalog
+        return web.json_response(await asyncio.to_thread(model_catalog))
+
+    @routes.post(PREFIX + "/films/{project_id}/{film_id}/captions/asr/{job_id}")
+    @guarded
+    async def caption_asr_start(request):
+        from .director_caption_asr import reserve_asr, run_asr, interrupt_asr
+        body = await request.json()
+        args = tuple(identity(request.match_info[key]) for key in ('project_id', 'film_id', 'job_id'))
+        store = get_store()
+        async with _FILM_ASR_LOCK:
+            job, created = await asyncio.to_thread(reserve_asr, store, *args, body)
+            if created:
+                async def work():
+                    failure = None
+                    try:
+                        await asyncio.to_thread(run_asr, store, *args)
+                        return None
+                    except asyncio.CancelledError:
+                        from .director_caption_asr import cancel_asr
+                        # to_thread cancellation alone cannot stop native code.
+                        # Persist cancellation so its owned process is reaped.
+                        cancel_asr(store, *args)
+                        raise
+                    except Exception as error:
+                        failure = {'state': 'error', 'error': str(error), 'status_persisted': False}
+                        return failure
+                    finally:
+                        if failure is None:
+                            _FILM_ASR_TASKS.pop(args[2], None)
+                _FILM_ASR_TASKS[args[2]] = asyncio.create_task(work())
+            elif job['state'] in {'queued', 'running'} and args[2] not in _FILM_ASR_TASKS:
+                job = await asyncio.to_thread(interrupt_asr, store, *args)
+        return web.json_response(job, status=202 if created else 200)
+
+    @routes.get(PREFIX + "/films/{project_id}/{film_id}/captions/asr/{job_id}")
+    @guarded
+    async def caption_asr_progress(request):
+        from .director_caption_asr import asr_status, recognized_track, interrupt_asr
+        args = tuple(request.match_info[key] for key in ('project_id', 'film_id', 'job_id'))
+        store = get_store()
+        job = await asyncio.to_thread(asr_status, store, *args)
+        task = _FILM_ASR_TASKS.get(args[2])
+        if job['state'] in {'queued', 'running'}:
+            if task is None or task.cancelled():
+                job = await asyncio.to_thread(interrupt_asr, store, *args)
+            elif task.done():
+                failure = task.result()
+                if isinstance(failure, dict):
+                    job = {**job, **failure}
+        if job['state'] == 'success':
+            job = {**job, **await asyncio.to_thread(recognized_track, store, *args)}
+        return web.json_response(job)
+
+    @routes.post(PREFIX + "/films/{project_id}/{film_id}/captions/asr/{job_id}/cancel")
+    @guarded
+    async def caption_asr_cancel(request):
+        from .director_caption_asr import cancel_asr
+        args = tuple(request.match_info[key] for key in ('project_id', 'film_id', 'job_id'))
+        return web.json_response(await asyncio.to_thread(cancel_asr, get_store(), *args))
+
+    @routes.post(PREFIX + "/films/{project_id}/{film_id}/captions/speech-track")
+    @guarded
+    async def film_caption_speech_track(request):
+        from .director_captions import INPUT_SCHEMA, _compile, track_from_speech_report
+        from .director_film import load_film
+        body = await request.json()
+        def prepare_track():
+            film = load_film(get_store(), request.match_info['project_id'], request.match_info['film_id'])
+            entry = next((entry for entry in film['entries'] if entry['shot_id'] == body['shot_id']), None)
+            if entry is None:
+                raise ValueError('请选择冻结整片中的镜头')
+            track = track_from_speech_report(entry, body['report'], confirmed_media_match=body.get('confirm_media_match'))
+            _compile(film, {'schema': INPUT_SCHEMA, 'film_sha256': film['sha256'], 'tracks': [track]})
+            return track
+        return web.json_response(await asyncio.to_thread(prepare_track))
+
+    @routes.post(PREFIX + "/films/{project_id}/{film_id}/captions/{caption_id}")
+    @guarded
+    async def film_caption_prepare(request):
+        from .director_captions import prepare_captions
+        body = await request.json()
+        result, created = await asyncio.to_thread(
+            prepare_captions, get_store(),
+            *(request.match_info[key] for key in ('project_id', 'film_id', 'caption_id')), body,
+        )
+        return web.json_response(result, status=201 if created else 200)
+
+    @routes.get(PREFIX + "/films/{project_id}/{film_id}/captions/{caption_id}")
+    @guarded
+    async def film_caption_manifest(request):
+        from .director_captions import load_captions
+        result = await asyncio.to_thread(
+            load_captions, get_store(),
+            *(request.match_info[key] for key in ('project_id', 'film_id', 'caption_id')),
+        )
+        return web.json_response(result)
+
+    @routes.get(PREFIX + "/films/{project_id}/{film_id}/captions/{caption_id}/file/{format}")
+    @guarded
+    async def film_caption_download(request):
+        from .director_captions import caption_file
+        format = request.match_info['format']
+        path = await asyncio.to_thread(
+            caption_file, get_store(),
+            *(request.match_info[key] for key in ('project_id', 'film_id', 'caption_id')), format,
+        )
+        mime = 'text/vtt' if format == 'vtt' else 'application/x-subrip'
+        return web.FileResponse(path, headers={
+            'Content-Type': mime + '; charset=utf-8',
+            'Content-Disposition': f'attachment; filename="director-captions.{format}"',
+        })
+
     @routes.post(PREFIX + "/films/{project_id}/{film_id}/exports/{job_id}")
     @guarded
     async def film_export_start(request):
@@ -868,10 +1132,18 @@ def register_director_routes():
             job, created = await asyncio.to_thread(reserve_export, store, owner, film_id, job_id, body)
             if created:
                 async def work():
+                    failure = None
                     try:
                         await asyncio.to_thread(run_export, store, owner, film_id, job_id)
+                    except Exception as error:
+                        # A failed final JSON write cannot record its own error.
+                        # Retain only a small result on this completed task, not
+                        # an exception/traceback; GET still validates disk identity.
+                        failure = {'state': 'error', 'error': str(error), 'status_persisted': False}
+                        return failure
                     finally:
-                        _FILM_EXPORT_TASKS.pop(job_id, None)
+                        if failure is None:
+                            _FILM_EXPORT_TASKS.pop(job_id, None)
                 _FILM_EXPORT_TASKS[job_id] = asyncio.create_task(work())
         return web.json_response(job)
 
@@ -881,8 +1153,14 @@ def register_director_routes():
         from .director_film_export import export_status
         args = tuple(request.match_info[key] for key in ('project_id', 'film_id', 'job_id'))
         job = await asyncio.to_thread(export_status, get_store(), *args)
-        if job['state'] in {'queued', 'running'} and args[2] not in _FILM_EXPORT_TASKS:
-            job = {**job, 'state': 'interrupted', 'error': 'Core 已重启或导出进程不在当前实例；未自动重新编码，请明确另起导出。'}
+        if job['state'] in {'queued', 'running'}:
+            task = _FILM_EXPORT_TASKS.get(args[2])
+            if task is None or task.cancelled():
+                job = {**job, 'state': 'interrupted', 'error': 'Core 已重启或导出进程不在当前实例；未自动重新编码，请明确另起导出。'}
+            elif task.done():
+                failure = task.result()
+                if isinstance(failure, dict) and failure.get('state') == 'error':
+                    job = {**job, 'state': 'error', 'error': failure['error'], 'status_persisted': False}
         return web.json_response(job)
 
     @routes.get(PREFIX + "/films/{project_id}/{film_id}/exports/{job_id}/file")
@@ -1048,6 +1326,27 @@ def register_director_routes():
         return web.FileResponse(
             Path(__file__).resolve().parents[1] / "web" / "director" / "radar_state.mjs"
         )
+
+    @routes.get(PREFIX + "/candidate_diagnostics.mjs")
+    async def candidate_diagnostics_module(_request):
+        return web.FileResponse(Path(__file__).resolve().parents[1] / "web/director/candidate_diagnostics.mjs")
+
+    @routes.get(PREFIX + "/content_hash.mjs")
+    async def content_hash_module(_request):
+        return web.FileResponse(Path(__file__).resolve().parents[1] / "web/director/content_hash.mjs")
+
+    @routes.get(PREFIX + "/keyframes_state.mjs")
+    async def keyframes_state(_request):
+        # session.mjs is served both at PREFIX and under /ui-modules/.
+        return web.FileResponse(
+            Path(__file__).resolve().parents[1] / "web" / "director" / "keyframes_state.mjs"
+        )
+
+    @routes.get(PREFIX + "/control_state.mjs")
+    async def control_state(_request):
+        # session/radar_state are also served directly at PREFIX, not only
+        # /ui-modules. Their relative dependency must work on a cold browser.
+        return web.FileResponse(Path(__file__).resolve().parents[1] / "web/director/control_state.mjs")
 
     @routes.get(PREFIX + "/default")
     async def default(_request):

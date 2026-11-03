@@ -24,3 +24,56 @@
 不可静默删除用户显式选择，也不能恢复未知组合硬禁令。
 
 ClipProj 的 quantization 字段只描述 CLIP 编码器；不能据此宣布 DiT 支持 NVFP4、RotNVFP4 或任何底模格式。
+
+## 可选文件 alpha 与重复前缀解释
+
+LoRA Compatibility Loader 保留原三输入／两输出，新增的两个高级可选项缺省不改变旧数值：
+
+- `file_alpha_policy=legacy_tensor_only`：仍只用张量内逐 key alpha；不自动信任文件 metadata。
+- 显式 `metadata_alpha_per_rank`：对完整、实际映射、无歧义的普通线性 A/B，缺逐 key alpha 时，
+  读取 `ss_network_alpha`，除以实际矩阵 rank。逐 key alpha（包括零／负值）始终优先。
+  文件 alpha 的零在此模式就是零，不猜训练器把零当 rank 的其它约定。`ss_network_dim` 如提供须与
+  被解释的实际 rank 一致；坏或非有限的已选值具体报错。未使用的 metadata 不影响原加载。
+- `prefix_policy=legacy` 保留旧映射；显式 `unique_double_prefix` 只为完整且尺寸匹配的线性对增加
+  一个现有唯一目标的双 `diffusion_model.` 前缀别名。不改源 key、不从不同 namespace 拼 A/B，
+  不覆盖已有 LoRA、dense 或 set-weight consumer；歧义保持原 payload 并报告未应用。
+
+文件 metadata 可能记录配置值而非训练实际缩放；选择解释不授予训练来源或模型效果认证。
+固定 producer 的[配置写入](https://github.com/Oxen-AI/ai-toolkit/blob/f8552a40989da8e9c095ed883b63a631c5999485/toolkit/metadata.py#L90)
+与 [PEFT 实际 alpha 重置](https://github.com/Oxen-AI/ai-toolkit/blob/f8552a40989da8e9c095ed883b63a631c5999485/toolkit/lora_special.py#L397)
+展示了这一源码风险，不据此猜测用户文件的真实训练强度。
+报告 `alpha_interpretation`／`prefix_interpretation` 列明使用或跳过的来源，用户 strength、顺序、
+LOW/HIGH 选择不变。split-QKV 在融合 rank 前处理各分量；特殊算法及未知内容继续交原 Core，
+不把未解释写成已生效。`disabled` 不读文件，也不验证未使用的解释选项。
+
+## 实际实例的 Core／精度合同观察
+
+已有环境兼容审计的 `environment.runtime_contracts` 会分别列出已加载 Core 模块路径、当前磁盘 SHA、
+FinalLayer／prefetch cleanup／视频 VAE／融合 linear 的实际 callable 签名，以及已安装发行包版本。
+缺少模块保持未知，不为检查自动导入 Sage、Triton 或其它内核，更不会升级／下载环境。
+
+`precision` 将 DiT 调制／scaling 与 VAE 的 FP16 fast accumulation 分列；启动 fast 参数、FP16
+累加 opt-in 和内核符号存在都只是状态，不证明当前 dtype／设备分支已执行。也不按 Turing、其它
+设备或版本名单禁止用户运行。磁盘 SHA 不认证内存字节码，CPU 观察不认证 Turing 或 GPU 数值。
+
+该静态快照不猜执行／委托次数。需要采样后的 Spark、Veda 或缓存 Audit 报告确认实际命中；
+安装层数、包版本和一次成片返回都不能替代调用证据。审计不会改变底模、LoRA 顺序、dtype 或后端。
+
+## 当前 Core 原生缓存的定向实测
+
+2026-10-22 在 RTX 4060 Ti 上串行完成 OFF、ON、ON＋诊断三组原生20步；各交付120帧、
+736×416、24fps联合音视频，完整RGB／PCM／时间戳与严格解码检查通过，画质与听感尚未人审。
+OFF实际1000次attention测量；两组ON各16次完整前向＋4次自然命中，共804次测量。
+这不是公平性能对比，也不把测量减少直接换算成提速比例。
+
+第三组在原20步完成后，另外执行8次同一真实输入的原生H3诊断前向，不是28步采样。
+Error／fresh／Interrupt／fresh四个外层请求均出现自然full→hit；实际异常对象正常传出，
+选项恢复且缓存释放。被动观察到非空CUDA预取队列和4次T8-owned HIT清理，清理后资源释放。
+这不等同用户点击取消的端到端验收，也不证明原20步输出的独立tensor A/B逐位保持。
+
+真实采样使用Core的 `Guider_Basic`（继承 `CFGGuider`）；附加诊断使用独立 `CFGGuider`。
+不能因审计脚本误把二者类名写成同一个而误报生成失败。仅校正私有证据收取，未改采样、
+权重、步数、sigma、环境或用户进程。原失败记录保留。
+
+本次范围不包含所有GGUF／FastVAE／外部解码器或任意组合认证；未知组合仍保留用户选择并委托，
+真实缺少API、尺寸、文件、缓存完整性错误仍正常报告。旧工作流及默认数学路径不变。

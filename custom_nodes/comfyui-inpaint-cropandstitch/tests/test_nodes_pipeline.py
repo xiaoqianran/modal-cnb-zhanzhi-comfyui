@@ -126,6 +126,120 @@ class TestNodesPipeline(unittest.TestCase):
         # Final image must be 3 channels
         self.assertEqual(final_image.shape, (1, 80, 80, 3))
 
+    def test_roundtrip_transparent_background_preserved(self):
+        # Issue #181: RGBA image with a fully transparent background and an opaque subject.
+        # Everything outside the blended area (color and alpha) must come back unchanged.
+        torch.manual_seed(0)
+        H, W = 150, 200
+        rgba_img = torch.rand(1, H, W, 4, dtype=torch.float32)
+        rgba_img[..., 3] = 0.0
+        rgba_img[:, 50:100, 50:150, 3] = 1.0
+        mask = torch.zeros(1, H, W, dtype=torch.float32)
+        mask[:, 65:85, 75:125] = 1.0
+
+        # Region safely outside mask + blend radius
+        outside = torch.ones(1, H, W, dtype=torch.bool)
+        outside[:, 30:120, 40:160] = False
+
+        for device_mode in ["cpu (compatible)", "gpu (much faster)"]:
+            for blend in [0, 16]:
+                args = self._default_crop_args(rgba_img.clone(), mask=mask, device_mode=device_mode, mask_blend_pixels=blend)
+                stitcher, cropped_image, _ = self.crop_node.inpaint_crop(**args)[:3]
+                self.assertEqual(cropped_image.shape[-1], 4)
+
+                for inpainted in [torch.rand_like(cropped_image), torch.rand_like(cropped_image[..., :3])]:
+                    with self.subTest(device_mode=device_mode, blend=blend, inpaint_channels=inpainted.shape[-1]):
+                        result = self.stitch_node.inpaint_stitch(stitcher, inpainted)[0]
+                        self.assertEqual(result.shape, rgba_img.shape)
+                        self.assertTrue(torch.allclose(result[outside], rgba_img[outside], atol=1e-5))
+                        # Masked area was actually changed
+                        self.assertFalse(torch.allclose(result[0, 75, 100, :3], rgba_img[0, 75, 100, :3]))
+
+    def _issue_181_scene(self, H=110, W=93):
+        # Mimics ComfyUI LoadImage on a transparent PNG with painted eyes:
+        # IMAGE is RGB (alpha dropped, black under transparency), MASK = 1 - alpha + painted area.
+        alpha = torch.zeros(1, H, W)
+        alpha[:, 20:100, 15:80] = 1.0                      # opaque character
+        alpha[:, 19, 15:80] = 0.5                          # a semi-transparent edge row
+        rgb = torch.zeros(1, H, W, 3)
+        rgb[:, 20:100, 15:80] = torch.tensor([0.9, 0.75, 0.7])
+        image = rgb
+        mask = 1.0 - alpha
+        mask[:, 40:46, 30:60] = 1.0                        # painted "eyes"
+        return image, mask, alpha
+
+    def _issue_181_model_output(self, cropped_image, cropped_mask):
+        # Simulated Qwen 2.1: transparent background (alpha 0, purple junk RGB),
+        # opaque character, eyes recolored blue.
+        out = torch.ones(cropped_image.shape[:3] + (4,))
+        out[..., :3] = cropped_image
+        background = cropped_image.sum(-1) < 0.05
+        out[..., :3][background] = torch.tensor([0.5, 0.1, 0.6])
+        out[..., 3][background] = 0.0
+        return out
+
+    def test_issue_181_qwen_transparent_output_keeps_alpha(self):
+        image, mask, alpha = self._issue_181_scene()
+        for device_mode in ["cpu (compatible)", "gpu (much faster)"]:
+            with self.subTest(device_mode=device_mode):
+                # Settings from the reporter's workflow: expand 8, blend 8, resize to 512, padding 32
+                args = self._default_crop_args(image.clone(), mask=mask.clone(), device_mode=device_mode,
+                                               mask_expand_pixels=8, mask_blend_pixels=8,
+                                               context_from_mask_extend_factor=1.0,
+                                               output_resize_to_target_size=True,
+                                               output_target_width=512, output_target_height=512,
+                                               output_padding=32)
+                stitcher, cropped_image, cropped_mask = self.crop_node.inpaint_crop(**args)[:3]
+                inpainted = self._issue_181_model_output(cropped_image, cropped_mask)
+                result = self.stitch_node.inpaint_stitch(stitcher, inpainted)[0]
+
+                self.assertEqual(result.shape, (1, 110, 93, 4))
+                # Background (well away from the character) is transparent again
+                self.assertLess(result[0, 5, 5, 3].item(), 0.05)
+                self.assertLess(result[0, 105, 88, 3].item(), 0.05)
+                # Character interior away from the mask: color unchanged and opaque
+                self.assertTrue(torch.allclose(result[0, 70, 47, :3], image[0, 70, 47], atol=1e-4))
+                self.assertAlmostEqual(result[0, 70, 47, 3].item(), 1.0, places=4)
+                # Everything stays within [0, 1]
+                self.assertTrue((result >= 0).all() and (result <= 1).all())
+
+    def test_issue_181_batch_mixed_transparency_stacks(self):
+        # One stitched image ends up RGBA (transparent output), the other stays RGB-equivalent:
+        # the batch must still come out as a single RGBA tensor, with the opaque one at alpha 1.
+        image, mask, _ = self._issue_181_scene()
+        args = self._default_crop_args(image, mask=mask)
+        stitcher, cropped_image, cropped_mask = self.crop_node.inpaint_crop(**args)[:3]
+        transparent = self._issue_181_model_output(cropped_image, cropped_mask)
+        opaque = transparent.clone()
+        opaque[..., 3] = 1.0
+        result = self.stitch_node.inpaint_stitch(stitcher, torch.cat([transparent, opaque]))[0]
+
+        self.assertEqual(result.shape, (2, 110, 93, 4))
+        self.assertLess(result[0, 5, 5, 3].item(), 0.05)
+        self.assertTrue(torch.all(result[1, ..., 3] == 1.0))
+
+    def test_roundtrip_semitransparent_with_resize_keeps_colors(self):
+        # Issue #181: resizing RGBA used to premultiply by alpha, turning colors in
+        # (semi-)transparent areas into noise. Crop with upscaling, stitch back the
+        # unmodified crop, and colors must survive at every alpha level.
+        H, W = 64, 64
+        rgba_img = torch.zeros(1, H, W, 4, dtype=torch.float32)
+        rgba_img[..., :3] = torch.tensor([0.8, 0.3, 0.5])
+        rgba_img[..., 3] = torch.linspace(0.0, 1.0, W)  # alpha gradient from fully transparent to opaque
+        mask = torch.zeros(1, H, W, dtype=torch.float32)
+        mask[:, 16:48, 8:56] = 1.0
+
+        for device_mode in ["cpu (compatible)", "gpu (much faster)"]:
+            with self.subTest(device_mode=device_mode):
+                args = self._default_crop_args(rgba_img.clone(), mask=mask, device_mode=device_mode,
+                                               output_resize_to_target_size=True, output_target_width=256, output_target_height=256)
+                stitcher, cropped_image, _ = self.crop_node.inpaint_crop(**args)[:3]
+                self.assertTrue(torch.allclose(cropped_image[..., :3], rgba_img[0, 0, 0, :3].expand_as(cropped_image[..., :3]), atol=0.01))
+
+                result = self.stitch_node.inpaint_stitch(stitcher, cropped_image)[0]
+                self.assertTrue(torch.allclose(result[..., :3], rgba_img[..., :3], atol=0.01))
+                self.assertTrue(torch.allclose(result[..., 3], rgba_img[..., 3], atol=0.02))
+
     def test_mask_dimensions_normalization(self):
         orig_img = torch.rand(1, 60, 60, 3, dtype=torch.float32)
 
@@ -291,6 +405,19 @@ class TestNodesPipeline(unittest.TestCase):
         stitcher, crop_im, crop_m = res[:3]
         # Mask is clamped and normalized into [0.0, 1.0]
         self.assertLessEqual(crop_m.max().item(), 1.0)
+
+    def test_blurred_mask_float_noise_does_not_fall_back_to_whole_image(self):
+        # Issue #182: a blurred mask peaking at 1.0000006 was divided by 255, the hipass
+        # filter then erased it, and the crop fell back to the whole image.
+        img = torch.rand(1, 200, 200, 3, dtype=torch.float32)
+        mask = torch.zeros(1, 200, 200, dtype=torch.float32)
+        mask[0, 90:110, 90:110] = 1.0000006
+        mask[0, 85:115, 85:115] = torch.maximum(mask[0, 85:115, 85:115], torch.tensor(0.5))
+        args = self._default_crop_args(img, mask=mask, mask_hipass_filter=0.1)
+        stitcher, crop_im, crop_m = self.crop_node.inpaint_crop(**args)[:3]
+        self.assertLess(crop_im.shape[1], 100)
+        self.assertLess(crop_im.shape[2], 100)
+        self.assertEqual(crop_m.max().item(), 1.0)
 
     def test_preresize_min_greater_than_max_swap(self):
         # Inverted min/max resolutions (min=800, max=400)

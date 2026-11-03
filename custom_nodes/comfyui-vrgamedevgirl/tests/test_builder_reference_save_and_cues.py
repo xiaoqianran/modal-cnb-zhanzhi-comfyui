@@ -1,0 +1,182 @@
+import ast
+import hashlib
+import importlib.util
+import json
+import os
+import re
+import tempfile
+import unittest
+from pathlib import Path
+
+from builder_source import function_source, read_builder_source, read_builder_backend_source
+
+
+ROOT = Path(__file__).resolve().parents[1]
+NODE_SOURCE = ROOT / "builder/nodes.py"
+UI_SOURCE = read_builder_source()
+ATOMIC_SPEC = importlib.util.spec_from_file_location("vrgdg_atomic_write", ROOT / "core/atomic_write.py")
+ATOMIC = importlib.util.module_from_spec(ATOMIC_SPEC)
+ATOMIC_SPEC.loader.exec_module(ATOMIC)
+
+
+def load_save_helpers():
+    tree = ast.parse(read_builder_backend_source(), filename=str(NODE_SOURCE))
+    names = {
+        "_safe_project_name",
+        "_session_path",
+        "_srt_path",
+        "_context_folder",
+        "_fallback_project_context_text",
+        "_save_project_context_files",
+        "_validate_saved_project",
+        "_save_reference_descriptions",
+    }
+    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names]
+    namespace = {
+        "hashlib": hashlib,
+        "json": json,
+        "os": os,
+        "re": re,
+        "tempfile": tempfile,
+        "atomic_write_json": ATOMIC.atomic_write_json,
+        "atomic_write_text": ATOMIC.atomic_write_text,
+    }
+    exec(compile(ast.Module(body=functions, type_ignores=[]), str(NODE_SOURCE), "exec"), namespace)
+    return namespace
+
+
+class BuilderReferenceSaveAndCueTests(unittest.TestCase):
+    def test_long_reference_names_save_without_collisions(self):
+        helpers = load_save_helpers()
+        names = ["A detailed location description " * 20 + ending for ending in ("east", "west")]
+        refs = {
+            "subjects": [{"name": "Singer", "description": "Lead singer"}],
+            "locations": [
+                {"id": f"loc_{index}", "name": name, "description": f"Description {index}"}
+                for index, name in enumerate(names)
+            ],
+        }
+        with tempfile.TemporaryDirectory() as root:
+            folder = os.path.join(root, "project_" + "x" * 80)
+            manifest = helpers["_save_reference_descriptions"](folder, {"flux_reference_builder": refs})
+            locations = Path(folder) / "subject_location" / "location"
+            files = sorted(locations.glob("*.txt"))
+            self.assertEqual(len(files), 2)
+            self.assertTrue(all(len(path.stem) <= 120 and len(str(path)) + 14 <= 240 for path in files))
+            self.assertEqual({path.read_text().strip() for path in files}, {"Description 0", "Description 1"})
+            self.assertTrue((Path(folder) / "subject_location" / "subject" / "Singer.txt").is_file())
+            self.assertEqual(json.loads(Path(manifest).read_text(encoding="utf-8")), refs)
+            helpers["_save_reference_descriptions"](folder, {"flux_reference_builder": refs})
+            self.assertEqual(sorted(locations.glob("*.txt")), files)
+
+    def test_reference_manifest_context_and_mappings_round_trip(self):
+        helpers = load_save_helpers()
+        refs = {
+            "subjects": [{"id": "singer", "name": "Singer", "description": "Dark hair", "image": {"path": "singer.png"}}],
+            "locations": [{"id": "entry", "name": "Entry", "description": "Deadbolted entry", "image": {"path": "entry.png"}}],
+            "subject_scene_map": {"scene-1": ["singer"]},
+            "performer_scene_map": {"scene-1": ["singer"]},
+            "scene_map": {"scene-1": "entry"},
+            "scene_trigger_map": {"scene-1": "deadbolt"},
+        }
+        session = {
+            "segments": [{"id": "scene-1", "scene_summary": "Singer waits at the locked door."}],
+            "flux_reference_builder": refs,
+            "builder_story_layer": {"image_world_style": "cinematic realism"},
+            "project_context_files": {},
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            helpers["atomic_write_json"](helpers["_session_path"](folder), session)
+            helpers["atomic_write_text"](helpers["_srt_path"](folder), "1\n00:00:00,000 --> 00:00:08,000\nScene\n")
+            context_paths = helpers["_save_project_context_files"](folder, session)
+            manifest_path = helpers["_save_reference_descriptions"](folder, session)
+            helpers["_validate_saved_project"](folder, session, context_paths)
+
+            self.assertTrue(all(Path(path).read_text(encoding="utf-8").strip() for path in context_paths))
+            self.assertEqual(json.loads(Path(manifest_path).read_text(encoding="utf-8")), refs)
+            self.assertEqual(json.loads(Path(manifest_path).read_text(encoding="utf-8"))["performer_scene_map"], {"scene-1": ["singer"]})
+
+    def test_final_prompt_assembly_enforces_cue_map_and_request_is_audited(self):
+        self.assertIn("enforceMiniMaxH3CueOnShotDescription(segment, descriptions[index], index)", UI_SOURCE)
+        self.assertIn('cue.type === "instrumental" && dialogueTags.length', UI_SOURCE)
+        self.assertIn("segment.minimax_h3_llm_request_audit_path", UI_SOURCE)
+        self.assertIn("Array.isArray(segment.lyric_cue_map) && segment.lyric_cue_map.length", UI_SOURCE)
+        self.assertIn("the explicit singer cue map was dropped before LLM prompting", UI_SOURCE)
+        self.assertIn("miniMaxH3CapitalizeCueText(miniMaxH3PunctuatedCueText(cue.text))", UI_SOURCE)
+        self.assertIn("miniMaxH3StripLeadingCutDirective(text)", UI_SOURCE)
+        self.assertIn("the camera cuts. ${miniMaxH3CapitalizeCueText(clean)}", UI_SOURCE)
+        self.assertIn("canonicalCutPlan?.instruction || selectedScene.cut_plan?.instruction", UI_SOURCE)
+        self.assertIn("isSingleContinuousShot && cueMap.length > 1", UI_SOURCE)
+        self.assertIn("continuous-shot lyric cue mismatch", UI_SOURCE)
+        self.assertIn("allow instrumental intervals to coexist in the same shot", UI_SOURCE)
+        node_source = read_builder_backend_source()
+        self.assertIn('"actual_llm_instruction": prompt', node_source)
+        self.assertIn('"raw_llm_response"', node_source)
+
+    def test_complete_manual_timing_returns_before_transcription(self):
+        source = function_source(UI_SOURCE, "ensureAutoTimedSingerCuesBeforePrompt")
+        self.assertLess(source.index("if (existingTimingComplete) return true;"), source.index("autoTimeMiniMaxSingerCuesForSegment(segment)"))
+
+    def test_vocal_cue_cleanup_preserves_llm_shot_prose(self):
+        start = UI_SOURCE.index("function enforceMiniMaxH3CueOnShotDescription")
+        end = UI_SOURCE.index("function miniMaxH3OfficialShotBodyFromDescriptions", start)
+        source = UI_SOURCE[start:end]
+        self.assertIn("Normalize the cue in its original sentence", source)
+        self.assertIn("const cueVariants", source)
+        # Whole-sentence vocal deletion caused the observed `\"; S2 ...` corruption.
+        vocal_source = source[source.index("const cueText ="):]
+        self.assertNotIn("sentences.filter((sentence) => !vocalMarker.test(sentence))", vocal_source)
+        self.assertNotIn("the assigned vocal cue", source)
+        self.assertIn("miniMaxH3MergeTimedCue", source)
+        self.assertIn("const vocalVerb", source)
+        self.assertIn("Remove a previously generated canonical contract", source)
+
+    def test_minimax_generation_requires_rich_shot_prose(self):
+        self.assertIn("SHOT FORMAT — MANDATORY", UI_SOURCE)
+        self.assertIn("MOTION ENERGY — MANDATORY", UI_SOURCE)
+        self.assertIn("not notes, labels, or fragments", UI_SOURCE)
+        self.assertIn("let targetLimit = 7000", UI_SOURCE)
+
+    def test_minimax_custom_voice_preserves_description(self):
+        self.assertIn('voiceDescription.value = subject.minimax_voice.description || "";', UI_SOURCE)
+        self.assertIn('!subject.minimax_voice.preset_id?.endsWith("_custom")', UI_SOURCE)
+
+        helpers = load_save_helpers()
+        custom_voice = {
+            "preset_id": "female_custom",
+            "gender": "female",
+            "preset_name": "LADY VALERIE",
+            "description": "An adult feminine velvety contralto with crisp diction.",
+        }
+        refs = {
+            "subjects": [{
+                "id": "char_1",
+                "name": "Valerie",
+                "description": "Lead singer",
+                "reference_type": "character",
+                "minimax_voice": custom_voice,
+                "image": {"path": "valerie.png"},
+            }],
+            "locations": [],
+            "subject_scene_map": {"scene-1": ["char_1"]},
+            "performer_scene_map": {"scene-1": ["char_1"]},
+        }
+        session = {
+            "segments": [{"id": "scene-1", "scene_summary": "Valerie speaks."}],
+            "flux_reference_builder": refs,
+            "project_context_files": {},
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            helpers["atomic_write_json"](helpers["_session_path"](folder), session)
+            helpers["atomic_write_text"](helpers["_srt_path"](folder), "1\n00:00:00,000 --> 00:00:05,000\nHello\n")
+            context_paths = helpers["_save_project_context_files"](folder, session)
+            manifest_path = helpers["_save_reference_descriptions"](folder, session)
+            helpers["_validate_saved_project"](folder, session, context_paths)
+
+            saved = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+            self.assertEqual(saved["subjects"][0]["minimax_voice"], custom_voice)
+
+
+if __name__ == "__main__":
+    unittest.main()
+

@@ -1,5 +1,4 @@
 import { ComfyApp, app } from "../../scripts/app.js";
-import { ComfyDialog, $el } from "../../scripts/ui.js";
 import { api } from "../../scripts/api.js";
 import { customAlert, isBeforeFrontendVersion } from "./common.js";
 
@@ -315,7 +314,6 @@ app.registerExtension({
 		}
 
 		if(nodeData.name == "ImpactControlBridge") {
-			const onConnectionsChange = nodeType.prototype.onConnectionsChange;
 			nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
 				if(index != 0 || !link_info || this.inputs[0].type != '*')
 					return;
@@ -328,7 +326,8 @@ app.registerExtension({
 				}
 				else {
 					const node = app.graph.getNodeById(link_info.origin_id);
-					slot_type = node?.outputs[link_info.origin_slot]?.type;
+					// An upstream dynamic output may not be restored yet during workflow loading.
+					slot_type = node?.outputs[link_info.origin_slot]?.type ?? link_info.type ?? '*';
 				}
 
 				this.inputs[0].type = slot_type;
@@ -338,7 +337,6 @@ app.registerExtension({
 		}
 
 		if(nodeData.name == "ImpactConditionalBranch" || nodeData.name == "ImpactConditionalBranchSelMode") {
-			const onConnectionsChange = nodeType.prototype.onConnectionsChange;
 			nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
 				if(!link_info || this.inputs[0].type != '*')
 					return;
@@ -354,7 +352,7 @@ app.registerExtension({
 				}
 				else {
 					const node = app.graph.getNodeById(link_info.origin_id);
-					slot_type = node?.outputs[link_info.origin_slot].type;
+					slot_type = node?.outputs[link_info.origin_slot]?.type ?? link_info.type ?? '*';
 				}
 
 				this.inputs[0].type = slot_type;
@@ -365,14 +363,13 @@ app.registerExtension({
 		}
 
 		if(nodeData.name == "ImpactCompare") {
-			const onConnectionsChange = nodeType.prototype.onConnectionsChange;
 			nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
 				if(!link_info || this.inputs[0].type != '*' || type == 2)
 					return;
 
 				// assign type
 				const node = app.graph.getNodeById(link_info.origin_id);
-				let slot_type = node?.outputs[link_info.origin_slot].type;
+				const slot_type = node?.outputs[link_info.origin_slot]?.type ?? link_info.type ?? '*';
 
 				this.inputs[0].type = slot_type;
 				this.inputs[1].type = slot_type;
@@ -380,7 +377,6 @@ app.registerExtension({
 		}
 
 		if(nodeData.name == "ImpactSelectNthItemOfAnyList") {
-			const onConnectionsChange = nodeType.prototype.onConnectionsChange;
 			nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
 				if(!link_info || this.inputs[0].type != '*')
 					return;
@@ -396,7 +392,7 @@ app.registerExtension({
 				}
 				else {
 					const node = app.graph.getNodeById(link_info.origin_id);
-					slot_type = node?.outputs[link_info.origin_slot].type;
+					slot_type = node?.outputs[link_info.origin_slot]?.type ?? link_info.type ?? '*';
 				}
 
 				this.inputs[0].type = slot_type;
@@ -430,7 +426,7 @@ app.registerExtension({
 						}
 
 						if(this.outputs[0].type == '*'){
-							if(link_info.type == '*' && app.graph.getNodeById(link_info.target_id).slots[link_info.target_slot].type != '*') {
+							if(link_info.type == '*' && app.graph.getNodeById(link_info.target_id).inputs[link_info.target_slot].type != '*') {
 								app.graph._nodes_by_id[link_info.target_id].disconnectInput(link_info.target_slot);
 							}
 							else {
@@ -459,11 +455,6 @@ app.registerExtension({
 							return; // fallback
 						}
 
-						if(origin_type == '*' && app.graph.getNodeById(link_info.origin_id).slots[link_info.origin_slot].type != '*') {
-							this.disconnectInput(link_info.target_slot);
-							return;
-						}
-
 						for(let i in this.inputs) {
 							if(this.inputs[i].name != 'select')
 								this.inputs[i].type = origin_type;
@@ -482,7 +473,7 @@ app.registerExtension({
 					if(
 						!stackTrace.includes('LGraphNode.prototype.connect') && // for touch device
 						!stackTrace.includes('LGraphNode.connect') && // for mouse device
-						!stackTrace.includes('loadGraphData')) {
+						!stackTrace.includes('loadGraphData') && !app.configuringGraph) {
 							if(this.outputs[link_info.origin_slot].links.length == 0) {
 								this.removeOutput(link_info.origin_slot);
 							}
@@ -573,7 +564,7 @@ app.registerExtension({
 					return;
 				}
 
-				if(stackTrace.includes('loadGraphData')) {
+				if(stackTrace.includes('loadGraphData') || app.configuringGraph) {
 					if(this.widgets?.[0]) {
 						this.widgets[0].options.max = this.inputs.length-3;
 						this.widgets[0].value = Math.min(this.widgets[0].value, this.widgets[0].options.max);
@@ -600,7 +591,7 @@ app.registerExtension({
 						}
 
 						if(this.outputs[0].type == '*'){
-							if(link_info.type == '*' && app.graph.getNodeById(link_info.target_id).slots[link_info.target_slot].type != '*') {
+							if(link_info.type == '*' && app.graph.getNodeById(link_info.target_id).inputs[link_info.target_slot].type != '*') {
 								app.graph._nodes_by_id[link_info.target_id].disconnectInput(link_info.target_slot);
 							}
 							else {
@@ -634,16 +625,6 @@ app.registerExtension({
 						// NOTE: node is undefined when subgraph editing mode
 						if(node) {
 							let origin_type = node.outputs[link_info.origin_slot]?.type;
-							if(link_info.target_slot == 0 && this.inputs.length > 3) {  // NOTE: widgets are regarded as input since new front
-									origin_type = this.inputs[1].type;
-									node.connect(link_info.origin_slot, node.id, 'input1');
-							}
-
-							if(origin_type == '*' && app.graph.getNodeById(link_info.origin_id).slots[link_info.origin_slot].type != '*') {
-								this.disconnectInput(link_info.target_slot);
-								return;
-							}
-
 							for(let i in this.inputs) {
 								let input_i = this.inputs[i];
 								if(input_i.name != 'select' && input_i.name != 'sel_mode')
@@ -688,6 +669,48 @@ app.registerExtension({
 				if(this.widgets?.[0]) {
 					this.widgets[0].options.max = this.inputs.length-3;
 					this.widgets[0].value = Math.min(this.widgets[0].value, this.widgets[0].options.max);
+					if(this.widgets[0].options.max > 0 && this.widgets[0].value == 0)
+						this.widgets[0].value = 1;
+				}
+			}
+
+			if(nodeData.name == 'ImpactSwitch' || nodeData.name == 'LatentSwitch' || nodeData.name == 'SEGSSwitch') {
+				const onAfterGraphConfigured = nodeType.prototype.onAfterGraphConfigured;
+				nodeType.prototype.onAfterGraphConfigured = function () {
+					onAfterGraphConfigured?.apply(this, arguments);
+
+					requestAnimationFrame(() => {
+						if(!this.graph)
+							return;
+
+						const dynamic_inputs = this.inputs.filter(input_i => input_i.name != 'select' && input_i.name != 'sel_mode');
+						let last_used = -1;
+						for(let i = 0; i < dynamic_inputs.length; i++) {
+							if(dynamic_inputs[i].link != null)
+								last_used = i;
+						}
+
+						const select_value = Number(this.widgets?.[0]?.value) || 1;
+						const keep = Math.max(last_used + 2, select_value + 1);
+						for(let i = dynamic_inputs.length - 1; i >= keep; i--) {
+							this.removeInput(this.inputs.indexOf(dynamic_inputs[i]));
+						}
+
+						if(last_used == dynamic_inputs.length - 1)
+							this.addInput(`${input_name}${last_used + 2}`, this.outputs[0].type);
+
+						let slot_i = 1;
+						for(let i = 0; i < this.inputs.length; i++) {
+							let input_i = this.inputs[i];
+							if(input_i.name != 'select' && input_i.name != 'sel_mode')
+								input_i.name = `${input_name}${slot_i++}`;
+						}
+
+						if(this.widgets?.[0]) {
+							const dynamic_count = this.inputs.filter(input_i => input_i.name != 'select' && input_i.name != 'sel_mode').length;
+							this.widgets[0].options.max = Math.max(1, dynamic_count - 1, this.widgets[0].value);
+						}
+					});
 				}
 			}
 		}
@@ -729,6 +752,7 @@ app.registerExtension({
 		}
 
 		if(node.comfyClass == "ImpactSEGSLabelFilter" || node.comfyClass == "SEGSLabelFilterDetailerHookProvider") {
+			node._value = node.widgets[0].value;
 			node.widgets[0].callback = (value, canvas, node, pos, e) => {
 				if(node) {
 					if(node.widgets[1].value.trim() != "" && !node.widgets[1].value.trim().endsWith(","))

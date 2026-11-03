@@ -462,6 +462,7 @@ app.registerExtension({
       const orderWidget = findW("bbox_order");               // "yx" (Ideogram) | "xy" (Qwen/standard) (set via the toolbar)
       if (bgBrightnessWidget && typeof bgBrightnessWidget.value !== "number") bgBrightnessWidget.value = 25;
       const wWidget = findW("width"), hWidget = findW("height");
+      const isLinked = (w) => !!node.inputs?.some((inp) => inp.name === w.name && inp.link != null);   // widget driven by a noodle
       // Hide the data widgets while keeping them serializable.
       function hideDataWidgets() {
         for (const w of [elementsWidget, stylePaletteWidget, bgBrightnessWidget, formatWidget, coordWidget, orderWidget]) {
@@ -2283,12 +2284,13 @@ app.registerExtension({
       chainCallback(node, "onExecuted", function (message) {
         // Reflect resolved width/height (e.g. from connected inputs) in the canvas aspect first: an
         // imported caption with absolute-pixel boxes (MOSS) is converted against the current dims.
-        // A connected background image governs the aspect itself, so skip then.
-        if (message?.dims && !node._bgImg) {
+        // A connected background image governs the aspect itself, unless width/height are linked:
+        // then the resolved values are what the node actually used.
+        if (message?.dims) {
           const [w, h] = message.dims;
-          if (wWidget && w) wWidget.value = w;
-          if (hWidget && h) hWidget.value = h;
-          syncCanvasToDims(); fitCanvas();
+          if (wWidget && w && (!node._bgImg || isLinked(wWidget))) wWidget.value = w;
+          if (hWidget && h && (!node._bgImg || isLinked(hWidget))) hWidget.value = h;
+          syncCanvasToDims(); fitCanvas(); updateBboxLabel();
         }
         if (message?.caption) applyImported(message.caption[0]);
         // Seed regions from the bboxes input only when the editor is empty, so user-drawn/edited
@@ -2574,7 +2576,7 @@ app.registerExtension({
       // ── width/height widget callbacks ──
       for (const w of [wWidget, hWidget]) {
         if (!w) continue;
-        chainCallback(w, "callback", () => { syncCanvasToDims(); drawCanvas(); fitCanvas(); updateTokens(); });  // absolute coords depend on w/h
+        chainCallback(w, "callback", () => { syncCanvasToDims(); drawCanvas(); fitCanvas(); updateTokens(); updateBboxLabel(); });  // absolute coords depend on w/h
       }
       // Update the token estimate when the caption-level text widgets change.
       for (const name of spec.captionWidgets) {
@@ -2598,10 +2600,10 @@ app.registerExtension({
           node._bgImg = img;
           if (!keepAspect) {                                          // live mode keeps the user's canvas aspect
             const r16 = (v) => Math.max(16, Math.round(v / 16) * 16); // model needs multiples of 16
-            if (wWidget) wWidget.value = r16(img.naturalWidth);        // match canvas aspect to the image
-            if (hWidget) hWidget.value = r16(img.naturalHeight);
+            if (wWidget && !isLinked(wWidget)) wWidget.value = r16(img.naturalWidth);   // match canvas aspect to the image
+            if (hWidget && !isLinked(hWidget)) hWidget.value = r16(img.naturalHeight);
           }
-          syncCanvasToDims(); drawCanvas(); fitCanvas(); updateGrabBtn();
+          syncCanvasToDims(); drawCanvas(); fitCanvas(); updateGrabBtn(); updateBboxLabel();
         };
         img.src = src;
       }
@@ -2697,14 +2699,16 @@ app.registerExtension({
         } catch (e) {}
         return null;
       }
-      // Persist editor data by name (robust to widget-order changes across versions).
+      // Persist editor data by name (robust to widget-order changes across versions). JSON round-trip: node.properties
+      // is Vue-reactive in newer frontends and its sub-objects are Proxies, which structuredClone (used when the
+      // frontend creates the workflow tab) rejects — the load then aborts with "Unable to find workflow" (#775).
       chainCallback(node, "onSerialize", function (o) {
         if (!o) return;
         const p = node.properties;
-        o.ideo = { boxes: node._boxes, palette: node._stylePalette, importMode: findW("import_mode")?.value,
+        o.ideo = JSON.parse(JSON.stringify({ boxes: node._boxes, palette: node._stylePalette, importMode: findW("import_mode")?.value,
           outputFormat: findW("output_format")?.value, coordMode: findW("coord_mode")?.value, bboxOrder: findW("bbox_order")?.value,
           dock: { pinned: p.dockPinned, graph: p.dockGraph, rect: p.dockRect, panelH: node._panelH, min: p.dockMin,
-            exposeParent: p.exposeToParent, parent: p.dockParent } };
+            exposeParent: p.exposeToParent, parent: p.dockParent } }));
       });
       chainCallback(node, "onConfigure", function (o) {
         const raw = o && Array.isArray(o.widgets_values) ? o.widgets_values : [];

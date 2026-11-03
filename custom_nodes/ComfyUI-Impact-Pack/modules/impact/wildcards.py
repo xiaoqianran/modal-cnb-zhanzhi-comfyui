@@ -10,7 +10,7 @@ import numpy as np
 import yaml
 from impact import config, utils
 
-wildcards_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "wildcards"))
+wildcards_path = os.path.join(config.pack_root, "wildcards")
 
 RE_WildCardQuantifier = re.compile(r"(?P<quantifier>\d+)#__(?P<keyword>[\w.\-+/*\\]+?)__", re.IGNORECASE)
 wildcard_lock = threading.Lock()
@@ -40,24 +40,10 @@ class LazyWildcardLoader:
         self._loaded = False
 
     def _load_txt(self):
-        """Load .txt wildcard file"""
-        try:
-            with open(self.file_path, 'r', encoding="ISO-8859-1") as f:
-                lines = f.read().splitlines()
-                return [x for x in lines if x.strip() and not x.strip().startswith('#')]
-        except (yaml.reader.ReaderError, UnicodeDecodeError):
-            with open(self.file_path, 'r', encoding="UTF-8", errors="ignore") as f:
-                lines = f.read().splitlines()
-                return [x for x in lines if x.strip() and not x.strip().startswith('#')]
+        return load_txt_wildcard(self.file_path)
 
     def _load_yaml(self):
-        """Load .yaml/.yml wildcard file"""
-        try:
-            with open(self.file_path, 'r', encoding="ISO-8859-1") as f:
-                return yaml.load(f, Loader=yaml.FullLoader)
-        except (yaml.reader.ReaderError, UnicodeDecodeError):
-            with open(self.file_path, 'r', encoding="UTF-8", errors="ignore") as f:
-                return yaml.load(f, Loader=yaml.FullLoader)
+        return yaml.load(_read_wildcard_text(self.file_path), Loader=yaml.FullLoader)
 
     def get_data(self):
         """Get wildcard data, loading if necessary"""
@@ -125,6 +111,7 @@ def calculate_directory_size(directory_path, limit=None):
     total_size = 0
     try:
         for root, directories, files in os.walk(directory_path, followlinks=True):
+            directories[:] = [d for d in directories if d not in ('.git', '.github')]
             for file in files:
                 if file.endswith(('.txt', '.yaml', '.yml')):
                     file_path = os.path.join(root, file)
@@ -159,6 +146,7 @@ def scan_wildcard_metadata(wildcard_path):
     discovered = 0
     try:
         for root, directories, files in os.walk(wildcard_path, followlinks=True):
+            directories[:] = [d for d in directories if d not in ('.git', '.github')]
             for file in files:
                 if file.endswith('.txt'):
                     file_path = os.path.join(root, file)
@@ -257,6 +245,12 @@ def find_wildcard_file(key):
     except Exception:
         pass
 
+    # Normalization changes spaces and case; keep the original indexed path.
+    # Preserve direct-file precedence before falling back to the metadata.
+    file_path = available_wildcards.get(key)
+    if file_path and os.path.isfile(file_path):
+        return (file_path, file_path.endswith(('.yaml', '.yml')))
+
     # Case 2: YAML nested key (e.g., "colors/warm" → "colors.yaml")
     if '/' in key:
         parent_key = key.split('/')[0]
@@ -311,8 +305,7 @@ def get_wildcard_value(key):
             # Example: "dragon" matches "dragon.txt", "fantasy/dragon.txt", "dragon/fire.txt", etc.
             matched_keys = []
             for k in available_wildcards.keys():
-                if (k == key or
-                    k.endswith('/' + key) or
+                if k != key and (k.endswith('/' + key) or
                     k.startswith(key + '/') or
                     ('/' + key + '/') in k):
                     matched_keys.append(k)
@@ -357,28 +350,27 @@ def get_wildcard_value(key):
     return value
 
 
+def _read_wildcard_text(file_path):
+    try:
+        with open(file_path, 'r', encoding="utf-8-sig") as f:
+            return f.read()
+    except UnicodeDecodeError:
+        logging.warning(f"[Impact Pack] wildcard file {file_path!r} is not valid UTF-8; decoded via ISO-8859-1 fallback. Re-save as UTF-8 if content appears garbled.")
+        with open(file_path, 'r', encoding="ISO-8859-1") as f:
+            return f.read()
+
+
 def load_txt_wildcard(file_path):
     """Load a .txt wildcard file"""
-    try:
-        with open(file_path, 'r', encoding="ISO-8859-1") as f:
-            lines = f.read().splitlines()
-            return [x for x in lines if x.strip() and not x.strip().startswith('#')]
-    except (yaml.reader.ReaderError, UnicodeDecodeError):
-        with open(file_path, 'r', encoding="UTF-8", errors="ignore") as f:
-            lines = f.read().splitlines()
-            return [x for x in lines if x.strip() and not x.strip().startswith('#')]
+    return [x for x in _read_wildcard_text(file_path).splitlines()
+            if x.strip() and not x.strip().startswith('#')]
 
 
 def load_yaml_wildcard(file_path, key_prefix=''):
     """Load a .yaml/.yml wildcard file and expand nested structures"""
     global loaded_wildcards
 
-    try:
-        with open(file_path, 'r', encoding="ISO-8859-1") as f:
-            yaml_data = yaml.load(f, Loader=yaml.FullLoader)
-    except (yaml.reader.ReaderError, UnicodeDecodeError):
-        with open(file_path, 'r', encoding="UTF-8", errors="ignore") as f:
-            yaml_data = yaml.load(f, Loader=yaml.FullLoader)
+    yaml_data = yaml.load(_read_wildcard_text(file_path), Loader=yaml.FullLoader)
 
     if not yaml_data:
         return []
@@ -468,49 +460,42 @@ def read_wildcard_dict(wildcard_path, on_demand=False):
     """
     global wildcard_dict
     for root, directories, files in os.walk(wildcard_path, followlinks=True):
+        directories[:] = [d for d in directories if d not in ('.git', '.github')]
         for file in files:
-            if file.endswith('.txt'):
-                file_path = os.path.join(root, file)
-                rel_path = os.path.relpath(file_path, wildcard_path)
-                key = wildcard_normalize(os.path.splitext(rel_path)[0])
-
-                if on_demand:
-                    # Store lazy loader instead of actual data
-                    wildcard_dict[key] = LazyWildcardLoader(file_path, 'txt')
-                else:
-                    # Load data immediately (original behavior)
-                    try:
-                        with open(file_path, 'r', encoding="ISO-8859-1") as f:
-                            lines = f.read().splitlines()
-                            wildcard_dict[key] = [x for x in lines if x.strip() and not x.strip().startswith('#')]
-                    except yaml.reader.ReaderError:
-                        with open(file_path, 'r', encoding="UTF-8", errors="ignore") as f:
-                            lines = f.read().splitlines()
-                            wildcard_dict[key] = [x for x in lines if x.strip() and not x.strip().startswith('#')]
-            elif file.endswith('.yaml') or file.endswith('.yml'):
-                file_path = os.path.join(root, file)
-
-                if on_demand:
-                    # For YAML files in on-demand mode, we need to load and parse them
-                    # since they may contain nested structures
-                    loader = LazyWildcardLoader(file_path, 'yaml')
-                    yaml_data = loader.get_data()
-                    if yaml_data:
-                        for k, v in yaml_data.items():
-                            read_wildcard(k, v, on_demand)
-                else:
-                    # Load data immediately (original behavior)
-                    try:
-                        with open(file_path, 'r', encoding="ISO-8859-1") as f:
-                            yaml_data = yaml.load(f, Loader=yaml.FullLoader)
-                    except yaml.reader.ReaderError:
-                        with open(file_path, 'r', encoding="UTF-8", errors="ignore") as f:
-                            yaml_data = yaml.load(f, Loader=yaml.FullLoader)
-
-                    for k, v in yaml_data.items():
-                        read_wildcard(k, v, on_demand)
+            file_path = os.path.join(root, file)
+            try:
+                _read_wildcard_file(wildcard_path, file, file_path, on_demand)
+            except Exception as e:
+                # One bad file must not abort the scan or hide which file is broken.
+                logging.warning(f"[Impact Pack] Skipped wildcard file {file_path}: {type(e).__name__}: {e}")
 
     return wildcard_dict
+
+
+def _read_wildcard_file(wildcard_path, file, file_path, on_demand):
+    if file.endswith('.txt'):
+        rel_path = os.path.relpath(file_path, wildcard_path)
+        key = wildcard_normalize(os.path.splitext(rel_path)[0])
+
+        if on_demand:
+            # Store lazy loader instead of actual data
+            wildcard_dict[key] = LazyWildcardLoader(file_path, 'txt')
+        else:
+            # Load data immediately (original behavior)
+            wildcard_dict[key] = load_txt_wildcard(file_path)
+    elif file.endswith('.yaml') or file.endswith('.yml'):
+        if on_demand:
+            # For YAML files in on-demand mode, we need to load and parse them
+            # since they may contain nested structures
+            loader = LazyWildcardLoader(file_path, 'yaml')
+            yaml_data = loader.get_data()
+        else:
+            # Load data immediately (original behavior)
+            yaml_data = yaml.load(_read_wildcard_text(file_path), Loader=yaml.FullLoader)
+
+        if yaml_data:
+            for k, v in yaml_data.items():
+                read_wildcard(k, v, on_demand)
 
 
 def process_comment_out(text):
@@ -538,7 +523,8 @@ def process(text, seed=None):
     text = process_comment_out(text)
 
     if seed is not None:
-        random.seed(seed)
+        # np.random.default_rng() only accepts non negative seeds.
+        seed = int(seed) & 0xFFFFFFFFFFFFFFFF
     random_gen = np.random.default_rng(seed)
 
     local_wildcard_dict = get_wildcard_dict()
@@ -826,6 +812,9 @@ def process(text, seed=None):
         # pass2: replace wildcards
         text, is_replaced2 = replace_wildcard(pass1)
         stop_unwrap = not is_replaced1 and not is_replaced2
+
+    if not stop_unwrap:
+        logging.warning("[Impact Pack] Wildcard expansion limit reached; check for circular references.")
 
     return text
 
@@ -1139,6 +1128,7 @@ def load_yaml_files_only(wildcard_path):
     yaml_count = 0
     try:
         for root, directories, files in os.walk(wildcard_path, followlinks=True):
+            directories[:] = [d for d in directories if d not in ('.git', '.github')]
             for file in files:
                 if file.endswith('.yaml') or file.endswith('.yml'):
                     file_path = os.path.join(root, file)

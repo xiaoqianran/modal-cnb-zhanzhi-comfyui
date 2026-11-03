@@ -19,6 +19,7 @@ docs/rgthree_seed.png
 package-lock.json
 package.json
 pnpm-lock.yaml
+pnpm-workspace.yaml
 prestartup_script.py
 py/__init__.py
 py/any_switch.py
@@ -115,8 +116,10 @@ src_web/comfyui/testing/comfyui_env.ts
 src_web/comfyui/testing/runner.ts
 src_web/comfyui/testing/utils_test.ts
 src_web/comfyui/tests/context_dynamic_tests.ts
+src_web/comfyui/tests/fast_groups_restriction_tests.ts
 src_web/comfyui/tests/image_or_latent_size_tests.ts
 src_web/comfyui/tests/power_puter.ts
+src_web/comfyui/tests/power_puter_inputs_tests.ts
 src_web/comfyui/utils.ts
 src_web/comfyui/utils_canvas.ts
 src_web/comfyui/utils_deprecated_comfyui.ts

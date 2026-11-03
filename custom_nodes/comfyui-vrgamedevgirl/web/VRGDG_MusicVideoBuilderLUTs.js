@@ -13,6 +13,7 @@ export function createMusicVideoBuilderLuts(options = {}) {
     loading: false,
     error: "",
     selectedName: "",
+    lutsDir: "",
   };
 
   const root = document.createElement("div");
@@ -45,6 +46,7 @@ export function createMusicVideoBuilderLuts(options = {}) {
         throw new Error(data?.error || `LUT list failed (${response.status})`);
       }
       state.luts = Array.isArray(data.luts) ? data.luts : [];
+      state.lutsDir = String(data.luts_dir || "");
       state.loaded = true;
     } catch (error) {
       state.error = String(error?.message || error || "Could not load LUTs.");
@@ -114,7 +116,7 @@ export function createMusicVideoBuilderLuts(options = {}) {
 
     if (!state.luts.length) {
       const empty = document.createElement("div");
-      empty.textContent = "No LUTs found.";
+      empty.textContent = "No LUTs installed. Add your own licensed .cube files to this node pack’s LUTS folder, then click Refresh. LUT files are not bundled.";
       empty.style.cssText = "color:#a1a1aa;font-size:12px;padding:10px;border:1px solid #3f3f46;border-radius:7px;background:#18181b;";
       root.append(empty);
       return;

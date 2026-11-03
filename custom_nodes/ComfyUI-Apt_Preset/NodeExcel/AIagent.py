@@ -1245,6 +1245,7 @@ import folder_paths
 from PIL import Image
 QWEN_TEXT_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
 QWEN_MULTIMODAL_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+QWEN_CHAT_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 
 def get_aliyun_api_key():
     env_api_key = os.getenv("aliyun_API_KEY")
@@ -1288,8 +1289,7 @@ def request_with_retry(url, headers, payload, seed, max_retries=3):
             return response.json()
         except requests.exceptions.RequestException as e:
             if "seed" in str(e).lower() and retry < max_retries - 1:
-                if "seed" in payload["parameters"]:
-                    payload["parameters"].pop("seed", None)
+                payload.get("parameters", payload).pop("seed", None)
                 continue
             if retry == max_retries - 1:
                 error_detail = f"请求失败: {str(e)}"
@@ -1318,6 +1318,21 @@ def analyze_text_no_sdk(model, api_key, system_prompt, text_content, max_tokens,
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+
+    if model in ("qwen3.8-omni-flash", "qwen3.8-max", "qwen3.8-flash"):
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.7,
+            "top_p": 0.8,
+        }
+        if model == "qwen3.8-omni-flash":
+            payload["reasoning_effort"] = "none"
+        if seed is not None and seed != 0:
+            payload["seed"] = seed
+        result_json = request_with_retry(QWEN_CHAT_API_URL, headers, payload, seed)
+        return result_json["choices"][0]["message"]["content"].strip()
 
     payload = {
         "model": model,

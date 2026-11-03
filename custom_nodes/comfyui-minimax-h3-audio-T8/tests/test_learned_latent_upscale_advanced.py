@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 
@@ -576,15 +577,25 @@ def test_new_nodes_append_without_changing_existing_order():
 
     classes = asyncio.run(h3_audio_t8_pkg.comfy_entrypoint().get_node_list())
     ids = [node.define_schema().node_id for node in classes]
+    legacy = asyncio.run(h3_audio_t8_pkg._HyperFlowLongVideoExtension().get_node_list())
+    legacy_ids = [node.define_schema().node_id for node in legacy]
+    modular_ids = [node.define_schema().node_id for node in h3_audio_t8_pkg._modular_node_classes()]
     # 1.83.0 appended three FastH3 V2 nodes; historical positions below
-    # still verify the original registry prefix, not a stale total count.
-    assert len(ids) == len(set(ids)) == 343
+    # still verify the original registry prefix as later modules are appended.
+    assert len(ids) == len(set(ids))
+    assert ids[:len(legacy_ids)] == legacy_ids
+    assert ids[len(legacy_ids):len(legacy_ids) + len(modular_ids)] == modular_ids
+    # HyperVAE was a historical tail, not the current tail. Bind the complete
+    # published00e875d registry prefix rather than forbidding future appends.
+    assert ids[553] == "MiniMaxH3HyperVAE2xLoaderEXPT8"
+    published = json.dumps(ids[:774], ensure_ascii=False, separators=(',', ':')).encode()
+    assert hashlib.sha256(published).hexdigest() == 'cde4078f4d8d9e20056d3620e93c33075d9068294960445789935dee5cef73e1'
     assert ids[336:339] == [
         'MiniMaxH3FastH3V2SetupEXPT8',
         'MiniMaxH3FastH3V2RuntimeAuditEXPT8',
         'MiniMaxH3FastH3V2DualModelLongVideoEXPT8',
     ]
-    assert ids[339:] == ['SolAttnMiniMax', 'MiniMaxH3SemanticBridgeConfigT8', 'MiniMaxH3SemanticBridgeApplyT8',
+    assert ids[339:343] == ['SolAttnMiniMax', 'MiniMaxH3SemanticBridgeConfigT8', 'MiniMaxH3SemanticBridgeApplyT8',
                         'MiniMaxH3LTXLatentAdapterEXPT8']
     assert ids[266] == "MiniMaxH3ChunkedTwoPassMaskedLowSigmaPlanT8Advanced"
     assert ids[267] == "MiniMaxH3SubjectSafeRGBCompositeT8Advanced"

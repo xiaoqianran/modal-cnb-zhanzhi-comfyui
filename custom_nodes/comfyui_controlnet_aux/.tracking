@@ -121,7 +121,6 @@ src/custom_controlnet_aux/diffusion_edge/denoising_diffusion_pytorch/vgg.py
 src/custom_controlnet_aux/diffusion_edge/denoising_diffusion_pytorch/wavelet.py
 src/custom_controlnet_aux/diffusion_edge/denoising_diffusion_pytorch/wcc.py
 src/custom_controlnet_aux/diffusion_edge/model.py
-src/custom_controlnet_aux/diffusion_edge/requirement.txt
 src/custom_controlnet_aux/diffusion_edge/taming/__init__.py
 src/custom_controlnet_aux/diffusion_edge/taming/data/ade20k.py
 src/custom_controlnet_aux/diffusion_edge/taming/data/annotated_objects_coco.py

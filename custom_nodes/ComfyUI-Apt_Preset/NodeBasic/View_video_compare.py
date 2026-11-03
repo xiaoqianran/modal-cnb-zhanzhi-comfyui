@@ -68,6 +68,10 @@ def _combine_images(first, second, direction, split_position, opacity=1.0):
         axis = None
     if second.shape[1:3] != (height, width):
         second = F.interpolate(second.movedim(-1, 1), size=(height, width), mode="bilinear", align_corners=False).movedim(1, -1)
+    if first.shape[-1] == 3 and second.shape[-1] == 4:
+        first = torch.cat((first, torch.ones_like(first[..., :1])), dim=-1)
+    elif first.shape[-1] == 4 and second.shape[-1] == 3:
+        second = torch.cat((second, torch.ones_like(second[..., :1])), dim=-1)
     if axis is not None:
         return torch.cat((first, second), dim=axis)
     combined = first.clone()

@@ -210,7 +210,8 @@ def test_d2c_record_uses_windowed_drive_audio_as_delivery_track(tmp_path):
     assert graph["5"]["inputs"]["drive_audio"] == ["16", 0]
     assert graph["5"]["inputs"]["final_audio"] == ["16", 0]
     assert graph["5"]["inputs"]["length"] == ["16", 1]
-    assert graph["11"]["inputs"]["audio"] == ["5", 2]
+    assert graph["5"]["class_type"] == "MiniMaxH3DirectorKeyframeConditioningEXPT8"
+    assert graph["11"]["inputs"]["audio"] == ["5", 3]
     assert graph["11"]["inputs"]["start_seconds"] == ["16", 2]
     assert graph["16"]["class_type"] == "MiniMaxH3AudioWindowT8"
 
@@ -226,7 +227,9 @@ def test_d2c_reference_voice_uses_audio_reference_not_delivery_audio(tmp_path):
     built = build_director_generation_prompt(project, shot["id"], store)
     graph = built["prompt"]
     assert graph["5"]["inputs"]["task_type"] == "Ref2VA"
-    assert graph["5"]["inputs"]["ref_audios.ref_audio_0"] == ["14", 0]
+    assert graph["5"]["inputs"]["ref_audios.ref_audio_0"] == ["15", 0]
+    assert graph["15"] == {"class_type": "TrimAudioDuration", "inputs": {
+        "audio": ["14", 0], "start_index": 0, "duration": 4}}
     assert graph["11"]["inputs"]["audio"] == ["10", 1]
 
 
@@ -419,9 +422,9 @@ def test_hyperflow_single_ignores_inactive_high_draft_but_dual_validates_it():
     from h3_audio_t8_pkg.director_sampling_settings import normalize_sampling
 
     raw = {"mode": "hyperflow", "variant": "single8", "hyperflow_file": "hyperflow/weight.safetensors",
-           "high_loras": [{"id": "draft", "name": "", "strength": 200, "enabled": True}]}
+           "high_loras": [{"id": "draft", "name": "", "strength": float("inf"), "enabled": True}]}
     assert normalize_sampling(raw)["high_loras"] == []
-    assert raw["high_loras"][0]["strength"] == 200
+    assert raw["high_loras"][0]["strength"] == float("inf")
     raw["variant"] = "continuous4plus4"
     with pytest.raises(ValueError, match="LoRA 强度"):
         normalize_sampling(raw)
@@ -466,7 +469,8 @@ def test_director_hyperflow_explicit_graph_keeps_legacy_recipe_separate(tmp_path
     assert built["sampling"]["total_nfe"] == expected_nfe
     assert len(built["sampling"]["trained_grid_contract"]["raw_sigmas"]) == 9
     assert len(built["sampling"]["trained_grid_contract_sha256"]) == 64
-    assert types.count("MiniMaxH3HyperFlowLoaderT8Advanced") == (1 if variant == "single8" else 2)
+    assert types.count("MiniMaxH3HyperFlowFreshLoaderEXPT8") == (1 if variant == "single8" else 2)
+    assert "MiniMaxH3HyperFlowLoaderT8Advanced" not in types
     assert types.count("MiniMaxH3LoRACompatibilityLoaderT8Advanced") == (1 if variant == "single8" else 2)
     if variant in {"upscale8plus4", "upscale4plus4"}:
         assert graph["10"]["inputs"]["av_latent"] != ["9", 0]
@@ -557,7 +561,8 @@ def test_director_hyperflow_separate_head_tail_validates_in_core(tmp_path, monke
         }
     graph = build_director_generation_prompt(project, project["current"], _store(tmp_path))["prompt"]
     root = Path(__file__).resolve().parents[1]
-    core = root.parents[1]
+    import comfy.model_sampling
+    core = Path(comfy.model_sampling.__file__).resolve().parents[1]
     script = """
 import asyncio
 import importlib.util
@@ -566,7 +571,7 @@ from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-sys.path.insert(0, str(root.parents[1]))
+sys.path.insert(0, sys.argv[2])
 from comfy.cli_args import args
 args.cpu = True
 import folder_paths
@@ -600,7 +605,7 @@ print(json.dumps({'valid': valid[0], 'errors': valid[1]}, default=str))
 """
     env = os.environ.copy()
     env["PYTHONPATH"] = str(core) + os.pathsep + env.get("PYTHONPATH", "")
-    result = subprocess.run([sys.executable, "-c", script, str(root)], input=json.dumps(graph),
+    result = subprocess.run([sys.executable, "-c", script, str(root), str(core)], input=json.dumps(graph),
                             text=True, capture_output=True, env=env, cwd=root, timeout=60, check=True)
     validation = json.loads(result.stdout.splitlines()[-1])
     assert validation["valid"], validation["errors"]
@@ -794,7 +799,7 @@ def test_director_hyperflow_separate_real_core_tail_eav_edit_keeps_head_cached(t
     from test_progressive_relay import paired
     from tools import build_modular_hyperflow_workflow as builder
 
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3]))
+    monkeypatch.syspath_prepend(str(Path(comfy.nested_tensor.__file__).resolve().parents[1]))
     import execution
     import nodes
     from comfy_extras.nodes_custom_sampler import RandomNoise
@@ -840,7 +845,7 @@ def test_director_hyperflow_separate_real_core_tail_eav_edit_keeps_head_cached(t
     monkeypatch.setattr(TinyHyperBase, "execute", classmethod(lambda cls: io.NodeOutput(base)))
     graph["1"] = {"class_type": "TinyHyperBase", "inputs": {}}
     for key, node in list(graph.items()):
-        if node["class_type"] == "MiniMaxH3HyperFlowLoaderT8Advanced":
+        if node["class_type"] == "MiniMaxH3HyperFlowFreshLoaderEXPT8":
             graph[key] = {"class_type": "SyntheticHyperLoader", "inputs": {
                 "model": node["inputs"]["model"], "patch": 0.}}
         elif node["class_type"] == "MiniMaxH3AudioConditioningT8":
@@ -916,7 +921,7 @@ def test_director_hyperflow_separate_real_core_tail_eav_edit_keeps_head_cached(t
         "mode": "resume_tail", "artifact_path": path, "artifact_sha256": digest}
     resumed = build_director_generation_prompt(project, project["current"], _store(tmp_path))["prompt"]
     for key, node in list(resumed.items()):
-        if node["class_type"] == "MiniMaxH3HyperFlowLoaderT8Advanced":
+        if node["class_type"] == "MiniMaxH3HyperFlowFreshLoaderEXPT8":
             resumed[key] = {"class_type": "SyntheticHyperLoader", "inputs": {
                 "model": node["inputs"]["model"], "patch": 0.}}
         elif node["class_type"] == "MiniMaxH3AudioConditioningT8":
@@ -1036,7 +1041,7 @@ def test_two_pass_rebuilds_first_frame_from_source_and_keeps_recording(tmp_path,
     project["doc"]["sampling"] = {"mode": "two_pass", "output_mp": 0.4}
     built = build_director_generation_prompt(project, shot["id"], store)
     graph = built["prompt"]
-    conditions = [(key, node) for key, node in graph.items() if node["class_type"] == "MiniMaxH3AudioConditioningT8"]
+    conditions = [(key, node) for key, node in graph.items() if node["class_type"] in {"MiniMaxH3AudioConditioningT8", "MiniMaxH3DirectorKeyframeConditioningEXPT8"}]
     assert len(conditions) == 2
     high = graph["5"]["inputs"]
     low_id, low_node = next((key, node) for key, node in conditions if key != "5")
@@ -1045,7 +1050,8 @@ def test_two_pass_rebuilds_first_frame_from_source_and_keeps_recording(tmp_path,
     assert low["drive_audio"] == high["drive_audio"]
     assert low["final_audio"] == high["final_audio"]
     assert low["length"] == high["length"]
-    assert graph["11"]["inputs"]["audio"] == ["5", 2]
+    assert graph["5"]["class_type"] == "MiniMaxH3DirectorKeyframeConditioningEXPT8"
+    assert graph["11"]["inputs"]["audio"] == ["5", 3]
     window_id = high["drive_audio"][0]
     assert graph["11"]["inputs"]["start_seconds"] == [window_id, 2]
     assert graph["10"]["inputs"]["av_latent"] == [built["sampling"]["high_output_node"], 0]

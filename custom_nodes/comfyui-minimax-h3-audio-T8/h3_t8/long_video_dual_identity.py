@@ -145,7 +145,76 @@ def _int8_backup_state(model, key, weight, state):
     return restored
 
 
-def _original_state(model, state):
+class UnknownBufferBackupSchema(UnverifiedModelStack):
+    """An opaque backup is executable state, not proof of original contents."""
+
+
+def _buffer_restoration(model, *, allow_unknown=False):
+    backups = getattr(model, "backup_buffers", {})
+    if not backups:
+        return {}, set(), set()
+    if type(backups) is not dict:
+        if allow_unknown:
+            return {}, set(), set()
+        raise UnknownBufferBackupSchema("MODEL buffer backups use an unknown container schema")
+    network = getattr(model, "model", None)
+    if not isinstance(network, torch.nn.Module):
+        raise UnknownBufferBackupSchema("MODEL buffer registration is unavailable")
+    restored, nonpersistent, unknown = {}, set(), set()
+    for key, value in backups.items():
+        if type(key) is not str or not key or any(not part for part in key.split(".")):
+            raise ValueError("Cannot reconstruct original MODEL: invalid buffer backup path")
+        module = network
+        parts = key.split(".")
+        for part in parts[:-1]:
+            module = module._modules.get(part)
+            if not isinstance(module, torch.nn.Module):
+                raise ValueError("Cannot reconstruct original MODEL: unregistered buffer backup path")
+        name = parts[-1]
+        if type(module._buffers) is not dict or type(module._non_persistent_buffers_set) is not set:
+            raise UnknownBufferBackupSchema("MODEL buffer registration uses an unknown schema")
+        live = module._buffers.get(name)
+        if name not in module._buffers or not isinstance(live, torch.Tensor):
+            raise ValueError("Cannot reconstruct original MODEL: backup is not a registered buffer")
+        # Always check known live contents, including adjacent opaque backups.
+        content_identity(live)
+        if not isinstance(value, torch.Tensor):
+            unknown.add(key)
+            continue
+        if isinstance(value, QuantizedTensor) or value.shape != live.shape:
+            raise ValueError("Cannot reconstruct original MODEL identity from this buffer backup format")
+        content_identity(value)
+        restored[key] = value
+        if name in module._non_persistent_buffers_set:
+            nonpersistent.add(key)
+    if unknown and not allow_unknown:
+        raise UnknownBufferBackupSchema("MODEL buffer backup entries use an unknown original-storage schema")
+    return restored, nonpersistent, unknown
+
+
+def _original_buffers(model, *, allow_unknown=False):
+    """Original registered buffers, including nonpersistent state and aliases.
+
+    Core may cast only the first name of an aliased buffer. Deduplicate after
+    restoration by actual original object identity, matching pre-load enumeration.
+    """
+    restored, _, unknown = _buffer_restoration(model, allow_unknown=allow_unknown)
+    network = model.model
+    if not restored and not unknown:
+        return dict(network.named_buffers())
+    result, seen = {}, set()
+    for name, value in network.named_buffers(remove_duplicate=False):
+        content_identity(value)
+        if name in unknown:
+            continue
+        original = restored.get(name, value)
+        if id(original) not in seen:
+            result[name] = original
+            seen.add(id(original))
+    return result
+
+
+def _original_state(model, state, *, allow_unknown_buffers=False):
     """Recover pre-LoRA storage from Core backups, never unpatch shared MODELs."""
     backups = getattr(model, "backup", {})
     buffers = getattr(model, "backup_buffers", {})
@@ -154,11 +223,28 @@ def _original_state(model, state):
     original = dict(state)
     # Dynamic Core may cast buffers as well as weights. Restore them before
     # reading extra quantization scales; never mix original weights/live scales.
-    for key, value in buffers.items():
-        if (key not in original or not isinstance(value, torch.Tensor)
-                or isinstance(value, QuantizedTensor)):
+    restored, nonpersistent, unknown = _buffer_restoration(
+        model, allow_unknown=allow_unknown_buffers)
+    for key, value in restored.items():
+        if key in nonpersistent:
+            if key in original:
+                # Native/custom state_dict hooks may explicitly export a
+                # registered nonpersistent buffer. Preserve that export shape
+                # while restoring its actual pre-cast bytes, just as for an
+                # ordinary persistent entry. Never certify unrelated contents.
+                exported = content_identity(original[key])
+                live = content_identity(model.model.get_buffer(key))
+                if exported not in (live, content_identity(value)):
+                    raise ValueError("MODEL exported buffer does not match registered live or original state")
+                original[key] = value
+            continue
+        if key not in original:
             raise ValueError("Cannot reconstruct original MODEL identity from this buffer backup format")
         original[key] = value
+    for key in unknown:
+        # A process-local fallback can validate live bytes but cannot pretend
+        # these unknown-backed tensors are reconstructed original storage.
+        original.pop(key, None)
     quantized = []
     for key, backup in backups.items():
         weight = getattr(backup, "weight", None)
@@ -175,8 +261,27 @@ def _original_state(model, state):
     return original
 
 
+# Historical full-module identity, retained for old diagnostics. Compatibility
+# depends on the actual factory below, not unrelated nodes in the same module.
 CORE_SIGMA_SHIFT_SOURCE_SHA256 = "5999ed8c22b13c8251084c0629fd82137d2fb52b55106abfc73bf5cafc73841d"
 CORE_SIGMA_SHIFT_EXECUTE_SHA256 = "ef0b67d716bab7cd65c83f86ac8067859d8f8712b64dba88a3d7b84356a710a3"
+
+
+def _sampling_class_members(cls):
+    """Ignore only inert CPython 3.13 metadata, never executable members.
+
+    Read the raw namespace without invoking descriptors or coercing subclasses.
+    Either key may be absent (setting __module__ removes __firstlineno__). The
+    names *inside* __static_attributes__ do not grant any member an exemption.
+    """
+    namespace = vars(cls)
+    if "__firstlineno__" in namespace and type(namespace["__firstlineno__"]) is not int:
+        raise UnverifiedModelStack("Sampling class line metadata is not an inert integer")
+    if "__static_attributes__" in namespace:
+        names = namespace["__static_attributes__"]
+        if type(names) is not tuple or any(type(name) is not str for name in names):
+            raise UnverifiedModelStack("Sampling class attribute metadata is not an inert string tuple")
+    return set(namespace) - {"__firstlineno__", "__static_attributes__"}
 
 
 def _native_sigma_shift_factory(cls, core_sampling):
@@ -195,7 +300,7 @@ def _native_sigma_shift_factory(cls, core_sampling):
             or cls.__bases__ != (native_av, core_sampling.CONST)
             or cls.__module__ != "comfy_extras.nodes_minimax_h3"
             or cls.__qualname__ != "MiniMaxH3SigmaShift.execute.<locals>.ModelSamplingAdvanced"
-            or set(vars(cls)) - {"__module__", "__doc__"}):
+            or _sampling_class_members(cls) - {"__module__", "__doc__"}):
         return None
     try:
         from comfy_extras import nodes_minimax_h3 as core_h3
@@ -214,7 +319,7 @@ def _native_sigma_shift_factory(cls, core_sampling):
     source = source_path.read_bytes()
     source_sha = hashlib.sha256(source).hexdigest()
     execute_sha = hashlib.sha256(inspect.getsource(factory).encode()).hexdigest()
-    if source_sha != CORE_SIGMA_SHIFT_SOURCE_SHA256 or execute_sha != CORE_SIGMA_SHIFT_EXECUTE_SHA256:
+    if execute_sha != CORE_SIGMA_SHIFT_EXECUTE_SHA256:
         raise UnverifiedModelStack("Core SigmaShift source is outside the audited sampling factory")
     compiled = compile(source, factory.__code__.co_filename, "exec", dont_inherit=True)
     def code_named(parent, name):
@@ -261,14 +366,14 @@ def _v2_sampling_identity(value):
     native_factory = None
     native_av = getattr(core_sampling, "ModelSamplingAV", None)
     if cls is sampling.MiniMaxH3FlowSampling:
-        if set(vars(cls)) - {"__module__", "__doc__", "audio_scale"}:
+        if _sampling_class_members(cls) - {"__module__", "__doc__", "audio_scale"}:
             raise UnverifiedModelStack("V2 sampling class contains unknown execution members")
         protocol = "t8_raw_audio_flow"
     elif (native_av is not None
           and cls.__bases__ == (native_av, core_sampling.CONST)
           and cls.__module__ == sampling.__name__
           and cls.__qualname__ == "_make_sampling.<locals>.MiniMaxH3NativeAVSampling"
-          and not (set(vars(cls)) - {"__module__", "__doc__"})):
+          and not (_sampling_class_members(cls) - {"__module__", "__doc__"})):
         # _make_sampling creates a fresh empty subclass each time. Its class
         # identity is not stable, but its exact bases and empty executable
         # namespace are: no arbitrary subclass or repr-based exemption.

@@ -65,12 +65,13 @@ class RgthreePowerPrimitive extends RgthreeBaseServerNode {
             }, {
                 values: Object.keys(PRIMITIVES),
             });
-            this.outputTypeWidget.hidden = this.properties[PROPERTY_HIDE_TYPE_SELECTOR];
+            this.outputTypeWidget.hidden = this.getPropBool(PROPERTY_HIDE_TYPE_SELECTOR, false);
         }
         this.setTypedData();
     }
     setTypedData() {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d;
+        var _e;
         const name = "value";
         const type = this.outputTypeWidget.value;
         const linked = !!((_b = (_a = this.inputs) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.link);
@@ -78,7 +79,14 @@ class RgthreePowerPrimitive extends RgthreeBaseServerNode {
         if (this.typeState == newTypeState)
             return;
         this.typeState = newTypeState;
-        let value = (_d = (_c = this.valueWidget) === null || _c === void 0 ? void 0 : _c.value) !== null && _d !== void 0 ? _d : null;
+        let value = (_e = (_c = this.valueWidget) === null || _c === void 0 ? void 0 : _c.value) !== null && _e !== void 0 ? _e : null;
+        let newIndex = this.widgets.indexOf(this.valueWidget);
+        if (this.valueWidget) {
+            this.removeWidget(this.valueWidget);
+        }
+        else {
+            newIndex = this.widgets.length;
+        }
         let newWidget = null;
         if (linked) {
             newWidget = ComfyWidgets["STRING"](this, name, ["STRING"], app).widget;
@@ -111,17 +119,12 @@ class RgthreePowerPrimitive extends RgthreeBaseServerNode {
         if (newWidget == null) {
             throw new Error(`Unsupported type "${type}".`);
         }
-        if (this.valueWidget) {
-            this.replaceWidget(this.valueWidget, newWidget);
+        if (!this.widgets.includes(newWidget)) {
+            this.addCustomWidget(newWidget);
         }
-        else {
-            if (!this.widgets.includes(newWidget)) {
-                this.addCustomWidget(newWidget);
-            }
-            moveArrayItem(this.widgets, newWidget, 1);
-        }
+        moveArrayItem(this.widgets, newWidget, newIndex);
         this.valueWidget = newWidget;
-        if (!((_e = this.inputs) === null || _e === void 0 ? void 0 : _e.length)) {
+        if (!((_d = this.inputs) === null || _d === void 0 ? void 0 : _d.length)) {
             this.addInput("value", "*", { widget: this.valueWidget });
         }
         else {
@@ -144,7 +147,7 @@ class RgthreePowerPrimitive extends RgthreeBaseServerNode {
             if (!this.outputTypeWidget) {
                 return true;
             }
-            this.outputTypeWidget.hidden = this.properties[PROPERTY_HIDE_TYPE_SELECTOR];
+            this.outputTypeWidget.hidden = this.getPropBool(PROPERTY_HIDE_TYPE_SELECTOR, false);
             if (this.outputTypeWidget.hidden) {
                 this.outputTypeWidget.computeLayoutSize = () => ({
                     minHeight: 0,

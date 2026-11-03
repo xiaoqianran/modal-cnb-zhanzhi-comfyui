@@ -6,13 +6,13 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 USERDATA = os.path.join(THIS_DIR, '..', 'userdata')
 
 
-def read_userdata_file(rel_path: str):
+def read_userdata_file(rel_path: str, default=None):
   """Reads a file from the userdata directory."""
   file_path = clean_path(rel_path)
   if path_exists(file_path):
     with open(file_path, 'r', encoding='UTF-8') as file:
       return file.read()
-  return None
+  return default
 
 
 def save_userdata_file(rel_path: str, content: str):
@@ -29,10 +29,10 @@ def delete_userdata_file(rel_path: str):
     os.remove(file_path)
 
 
-def read_userdata_json(rel_path: str):
+def read_userdata_json(rel_path: str, default=None):
   """Reads a json file from the userdata directory."""
   file_path = clean_path(rel_path)
-  return load_json_file(file_path)
+  return load_json_file(file_path, default)
 
 
 def save_userdata_json(rel_path: str, data: dict):
@@ -44,7 +44,11 @@ def save_userdata_json(rel_path: str, data: dict):
 def clean_path(rel_path: str):
   """Cleans a relative path by splitting on forward slash and os.path.joining."""
   cleaned = USERDATA
-  paths = rel_path.split('/')
+  paths = os.path.normpath(rel_path).split(os.sep)
   for path in paths:
     cleaned = os.path.join(cleaned, path)
+  cleaned = os.path.normpath(cleaned)
+  userdata_root = os.path.normpath(USERDATA)
+  if os.path.commonpath([cleaned, userdata_root]) != userdata_root:
+    raise ValueError(f'Invalid path: "{rel_path}" is not under userdata.')
   return cleaned

@@ -17,8 +17,8 @@ from nodes import (
     UNETLoader, VAEDecode, VAEEncode, VAELoader, common_ksampler,
 )
 
-from ..main_unit import CLIP_TYPE, apply_lora_stack, load_upscale_model, new_context, pil2tensor, read_ratios, upscale_with_model
-from .main_nodes import _apt_cache_evict_tag, _apt_cache_get, _apt_cache_set, _apt_second_pass_positive
+from ..main_unit import CLIP_TYPE, apply_lora_stack, condi_zero_out, load_upscale_model, new_context, pil2tensor, read_ratios, upscale_with_model
+from .main_nodes import Data_basic, _apt_cache_evict_tag, _apt_cache_get, _apt_cache_set, _apt_second_pass_positive
 from ..NodeBasic.C_AD import (
     _AD_H3_LATENT_TILE_PRESETS,
     _AD_H3_SAMPLE_LATENT_TILE_CHOICES,
@@ -181,6 +181,42 @@ def _uc_tiled_model(model, tile_count, overlap_pixels, bridge_seams=False):
     return tiled_model
 
 
+class UC_edit(Data_basic):
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = super().INPUT_TYPES()
+        for name in ("positive", "negative", "vae", "clip", "audio_vae"):
+            inputs["optional"].pop(name)
+        inputs["optional"]["pos"] = ("STRING", {"default": "", "multiline": True})
+        inputs["optional"]["neg"] = ("STRING", {"default": "", "multiline": False})
+        return inputs
+
+    RETURN_TYPES = ("RUN_CONTEXT", "MODEL", "LATENT", "IMAGE", "MASK")
+    RETURN_NAMES = ("context", "model", "latent", "image", "latent_mask")
+    CATEGORY = "Apt_Preset/unit_context"
+    NAME = "UC_edit"
+
+    def sample(self, context, model=None, latent=None, latent_image=None,
+               latent_mask=None, pos="", neg=""):
+        result = super().sample(
+            context, model=model, latent=latent, latent_image=latent_image,
+            latent_mask=latent_mask,
+        )
+        output_context, model, output_positive, output_negative, latent, _, clip, image, mask, _ = result
+        updates = {}
+        if (pos or neg) and clip is None:
+            raise ValueError("UC_edit needs CLIP in context to encode text")
+        if pos:
+            output_positive = CLIPTextEncode().encode(clip, pos)[0]
+            updates["pos"] = pos
+        if neg:
+            output_negative = CLIPTextEncode().encode(clip, neg)[0]
+            updates["neg"] = neg
+        if updates:
+            output_context = new_context(output_context, positive=output_positive, negative=output_negative, **updates)
+        return (output_context, model, latent, image, mask)
+
+
 class UC_create_context:
     @classmethod
     def INPUT_TYPES(cls):
@@ -280,8 +316,8 @@ class UC_ksampler:
                 }),
                 "ratio_selected": ([cls.custom_ratio] + cls.ratio_sizes, {"default": cls.custom_ratio}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 300}),
-                "width": ("INT", {"default": 512, "min": 8, "max": 16384}),
-                "height": ("INT", {"default": 512, "min": 8, "max": 16384}),
+                "width": ("INT", {"default": 1024, "min": 8, "max": 16384}),
+                "height": ("INT", {"default": 1024, "min": 8, "max": 16384}),
             },
             "optional": {
                 "model": ("MODEL",),
@@ -311,7 +347,7 @@ class UC_ksampler:
                VAE_Decode, model=None, positive=None, negative=None, latent=None,
                latent_image=None, latent_mask=None, sample_parameters=False,
                latent_size=False, ratio_selected="自定义宽和高", batch_size=1,
-               width=512, height=512, tile_size=_UC_NO_LATENT_TILE):
+               width=1024, height=1024, tile_size=_UC_NO_LATENT_TILE):
         model = model if model is not None else context.get("model")
         positive = positive if positive is not None else context.get("positive")
         negative = negative if negative is not None else context.get("negative")
@@ -339,9 +375,7 @@ class UC_ksampler:
                 raise ValueError("Cannot encode the default positive prompt without CLIP in context")
             positive = CLIPTextEncode().encode(clip, "")[0]
         if _uc_conditioning_is_empty(negative):
-            if clip is None:
-                raise ValueError("Cannot encode the default negative prompt 'blur' without CLIP in context")
-            negative = CLIPTextEncode().encode(clip, "blur")[0]
+            negative = condi_zero_out(positive)[0]
 
         if latent_image is not None:
             if vae is None:
@@ -361,8 +395,8 @@ class UC_ksampler:
             if latent_size is False:
                 ratio_selected = "None"
                 batch_size = 1
-                width = 512
-                height = 512
+                width = 1024
+                height = 1024
             if ratio_selected not in ("None", "customer_WxH", self.custom_ratio):
                 width = self.ratio_dict[ratio_selected]["width"]
                 height = self.ratio_dict[ratio_selected]["height"]

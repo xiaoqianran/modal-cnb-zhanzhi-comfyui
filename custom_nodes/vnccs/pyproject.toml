@@ -1,7 +1,7 @@
 [project]
 name = "vnccs"
 description = "VNCCS - Visual Novel Character Creation Suite"
-version = "3.1.2"
+version = "3.3.2"
 license = {file = "LICENSE"} 
 
 dependencies = [
@@ -9,18 +9,11 @@ dependencies = [
     "numpy",
     "Pillow",
     "opencv-python",
-    "llama-cpp-python>=0.3.16",
-    "einops",
     "safetensors",
     "huggingface-hub[torch]>=0.22",
     "json_repair",
     "aiohttp",
-    "timm",
-    "torchvision",
-    "transformers",
-    "kornia",
     "pymatting",
-    "transparent-background",
 ]
 
 [project.urls]

@@ -81,6 +81,7 @@ NODE_CLASS_MAPPINGS= {
 #-------------------------------------------------------N
 
 "UC_load_model": UC_load_model,
+"UC_edit": UC_edit,
 "UC_ksampler": UC_ksampler,
 "UC_ksampler_custom": UC_ksampler_custom,
 "UC_Ksampler_refine": UC_Ksampler_refine,

@@ -12437,14 +12437,11 @@
 "sum_qwenImage21": {
     "display_name": "sum_qwenImage21",
     "inputs": {
+        "system_prompt": {
+            "name": "系统提示词"
+        },
         "resolution": {
             "name": "分辨率"
-        },
-        "prompt_enhance": {
-            "name": "提示词增强"
-        },
-        "negative_prompt": {
-            "name": "负面词"
         }
 
     },

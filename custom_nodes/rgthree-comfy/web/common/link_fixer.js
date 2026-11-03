@@ -152,7 +152,8 @@ export class WorkflowLinkFixer {
         return { ...this.checkedData };
     }
     fix(force = false, times) {
-        var _a, _b, _c, _d, _e, _f, _g;
+        var _a, _b, _c, _d;
+        var _e, _f, _g;
         if (!this.checkedData || force) {
             this.check(force);
         }
@@ -324,19 +325,19 @@ class WorkflowLinkFixerSerialized extends WorkflowLinkFixer {
     }
     getNodeById(id) {
         var _a;
-        return (_a = this.graph.nodes.find((node) => Number(node.id) === id)) !== null && _a !== void 0 ? _a : null;
+        return (_a = this.graph.nodes.find((node) => String(node.id) === String(id))) !== null && _a !== void 0 ? _a : null;
     }
     fix(force = false, times) {
         const ret = super.fix(force, times);
-        this.graph.links = this.graph.links.filter((l) => !!l);
+        this.graph.links = (this.graph.links || []).filter((l) => !!l);
         return ret;
     }
     deleteGraphLink(id) {
-        const idx = this.graph.links.findIndex((l) => l && (l[0] === id || l.id === id));
+        const idx = (this.graph.links || []).findIndex((l) => l && (l[0] === id || l.id === id));
         if (idx === -1) {
             return `Link #${id} not found in workflow links.`;
         }
-        this.graph.links.splice(idx, 1);
+        (this.graph.links || []).splice(idx, 1);
         return true;
     }
 }

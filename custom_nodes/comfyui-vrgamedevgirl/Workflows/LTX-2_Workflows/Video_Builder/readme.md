@@ -2495,7 +2495,9 @@ LUT tips:
 - Click a LUT to apply it to the selected scene.
 - Drag a LUT onto a scene when you want to target a specific scene.
 - Use `Refresh` if you add new `.cube` files while ComfyUI is open.
-- The included LUT examples live under the repo's `LUTS/examples` folder.
+- LUT files and preview images are not bundled. Add your own licensed `.cube` files to this node pack's `LUTS` folder.
+- Optional previews you have rights to use can go in `LUTS/examples`, with the same base filename as the LUT.
+- If an existing project selected a removed LUT, choose another licensed LUT, restore your own lawfully obtained copy, or disable the LUT before rendering.
 
 `Adjust` includes temperature, tint, saturation, exposure, contrast, highlights, shadows, whites, blacks, sharpen, clarity, vignette, and fade. Enable scene adjust and change at least one value before previewing. `Live preview` updates a still frame after slider changes; `Preview Adjust` also renders only a preview frame, while `Render Adjust for Scene` processes the selected scene media. `Apply to all scenes` copies the settings project-wide. Global presets live under `output/VRGDG_AdjustPresets` and can be applied, saved, imported, or refreshed without restarting the Builder.
 
@@ -2751,6 +2753,7 @@ Hidden workflow requirements:
 | `ComfyUI-LTXVideo` | LTX 2.3 video, audio VAE, I2V/T2V, Reference-to-Video, Ingredients-to-Video, latent upscaling, and LTX guide/reference nodes |
 | `ComfyUI-GGUF` | GGUF model loading for video/text models. Look for nodes such as `UnetLoaderGGUF` and `DualCLIPLoaderGGUF` |
 | `ComfyUI-KJNodes` | Utility image/video nodes used by the hidden workflows, including resize, image size/count, and KJ VAE loader helpers |
+| `comfyui-minimax-h3-audio-T8` | Required by MiniMax H3 Ref to Video 2 Pass for `MiniMaxH3AVLatentSeparateT8`, which separates the pass 1 video and audio latents |
 | `comfyui_memory_cleanup` | RAM/VRAM cleanup nodes used between heavy video and image passes. Look for `RAMCleanup` and `VRAMCleanup` |
 | `erosdiffusion-eulerflowmatchingdiscretescheduler` | Custom FlowMatch scheduler used by ZImage/Krea-style image workflows. Look for `FlowMatchEulerDiscreteScheduler (Custom)` |
 
@@ -2759,7 +2762,8 @@ Mode-specific notes:
 | Builder feature | Extra dependency notes |
 | --- | --- |
 | `Image to Video` / `Text to Video` | Requires the LTXVideo, VideoHelperSuite, GGUF, and KJNodes packs above |
-| `MiniMax H3` | Requires a current ComfyUI build with `MiniMaxH3ReferenceToVideo`, KJNodes for the standard diffusion loader, VideoHelperSuite for reference video/audio loading and combining, and this repo's H3 timing/audio/reference nodes. Built-in audio also uses the installed LTX audio VAE decode node. GGUF is not supported on this path. |
+| `MiniMax H3` | Requires a current ComfyUI build with `MiniMaxH3ReferenceToVideo` and `MiniMaxH3ImageToVideo`, KJNodes for the standard diffusion loader, VideoHelperSuite for reference video/audio loading and combining, and this repo's H3 timing/audio/reference nodes. Built-in audio also uses the installed LTX audio VAE decode node. GGUF is not supported on this path. |
+| `MiniMax H3 Ref to Video 2 Pass` | Requires `comfyui-minimax-h3-audio-T8` in addition to the standard MiniMax H3 dependencies. Install it from the Builder's Models / Custom Nodes button, then restart ComfyUI. |
 | `MiniMax-H3 Turbo` | Optional. Requires `ComfyUI-MiniMax-H3-Turbo`, the selected Turbo LoRA under `models/loras`, and a ComfyUI restart after installation/update. Standard MiniMax does not require this extension while Turbo is disabled. |
 | `First Last Frame` | Requires the same LTX stack plus the bundled `LTX2.3_FLF_API.json` hidden workflow and both start/end images |
 | `ID-LoRA I2V` | Requires LTXVideo plus the required ID-LoRA/model shown in the Video tab |

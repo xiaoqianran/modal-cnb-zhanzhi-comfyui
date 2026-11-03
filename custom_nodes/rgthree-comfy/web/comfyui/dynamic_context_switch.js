@@ -12,7 +12,7 @@ class DynamicContextSwitchNode extends DynamicContextNodeBase {
         this.hasShadowInputs = true;
         this.lastInputsList = [];
         this.shadowInputs = [
-            { name: "base_ctx", type: "RGTHREE_DYNAMIC_CONTEXT", link: null, count: 0, boundingRect: null },
+            { name: "base_ctx", type: "RGTHREE_DYNAMIC_CONTEXT", link: null, count: 0, boundingRect: [0, 0, 0, 0] },
         ];
     }
     getContextInputsList() {
@@ -48,7 +48,7 @@ class DynamicContextSwitchNode extends DynamicContextNodeBase {
     refreshInputsAndOutputs() {
         var _a;
         const inputs = [
-            { name: "base_ctx", type: "RGTHREE_DYNAMIC_CONTEXT", link: null, count: 0, boundingRect: null },
+            { name: "base_ctx", type: "RGTHREE_DYNAMIC_CONTEXT", link: null, count: 0, boundingRect: [0, 0, 0, 0] },
         ];
         let numConnected = 0;
         for (let i = 0; i < this.inputs.length; i++) {
@@ -73,7 +73,7 @@ class DynamicContextSwitchNode extends DynamicContextNodeBase {
                     type: slotData.type,
                     link: null,
                     count: 1,
-                    boundingRect: null,
+                    boundingRect: [0, 0, 0, 0],
                 });
             }
         }
@@ -104,7 +104,8 @@ class DynamicContextSwitchNode extends DynamicContextNodeBase {
         this.fixInputsOutputsLinkSlots();
     }
     onDrawForeground(ctx, canvas) {
-        var _a, _b;
+        var _a;
+        var _b;
         const low_quality = ((_b = (_a = canvas === null || canvas === void 0 ? void 0 : canvas.ds) === null || _a === void 0 ? void 0 : _a.scale) !== null && _b !== void 0 ? _b : 1) < 0.6;
         if (low_quality || this.size[0] <= 10) {
             return;

@@ -1,5 +1,7 @@
 # MiniMax H3 T8 工作流目录
 
+最新已审：[Compact 4步、周期音画循环、Solar结构重渲染](91-h24-reviewed/README.md)。
+
 普通提示词入口：[全部原版→普通版对照](PLAIN_PROMPTS.md)。各分类的 `*_普通提示词.json`（按功能、采样和阶段命名，与原图同目录） 可一次输入完整描述，双采和多阶段文字仍可独立编辑；原 Relay 图保留。
 
 这里保存可直接拖入或通过 ComfyUI“工作流”菜单打开的前端 JSON、目录说明与文件名对照表。带日期的文件名只表示该工作流的发布日期，不代表功能稳定等级；带 `EXP` 或 `Advanced` 的路线应先阅读所在目录说明和画布 NOTE。
@@ -96,3 +98,5 @@ Windows 命名预算：仓库相对路径≤140、JSON文件名≤96字符；新
 新增入口：[FreeVideo 新四档 Full／Cold](76-freevideo-quality/README.md)。Light8+3／Medium12指定样片人审通过，16／20仅CPU结构支持；[旧8+2／4+4](72-freevideo-split/README.md)保持。
 
 使用顺序建议：先从稳定基础/音频工作流确认模型链可运行，再按具体目的进入 Advanced/EXP 目录。不要把不同高级采样器直接串联；组合能力应使用专门的 Mixer 工作流或遵循画布 NOTE。
+
+新增入口：[Pika双采与两种6+3的八套已审图](95-pika-dual/README.md)：普通Pika约0.6MP和可选2K细化独立选择，原单采示例保留。

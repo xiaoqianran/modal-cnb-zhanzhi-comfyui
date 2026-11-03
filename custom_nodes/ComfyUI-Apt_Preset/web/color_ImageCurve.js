@@ -2181,12 +2181,17 @@ app.registerExtension({
                     const ry = ir.y + sr.y * ir.scale;
                     const rw = sr.w * ir.scale;
                     const rh = sr.h * ir.scale;
+                    const corner = cornerAt(m, rx, ry, rw, rh);
                     const inside = m.x >= rx && m.x <= rx + rw && m.y >= ry && m.y <= ry + rh;
-                    canvas.style.cursor = inside ? "move" : "default";
-                    if (!inside) return;
+                    canvas.style.cursor = corner ? "nwse-resize" : (inside ? "move" : "default");
+                    if (!inside && !corner) return;
                     const imgPt = canvasToImage(m.x, m.y);
                     if (!imgPt) return;
                     dragInfo = {
+                        corner,
+                        width: sr.w,
+                        height: sr.h,
+                        zoom: cropState.zoom,
                         mouseX: imgPt.x,
                         mouseY: imgPt.y,
                         cx: cropState.cx * imageMeta.img_w,
@@ -2204,14 +2209,32 @@ app.registerExtension({
                         const ry = ir.y + sr.y * ir.scale;
                         const rw = sr.w * ir.scale;
                         const rh = sr.h * ir.scale;
+                        const corner = cornerAt(m, rx, ry, rw, rh);
                         const over = m.x >= rx && m.x <= rx + rw && m.y >= ry && m.y <= ry + rh;
-                        canvas.style.cursor = dragInfo ? "move" : (over ? "move" : "default");
+                        canvas.style.cursor = (dragInfo?.corner || corner) ? "nwse-resize" : (dragInfo || over ? "move" : "default");
                     }
                     if (!dragInfo) return;
                     const imgPt = canvasToImage(m.x, m.y);
                     if (!imgPt) return;
                     const dx = imgPt.x - dragInfo.mouseX;
                     const dy = imgPt.y - dragInfo.mouseY;
+                    if (dragInfo.corner) {
+                        const { sx, sy } = dragInfo.corner;
+                        const factor = Math.max((dragInfo.width + 2 * sx * dx) / dragInfo.width,
+                                                (dragInfo.height + 2 * sy * dy) / dragInfo.height);
+                        if (isCropByScaleEnabled()) {
+                            cropState.zoom = clamp(dragInfo.zoom / Math.max(0.01, factor), getMinZoomForImageBounds(), getMaxZoom());
+                        } else {
+                            setCropDims(Math.round(dragInfo.width * Math.max(0.01, factor)),
+                                        Math.round(dragInfo.height * Math.max(0.01, factor)));
+                            ensureMaskContainDims();
+                        }
+                        userAdjusted = true;
+                        getSourceRect();
+                        syncState();
+                        draw();
+                        return;
+                    }
                     
                     // 计算新的中心点（使用实际源框尺寸，避免 false 模式被锁死）
                     const srcRect = getSourceRect();
@@ -3020,6 +3043,14 @@ app.registerExtension({
                     };
                 };
 
+                const cornerAt = (m, rx, ry, rw, rh) => {
+                    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+                        if (Math.abs(m.x - (rx + (sx > 0 ? rw : 0))) <= 12 &&
+                            Math.abs(m.y - (ry + (sy > 0 ? rh : 0))) <= 12) return { sx, sy };
+                    }
+                    return null;
+                };
+
                 canvas.addEventListener("mousedown", (e) => {
                     if (e.button !== 0) return;
                     const ir = getImageRectOnCanvas();
@@ -3030,12 +3061,14 @@ app.registerExtension({
                     const ry = ir.y + sr.y * ir.scale;
                     const rw = sr.w * ir.scale;
                     const rh = sr.h * ir.scale;
+                    const corner = cornerAt(m, rx, ry, rw, rh);
                     const inside = m.x >= rx && m.x <= rx + rw && m.y >= ry && m.y <= ry + rh;
-                    canvas.style.cursor = inside ? "move" : "default";
-                    if (!inside) return;
+                    canvas.style.cursor = corner ? "nwse-resize" : (inside ? "move" : "default");
+                    if (!inside && !corner) return;
                     const imgPt = canvasToImage(m.x, m.y);
                     if (!imgPt) return;
                     dragInfo = {
+                        corner, width: sr.w, height: sr.h, zoom: cropState.zoom,
                         mouseX: imgPt.x,
                         mouseY: imgPt.y,
                         cx: cropState.cx * imageMeta.img_w,
@@ -3053,14 +3086,32 @@ app.registerExtension({
                         const ry = ir.y + sr.y * ir.scale;
                         const rw = sr.w * ir.scale;
                         const rh = sr.h * ir.scale;
+                        const corner = cornerAt(m, rx, ry, rw, rh);
                         const over = m.x >= rx && m.x <= rx + rw && m.y >= ry && m.y <= ry + rh;
-                        canvas.style.cursor = dragInfo ? "move" : (over ? "move" : "default");
+                        canvas.style.cursor = (dragInfo?.corner || corner) ? "nwse-resize" : (dragInfo || over ? "move" : "default");
                     }
                     if (!dragInfo) return;
                     const imgPt = canvasToImage(m.x, m.y);
                     if (!imgPt) return;
                     const dx = imgPt.x - dragInfo.mouseX;
                     const dy = imgPt.y - dragInfo.mouseY;
+                    if (dragInfo.corner) {
+                        const { sx, sy } = dragInfo.corner;
+                        const factor = Math.max((dragInfo.width + 2 * sx * dx) / dragInfo.width,
+                                                (dragInfo.height + 2 * sy * dy) / dragInfo.height);
+                        if (isCropByScaleEnabled()) {
+                            cropState.zoom = clamp(dragInfo.zoom / Math.max(0.01, factor), getMinZoomForImageBounds(), getMaxZoom());
+                        } else {
+                            setCropDims(Math.round(dragInfo.width * Math.max(0.01, factor)),
+                                        Math.round(dragInfo.height * Math.max(0.01, factor)));
+                            ensureMaskContainDims();
+                        }
+                        userAdjusted = true;
+                        getSourceRect();
+                        syncState();
+                        draw();
+                        return;
+                    }
                     const src = getSourceRect();
                     if (!src) return;
                     const halfW = src.w * 0.5;
@@ -3083,9 +3134,10 @@ app.registerExtension({
                     dragInfo = null;
                 });
 
-                canvas.addEventListener("wheel", (e) => {
+                const handleWheel = (e) => {
                     if (!imageMeta.img_w || !imageMeta.img_h) return;
                     e.preventDefault();
+                    e.stopImmediatePropagation();
                     if (!isCropByScaleEnabled()) {
                         const cur = ensureMaskContainDims();
                         const minW = (maskMeta.mask_w && maskMeta.mask_h) ? Math.max(1, Math.ceil(maskMeta.mask_w)) : 1;
@@ -3166,7 +3218,10 @@ app.registerExtension({
                     userAdjusted = true;
                     syncState();
                     draw();
-                }, { passive: false });
+                };
+                window.addEventListener("wheel", (e) => {
+                    if (e.target === canvas) handleWheel(e);
+                }, { passive: false, capture: true });
 
                 const bindCropDim = (w) => {
                     if (!w) return;

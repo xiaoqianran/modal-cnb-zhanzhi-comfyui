@@ -14,6 +14,7 @@ Sampler / scheduler:
 
 """Prepare enumeration lists once for input validation."""
 import os
+from copy import copy
 import folder_paths
 from .sampler_scheduler_picker import (
     fetch_sampler_scheduler_lists,
@@ -143,7 +144,7 @@ class VNCCS_Pipe:
         if not scheduler or scheduler == PIPE_INHERIT:
             scheduler = SCHEDULER_ENUM[0] if SCHEDULER_ENUM else DEFAULT_SCHEDULERS[0]
 
-        if lora_name and lora_name != "none" and model is not None:
+        if lora_name and lora_name != "none" and model is not None and lora_strength != 0:
             loader_type = getattr(pipe, "loader_type", "standard") if pipe else "standard"
             if loader_type == "nunchaku":
                 # TECH DEBT: legacy Nunchaku LoRA passthrough disabled. Delete
@@ -154,7 +155,9 @@ class VNCCS_Pipe:
                 print(f"[VNCCS Pipe] Applying LoRA: {lora_name} (strength={lora_strength}, loader={loader_type})")
                 model, clip = _apply_lora_standard(model, clip, full_path, lora_strength)
             else:
-                print(f"[VNCCS Pipe] LoRA not found on disk: '{lora_name}', skipping.")
+                raise FileNotFoundError(
+                    f"Selected LoRA '{lora_name}' is not installed. Restore it or disable it before generating."
+                )
 
         # Store on self for return
         self.model = model
@@ -174,6 +177,15 @@ class VNCCS_Pipe:
         self.nunchaku_kind = None
         self.nunchaku_settings = None
         self.model_entry = getattr(pipe, "model_entry", None)
+        self.model_cache_key = getattr(pipe, "model_cache_key", None)
+        if pipe is None or any(
+            current is not getattr(pipe, name, None)
+            for name, current in (("model", model), ("clip", clip), ("vae", vae))
+        ):
+            self.model_cache_key = None
+        self.model_kind = getattr(pipe, "model_kind", "")
+        self.qi2_cache = dict(getattr(pipe, "qi2_cache", {"device": "gpu", "dtype": "int8"}) or {})
+        self.audio_vae = getattr(pipe, "audio_vae", None)
         self.repo_id = getattr(pipe, "repo_id", None)
         self.lora_entries = getattr(pipe, "lora_entries", [])
         self.lora_states = getattr(pipe, "lora_states", [])
@@ -188,7 +200,7 @@ class VNCCS_Pipe:
             self.sample_steps if self.sample_steps is not None else 0,
             self.cfg,
             self.denoise,
-            self,
+            copy(self),
             self.sampler_name or "",
             self.scheduler or "",
         )

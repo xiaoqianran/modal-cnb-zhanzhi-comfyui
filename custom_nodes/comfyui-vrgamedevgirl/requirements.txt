@@ -1,14 +1,12 @@
-kornia
 librosa
-imageio
 opencv-python
 torchcodec
 google-generativeai
-av
 stable-ts
 demucs
 transformers
 accelerate
 huggingface_hub
-voxcpm
+Cython
+scikit-build-core
 llama-cpp-python

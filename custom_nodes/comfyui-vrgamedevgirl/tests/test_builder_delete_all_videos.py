@@ -1,12 +1,10 @@
 import unittest
 from pathlib import Path
 
+from builder_source import read_builder_source
 
-BUILDER_SOURCE = (
-    Path(__file__).resolve().parents[1]
-    / "web"
-    / "VRGDG_MusicVideoBuilderUI.js"
-).read_text(encoding="utf-8")
+
+BUILDER_SOURCE = read_builder_source()
 
 
 DELETE_ALL_START = BUILDER_SOURCE.index("async function deleteAllTimelineVideos()")
@@ -37,21 +35,26 @@ class BuilderDeleteAllVideosTests(unittest.TestCase):
         ):
             self.assertIn(line, DELETE_ALL_SOURCE)
 
-    def test_action_never_deletes_media_files(self):
-        self.assertNotIn("delete_project_media", DELETE_ALL_SOURCE)
-        self.assertNotIn("postJson(", DELETE_ALL_SOURCE)
-        self.assertIn("will NOT be deleted", DELETE_ALL_SOURCE)
-        self.assertIn("remain on disk as backups", DELETE_ALL_SOURCE)
+    def test_action_deletes_every_video_and_thumbnail_file(self):
+        self.assertIn("/vrgdg/music_builder/delete_project_media", DELETE_ALL_SOURCE)
+        self.assertIn("for (const path of mediaPaths)", DELETE_ALL_SOURCE)
+        # One OK / Cancel dialog (no native confirm); the image cleanup is a checkbox inside it.
+        self.assertIn("await confirmDestructiveAction(", DELETE_ALL_SOURCE)
+        self.assertNotIn("window.confirm(", DELETE_ALL_SOURCE)
+        self.assertIn("You are about to permanently delete", DELETE_ALL_SOURCE)
+        self.assertIn("cannot be undone", DELETE_ALL_SOURCE.lower())
+        self.assertIn("if (!answer.confirmed) return;", DELETE_ALL_SOURCE)
 
-    def test_action_is_undoable_and_saved(self):
+    def test_action_saves_cleanup(self):
         self.assertIn("pushHistory()", DELETE_ALL_SOURCE)
         self.assertIn(
-            'autoSaveSessionQuiet("all timeline videos removed")',
+            'autoSaveSessionQuiet(deleteSceneImages ? "all timeline videos and scene images removed" : "all timeline videos removed")',
             DELETE_ALL_SOURCE,
         )
 
-    def test_action_does_not_clear_images_or_prompts(self):
-        self.assertNotIn("segment.image_history = []", DELETE_ALL_SOURCE)
+    def test_image_cleanup_is_optional_and_preserves_prompts(self):
+        self.assertIn("if (deleteSceneImages)", DELETE_ALL_SOURCE)
+        self.assertIn("segment.image_history = []", DELETE_ALL_SOURCE)
         self.assertNotIn('segment.i2v_prompt = ""', DELETE_ALL_SOURCE)
         self.assertNotIn('segment.minimax_h3_prompt = ""', DELETE_ALL_SOURCE)
 

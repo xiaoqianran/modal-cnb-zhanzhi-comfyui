@@ -29,7 +29,7 @@ sam_lock = threading.Condition()
 last_prepare_data = None
 
 
-def async_prepare_sam(image_dir, model_name, filename):
+def async_prepare_sam(model_name, filename):
     with sam_lock:
         global sam_predictor
 
@@ -43,8 +43,7 @@ def async_prepare_sam(image_dir, model_name, filename):
         sam_model = sam_model_registry[model_kind](checkpoint=model_name)
         sam_predictor = SamPredictor(sam_model)
 
-        image_path = os.path.join(image_dir, filename)
-        image = nodes.LoadImage().load_image(image_path)[0]
+        image = nodes.LoadImage().load_image(filename)[0]
         image = np.clip(255. * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8)
 
         if impact.config.get_config()['sam_editor_cpu']:
@@ -68,8 +67,6 @@ async def sam_prepare(request):
             # already loaded: skip -- prevent redundant loading
             return web.Response(status=200)
 
-        last_prepare_data = data
-
         model_name = 'sam_vit_b_01ec64.pth'
         if data['sam_model_name'] == 'auto':
             model_name = impact.config.get_config()['sam_editor_model']
@@ -82,18 +79,22 @@ async def sam_prepare(request):
 
         logging.info(f"[Impact Pack] Loading SAM model '{model_path}'")
 
-        filename, image_dir = folder_paths.annotated_filepath(data["filename"])
+        filename = data["filename"]
+        _, image_dir = folder_paths.annotated_filepath(filename)
 
         if image_dir is None:
             typ = data['type'] if data['type'] != '' else 'output'
-            image_dir = folder_paths.get_directory_by_type(typ)
-            if data['subfolder'] is not None and data['subfolder'] != '':
-                image_dir += f"/{data['subfolder']}"
+            if folder_paths.get_directory_by_type(typ) is None:
+                return web.Response(status=400)
+            filename = f"{os.path.join(data['subfolder'] or '', filename)} [{typ}]"
 
-        if image_dir is None:
+        try:
+            folder_paths.get_annotated_filepath(filename)
+        except ValueError:
             return web.Response(status=400)
 
-        thread = threading.Thread(target=async_prepare_sam, args=(image_dir, model_path, filename,))
+        last_prepare_data = data
+        thread = threading.Thread(target=async_prepare_sam, args=(model_path, filename,))
         thread.start()
 
         logging.info("[Impact Pack] SAM model loaded. ")
@@ -392,6 +393,7 @@ def onprompt_for_switch(json_data):
                 else:
                     onprompt_cond_branch_info[k] = cond_input
 
+    unused_inversed_switches = set(inversed_switch_info)
     for k, v in json_data['prompt'].items():
         disable_targets = set()
 
@@ -401,7 +403,7 @@ def onprompt_for_switch(json_data):
                     if vv[1] + 1 != inversed_switch_info[vv[0]]:
                         disable_targets.add(kk)
                     else:
-                        del inversed_switch_info[k]
+                        unused_inversed_switches.discard(vv[0])
 
                 if vv[0] in disabled_switch:
                     disable_targets.add(kk)
@@ -422,8 +424,8 @@ def onprompt_for_switch(json_data):
             del v['inputs'][kk]
 
     # inversed_switch - select out of range
-    for target in inversed_switch_info.keys():
-        del json_data['prompt'][target]['inputs']['input']
+    for target in unused_inversed_switches:
+        json_data['prompt'][target]['inputs'].pop('input', None)
 
 
 def onprompt_for_pickers(json_data):
@@ -552,6 +554,12 @@ def onprompt_populate_wildcards(json_data):
 
                 PromptServer.instance.send_sync("impact-node-feedback", {"node_id": k, "widget_name": "populated_text", "type": "STRING", "value": inputs['populated_text']})
                 updated_widget_values[k] = inputs['populated_text']
+
+            # Static text can share cache entries; preserve seeds for syntax markers and links.
+            populated_text = inputs['populated_text']
+            if isinstance(inputs['seed'], int) and isinstance(populated_text, str):
+                if '{' not in populated_text and '__' not in populated_text:
+                    inputs['seed'] = 0
 
             if inputs['mode'] == 'reproduce':
                 PromptServer.instance.send_sync("impact-node-feedback", {"node_id": k, "widget_name": "mode", "type": "STRING", "value": 'populate'})

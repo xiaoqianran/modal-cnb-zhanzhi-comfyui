@@ -77,6 +77,7 @@ from .nodes.model_optimization_nodes import (
 )
 from .nodes.lora_nodes import LoraExtractKJ, LoraReduceRank
 from .nodes.image_transform_node import ImageTransformKJ, BBOXToBoundingBoxKJ
+from .nodes.image_compare_node import ImageCompareKJ
 from .nodes.sharpen_nodes import ImageSharpenKJ
 from .nodes.nodes_looping import LOOP_NODES
 from .nodes.hdr_preview_node import HDRPreviewKJ
@@ -191,6 +192,7 @@ NODE_CONFIG = {
     "EncodeVideoComponents": {"class": EncodeVideoComponents, "name": "Encode Video Components"},
     "DecodeAndSaveVideo": {"class": DecodeAndSaveVideo, "name": "Decode And Save Video"},
     "ImageTransformKJ": {"class": ImageTransformKJ, "name": "Image Transform KJ"},
+    "ImageCompareKJ": {"class": ImageCompareKJ, "name": "Image Compare KJ"},
     "BBOXToBoundingBoxKJ": {"class": BBOXToBoundingBoxKJ, "name": "BBOX to Bounding Box KJ"},
     "Ideogram4PromptBuilderKJ": {"class": Ideogram4PromptBuilderKJ, "name": "Ideogram 4 Prompt Builder KJ"},
     "Flux3PromptBuilderKJ": {"class": Flux3PromptBuilderKJ, "name": "FLUX.3 Prompt Builder KJ"},
@@ -425,3 +427,32 @@ if hasattr(PromptServer, "instance"):
             )
         except Exception:
             logging.exception("KJNodes: failed to register /kjweb_async static route")
+
+    import asyncio
+    import os
+    import folder_paths
+
+    @PromptServer.instance.routes.post("/kjnodes/model_mtimes")
+    async def kjnodes_model_mtimes(request):
+        # modified times for a combo's model files (Nodes 2.0 folder view date sort); only names already in a model folder listing
+        try:
+            values = (await request.json()).get("values")
+        except Exception:
+            values = None
+        if not isinstance(values, list):
+            return web.json_response({"error": "values must be a list"}, status=400)
+        wanted = {v for v in values[:50000] if isinstance(v, str)}
+
+        def stat():
+            # the combo list came from object_info, so its folder is already in the filename cache; pick the best match
+            folder, names = max(((name, wanted.intersection(entry[0])) for name, entry in list(folder_paths.filename_list_cache.items())),
+                                key=lambda x: len(x[1]), default=(None, set()))
+            out = {}
+            for name in names:
+                try:
+                    out[name] = os.path.getmtime(folder_paths.get_full_path(folder, name))
+                except (OSError, TypeError):
+                    pass
+            return out
+
+        return web.json_response(await asyncio.to_thread(stat))

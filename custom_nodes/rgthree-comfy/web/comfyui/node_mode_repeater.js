@@ -68,7 +68,9 @@ class NodeModeRepeater extends BaseCollectorNode {
                 }
             }
             else {
-                changeModeOfNodes(inputNode, this.mode);
+                if (!this.configuring) {
+                    changeModeOfNodes(inputNode, this.mode);
+                }
             }
         }
         this.hasTogglerOutput = hasTogglerOutput;
@@ -89,6 +91,9 @@ class NodeModeRepeater extends BaseCollectorNode {
     onModeChange(from, to) {
         var _a, _b;
         super.onModeChange(from, to);
+        if (this.configuring) {
+            return;
+        }
         const linkedNodes = getConnectedInputNodesAndFilterPassThroughs(this).filter((node) => node.type !== NodeTypesString.NODE_MODE_RELAY);
         if (linkedNodes.length) {
             for (const node of linkedNodes) {

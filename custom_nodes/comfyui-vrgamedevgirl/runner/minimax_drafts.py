@@ -1,0 +1,163 @@
+"""Split MiniMax two-pass graphs at the original pass-1 sampler output."""
+
+import copy
+import json
+import os
+import re
+import uuid
+
+
+def _draft_folder(project_folder, draft_id):
+    if not os.path.isdir(project_folder):
+        raise ValueError("The draft project folder does not exist.")
+    if not isinstance(draft_id, str) or len(draft_id) != 32 or any(c not in "0123456789abcdef" for c in draft_id):
+        raise ValueError("Invalid MiniMax draft id.")
+    root = os.path.realpath(project_folder)
+    folder = os.path.join(root, "minimax_drafts", draft_id)
+    if os.path.commonpath([root, os.path.realpath(folder)]) != root:
+        raise ValueError("Draft checkpoint must remain inside the project.")
+    return folder
+
+
+def _remove_other_video_outputs(prompt):
+    for key in list(prompt):
+        if key != "142" and prompt[key]["class_type"] == "VHS_VideoCombine":
+            del prompt[key]
+
+
+def _prune_draft_graph(prompt):
+    roots = ["142"] + [key for key, node in prompt.items() if node["class_type"] == "VRGDG_MiniMaxH3SaveLatent"]
+    keep = set()
+    def visit(key):
+        if key in keep:
+            return
+        keep.add(key)
+        for value in prompt[key].get("inputs", {}).values():
+            if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str) and value[0] in prompt and isinstance(value[1], int):
+                visit(value[0])
+    for key in roots:
+        visit(key)
+    return {key: node for key, node in prompt.items() if key in keep}
+
+
+def _build_minimax_draft(result, payload):
+    if "125" not in result["prompt"] or not ("two_pass" in result or "advanced_two_pass" in result):
+        raise ValueError("Draft rendering requires a MiniMax two-pass workflow.")
+    draft_id = uuid.uuid4().hex
+    folder = _draft_folder(payload["project_folder"], draft_id)
+    os.makedirs(folder)
+    saved = copy.deepcopy(result)
+    saved["draft_id"] = draft_id
+    saved["draft_scene_number"] = int(payload["scene_number"])
+    saved["draft_start"] = float(payload["timeline_start_seconds"])
+    saved["draft_end"] = float(payload["timeline_end_seconds"])
+    saved["draft_restore_audio"] = payload.get("draft_restore_audio") or {}
+    saved["draft_steps"] = {"pass1": result["prompt"]["124"]["inputs"]["steps"], "pass2": result["prompt"]["190"]["inputs"]["value"]}
+    with open(os.path.join(folder, "workflow.json"), "w", encoding="utf-8") as handle:
+        json.dump(saved, handle)
+    draft = copy.deepcopy(saved)
+    prompt = draft["prompt"]
+    _remove_other_video_outputs(prompt)
+    prompt["draft_save"] = {"class_type": "VRGDG_MiniMaxH3SaveDraft", "inputs": {
+        "latent": ["125", 0], "checkpoint_path": os.path.join(folder, "pass1.pt"),
+    }}
+    prompt["draft_decode"] = {"class_type": "VAEDecode", "inputs": {
+        "samples": ["draft_save", 0], "vae": ["119", 0],
+    }}
+    prompt["142"]["inputs"]["images"] = ["draft_decode", 0]
+    prompt["142"]["inputs"]["filename_prefix"] += "_draft_stage1"
+    for node in prompt.values():
+        if node["class_type"] == "VRGDG_MiniMaxH3SaveLatent":
+            node["inputs"]["latent"] = ["125", 0]
+    draft["prompt"] = _prune_draft_graph(prompt)
+    return draft
+
+
+_DIFFUSION_LOADERS = {"DiffusionModelLoaderKJ": "model_name", "UNETLoader": "unet_name"}
+
+
+def _draft_diffusion_models(prompt):
+    """Return the diffusion model files a saved draft graph loads."""
+    return sorted({
+        os.path.basename(str(node["inputs"].get(key) or ""))
+        for node in prompt.values()
+        for class_type, key in _DIFFUSION_LOADERS.items()
+        if node.get("class_type") == class_type and node["inputs"].get(key)
+    })
+
+
+# The names the MiniMax H3 Turbo LoRAs are released under: minimax_h3_{fl2v|ref2v}_[lightx2v_]turbo_{N}step_v{X.Y}...
+_TURBO_LORA = re.compile(r"^minimax_h3_(fl2v|ref2v)_(lightx2v_)?turbo_(\d+)step_v(\d+(?:\.\d+)*)", re.IGNORECASE)
+
+
+def _turbo_lora(name):
+    """Return the family, kind, step count and version of a Turbo LoRA file name, or None for any other LoRA."""
+    match = _TURBO_LORA.match(re.split(r"[\\/]", str(name or ""))[-1])
+    if not match:
+        return None
+    return {
+        "family": match.group(1).lower(), "lightx": bool(match.group(2)), "steps": int(match.group(3)),
+        "version": tuple(int(part) for part in match.group(4).split(".")),
+    }
+
+
+def _installed_turbo_lora(wanted, installed):
+    """Return the newest installed Turbo LoRA of the same family, kind and step count.
+
+    Full LoRAs without "comfy" in the name are the original-format files, which ComfyUI does not load.
+    """
+    found = []
+    for name in installed:
+        lora = _turbo_lora(name)
+        if lora and all(lora[key] == wanted[key] for key in ("family", "lightx", "steps")) and (lora["lightx"] or "comfy" in name.lower()):
+            found.append((lora["version"], name))
+    return max(found, key=lambda item: item[0])[1] if found else None
+
+
+def _replace_missing_turbo_loras(result, installed):
+    """Point every LoRA loader whose Turbo LoRA is no longer installed at the newest installed one.
+
+    A draft keeps the Turbo LoRA names it was made with and a newer release replaces the old file, so finishing
+    it would fail with "Value not in list". The replacement keeps the family, kind and step count. Other LoRAs, and
+    Turbo LoRAs with no installed match, stay as saved. Returns the names it changed, old and new.
+    """
+    installed = [name for name in installed or [] if isinstance(name, str)]
+    changed = []
+    for node in result["prompt"].values():
+        inputs = node.get("inputs")
+        name = inputs.get("lora_name") if isinstance(inputs, dict) else None
+        if not isinstance(name, str) or not name or name in installed:
+            continue
+        wanted = _turbo_lora(name)
+        replacement = _installed_turbo_lora(wanted, installed) if wanted else None
+        if replacement:
+            inputs["lora_name"] = replacement
+            changed.append((name, replacement))
+    return changed
+
+
+def _build_minimax_finalize(payload, installed_loras=None):
+    folder = _draft_folder(payload["project_folder"], payload["draft_id"])
+    checkpoint = os.path.join(folder, "pass1.pt")
+    if not os.path.isfile(checkpoint):
+        raise FileNotFoundError("The saved pass-1 latent is missing. Render a new draft first.")
+    with open(os.path.join(folder, "workflow.json"), encoding="utf-8") as handle:
+        result = json.load(handle)
+    # Finalize replays the draft's saved graph, so a draft made with another diffusion model
+    # would ignore the current model. Report it instead of building that graph.
+    current_model = os.path.basename(str(payload.get("diffusion_model_name") or "").strip())
+    draft_models = _draft_diffusion_models(result["prompt"])
+    if current_model and draft_models and current_model not in draft_models:
+        return {"stale_draft": True, "draft_models": draft_models, "current_model": current_model}
+    if int(payload["scene_number"]) != result["draft_scene_number"]:
+        raise ValueError("This draft belongs to a different scene.")
+    if abs(float(payload["timeline_start_seconds"]) - result["draft_start"]) > 0.001 or abs(float(payload["timeline_end_seconds"]) - result["draft_end"]) > 0.001:
+        raise ValueError("The scene timing changed. Render a new draft before finalizing.")
+    prompt = result["prompt"]
+    _remove_other_video_outputs(prompt)
+    # Replace the sampler itself, so every pass-2 consumer reuses exactly the saved output.
+    prompt["125"] = {"class_type": "VRGDG_MiniMaxH3LoadDraft", "inputs": {"checkpoint_path": checkpoint}}
+    prompt["142"]["inputs"]["filename_prefix"] += "_finalized"
+    result["prompt"] = _prune_draft_graph(prompt)
+    _replace_missing_turbo_loras(result, installed_loras)
+    return result

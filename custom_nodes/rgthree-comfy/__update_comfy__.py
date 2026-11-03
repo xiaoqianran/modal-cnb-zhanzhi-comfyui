@@ -4,16 +4,38 @@
 # Quick shell version: ls | xargs -I % sh -c 'echo; echo %; git -C % pull'
 
 import os
+import re
 from subprocess import Popen, PIPE, STDOUT
+
+from py.utils_userdata import read_userdata_json, save_userdata_json, delete_userdata_file
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(THIS_DIR)
 os.chdir("../")
 
 
-def pull_path(path, origin=None, print_col_max=15, silent=False):
+def pull_path(path, cache_key=None, origin=None, print_col_max=15, silent=False, cached_data=None):
+  if cached_data is None:
+    cached_data = {}
+  if cache_key is None:
+    cache_key = path
   if not silent and path != '../':
     print(f"🗀  {path:.<{print_col_max}}", end='')
+
+  if cache_key not in cached_data:
+    cached_data[cache_key] = {}
+  path_data = cached_data[cache_key]
+  output = ''
+
+  if 'head_branch' not in path_data:
+    p = Popen(["git", "-C", path, "remote", "show", 'origin'], stdout=PIPE, stderr=STDOUT)
+    output, _error = p.communicate()
+    match = re.search(r'HEAD branch:\s*([\S]*)', output.decode())
+    if not match:
+      return (False, output,)
+    path_data['head_branch'] = match.group(1)
+
+  origin = path_data['head_branch']
 
   # Try the pull
   args = ["git", "-C", path, "pull"]
@@ -32,7 +54,9 @@ def pull_path(path, origin=None, print_col_max=15, silent=False):
       print(f' \33[31m🞫 Error: Needs Restore\33[0m \n {output}')
     p = Popen(["git", "-C", path, "restore", "."], stdout=PIPE, stderr=STDOUT)
     _output, _error = p.communicate()
-    success, i_output = pull_path(path, origin=origin, print_col_max=print_col_max, silent=True)
+    success, i_output = pull_path(
+      path, origin=origin, print_col_max=print_col_max, silent=True, cached_data=cached_data
+    )
     if not silent:
       print(f"   {'':.<{print_col_max}}", end='')
     if success:
@@ -43,25 +67,6 @@ def pull_path(path, origin=None, print_col_max=15, silent=False):
       if not silent:
         print(f' \33[31m🞫 Unknown Error\33[0m \n {i_output}')
       return (False, i_output,)
-
-  if 'You are not currently on a branch' in output:
-    if not silent:
-      print(' \33[31m🞫 Error: Needs Branch\33[0m')
-      print(f"   {'':.<{print_col_max}} \33[33m🡅 Trying main.\33[0m")
-    m_success, m_output = pull_path(path, origin='main', print_col_max=print_col_max, silent=True)
-    if not m_success and 'fatal: couldn\'t find remote ref main' in m_output:
-      if not silent:
-        print(f"   {'':.<{print_col_max}} \33[31m🞫 Error: No main\33[0m")
-        print(f"   {'':.<{print_col_max}} \33[33m🡅 Trying master.\33[0m")
-    m_success, m_output = pull_path(path, origin='master', print_col_max=print_col_max, silent=True)
-    if m_success:
-      if not silent:
-        print(f"   {'':.<{print_col_max}} \33[32m🗸 Updated\33[0m")
-      return (True, m_output,)
-    else:
-      if not silent:
-        print(f"   {'':.<{print_col_max}} \33[31m🞫 Error: No master\33[0m")
-      return (False, m_output,)
 
   if not silent:
     print(f' \33[33m🡅 Needs update.\33[0m \n {output}', end='')
@@ -82,9 +87,11 @@ if len(custom_extensions) == 0:
 else:
   custom_extensions_name_max += 6
 
+cached_data = read_userdata_json('update_comfy_dirs', {})
+
 # Update ComfyUI itself.
 print(f"{'Updating ComfyUI ':.<{custom_extensions_name_max}}", end='')
-pull_path('../', origin='master')
+pull_path('../', cache_key='ComfyUI', origin='master', cached_data=cached_data)
 
 # If we have custom nodes, update them as well.
 if len(custom_extensions) > 0:
@@ -93,4 +100,10 @@ if len(custom_extensions) > 0:
     directory = custom_extension['directory']
     if 'rgthree' in directory or directory.startswith('__'):
       continue
-    pull_path(directory, print_col_max=custom_extensions_name_max)
+    pull_path(
+      directory,
+      cache_key=directory,
+      print_col_max=custom_extensions_name_max,
+      cached_data=cached_data
+    )
+  save_userdata_json('update_comfy_dirs', cached_data)

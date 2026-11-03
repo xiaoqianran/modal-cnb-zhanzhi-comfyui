@@ -87,7 +87,8 @@ def _sanitize_mask_tensor(mask: torch.Tensor) -> torch.Tensor:
     if mask.numel() == 0:
         return None
     mask = mask.clone()
-    if not mask.is_floating_point():
+    is_integer_mask = not mask.is_floating_point()
+    if is_integer_mask:
         mask = mask.float()
     mask = torch.nan_to_num(mask, nan=0.0, posinf=1.0, neginf=0.0)
 
@@ -132,10 +133,32 @@ def _sanitize_mask_tensor(mask: torch.Tensor) -> torch.Tensor:
     if mask.ndim > 3:
         mask = mask.reshape(mask.shape[0], mask.shape[-2], mask.shape[-1])
 
-    if mask.numel() > 0 and mask.max() > 1.0:
-        mask = mask / 255.0
+    # Integer masks above 1 are 0..255. Float masks only count as 0..255 when clearly above 1:
+    # blur/resize noise can push a 0..1 mask slightly over 1.0 (issue #182).
+    if mask.numel() > 0:
+        peak = mask.max()
+        if (is_integer_mask and peak > 1.0) or peak > 2.0:
+            mask = mask / 255.0
     mask = mask.clamp(0.0, 1.0)
     return mask
+
+
+def _add_opaque_alpha(image: torch.Tensor) -> torch.Tensor:
+    # [..., 1 or 3] -> [..., 4] with alpha = 1. Returns a new tensor.
+    if image.shape[-1] == 1:
+        image = image.repeat_interleave(3, dim=-1)
+    return torch.cat([image, torch.ones_like(image[..., :1])], dim=-1)
+
+
+def _has_pasted_transparency(image: torch.Tensor, mask: torch.Tensor) -> bool:
+    # True when an RGBA image has clearly transparent pixels where the mask will paste it.
+    # Opaque RGBA outputs (alpha ~1, e.g. regular Qwen 2.1 edits) return False.
+    if image.shape[-1] != 4:
+        return False
+    mask = mask.to(device=image.device)
+    if mask.ndim == image.ndim:
+        mask = mask[..., 0]
+    return bool(((image[..., 3] < 0.5) & (mask > 0)).any())
 
 
 class ProcessorLogic(ABC):
@@ -288,6 +311,13 @@ class ProcessorLogic(ABC):
             resized_image = resized_image[:, offset_y:offset_y + actual_h, offset_x:offset_x + actual_w]
             resized_mask = resized_mask[:, offset_y:offset_y + actual_h, offset_x:offset_x + actual_w]
 
+        # Keep the inpainted transparency when the canvas has no alpha (issue #181: LoadImage
+        # drops alpha, then a model like Qwen 2.1 returns RGBA with transparent areas).
+        # The canvas is treated as fully opaque. Opaque RGBA inpaints keep the RGB output below.
+        if canvas_crop.shape[-1] in [1, 3] and _has_pasted_transparency(resized_image, resized_mask):
+            canvas_image = _add_opaque_alpha(canvas_image)
+            canvas_crop = canvas_image[:, crop_y1:crop_y2, crop_x1:crop_x2]
+
         # --- Channel reconciliation (defensive handling of RGB vs RGBA vs Grayscale) ---
         c_canvas = canvas_crop.shape[-1]
         c_inpaint = resized_image.shape[-1]
@@ -346,6 +376,17 @@ class ProcessorLogic(ABC):
         return output_image
 
 
+def _pil_resize_image(chw: torch.Tensor, width: int, height: int, algorithm_enum) -> torch.Tensor:
+    # chw: [C, H, W]. Resize color and alpha separately: Pillow's RGBA resize
+    # premultiplies by alpha, which destroys colors in (semi-)transparent areas.
+    chw = chw.float().cpu()
+    if chw.shape[0] == 4:
+        rgb = F.to_tensor(F.to_pil_image(chw[:3]).resize((width, height), algorithm_enum))
+        alpha = F.to_tensor(F.to_pil_image(chw[3:4]).resize((width, height), algorithm_enum))
+        return torch.cat([rgb, alpha], dim=0)
+    return F.to_tensor(F.to_pil_image(chw).resize((width, height), algorithm_enum))
+
+
 def _get_pil_resampling(algorithm: str):
     if not isinstance(algorithm, str):
         return Image.Resampling.BILINEAR
@@ -385,8 +426,7 @@ class CPUProcessorLogic(ProcessorLogic):
         algorithm_enum = _get_pil_resampling(algorithm)
         results = []
         for i in range(samples.shape[0]):
-            samples_pil: Image.Image = F.to_pil_image(samples[i].float().cpu()).resize((width, height), algorithm_enum)
-            results.append(F.to_tensor(samples_pil))
+            results.append(_pil_resize_image(samples[i], width, height, algorithm_enum))
         samples = torch.stack(results, dim=0)
         samples = samples.movedim(1, -1)
         return samples
@@ -926,8 +966,7 @@ class GPUProcessorLogic(ProcessorLogic):
         algorithm_enum = _get_pil_resampling(algorithm)
         results = []
         for i in range(samples.shape[0]):
-            samples_pil: Image.Image = F.to_pil_image(samples[i].float().cpu()).resize((width, height), algorithm_enum)
-            results.append(F.to_tensor(samples_pil))
+            results.append(_pil_resize_image(samples[i], width, height, algorithm_enum))
         samples = torch.stack(results, dim=0).to(original_device)
         samples = samples.movedim(1, -1)
         return samples
@@ -1997,6 +2036,10 @@ class InpaintStitchImproved:
 
             one_image, = self.inpaint_stitch_single_image(one_stitcher, one_image, processor)
             results.append(one_image.squeeze(0))
+
+        # Images that kept transparency come out RGBA; give the rest an opaque alpha so the batch stacks
+        if any(r.shape[-1] == 4 for r in results):
+            results = [r if r.shape[-1] == 4 else _add_opaque_alpha(r) for r in results]
 
         result_batch = torch.stack(results, dim=0)
         result_batch = result_batch.cpu()

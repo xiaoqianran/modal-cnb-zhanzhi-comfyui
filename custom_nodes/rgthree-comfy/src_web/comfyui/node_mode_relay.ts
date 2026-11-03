@@ -5,7 +5,7 @@ import type {
   LGraphEventMode,
   LGraphNode,
   LLink,
-  Vector2,
+  Point,
   ISerialisedNode,
 } from "@comfyorg/frontend";
 
@@ -101,6 +101,10 @@ class NodeModeRelay extends BaseCollectorNode {
 
   override onModeChange(from: LGraphEventMode | undefined, to: LGraphEventMode) {
     super.onModeChange(from, to);
+    if (this.configuring) {
+      // Do not relay our mode while the workflow is being restored; loading must not rewrite other nodes.
+      return;
+    }
     // If we aren't connected to anything, then we'll use our mode to relay when it changes.
     if (this.inputs.length <= 1 && !this.isInputConnected(0) && this.isAnyOutputConnected()) {
       const [n, v] = logger.infoParts(`Mode change without any inputs; relaying our mode.`);
@@ -132,7 +136,7 @@ class NodeModeRelay extends BaseCollectorNode {
     }
   }
 
-  override computeSize(out: Vector2) {
+  override computeSize(out: Point) {
     let size = super.computeSize(out);
     if (
       this.properties["on_muted_inputs"] !== "MUTE" ||
