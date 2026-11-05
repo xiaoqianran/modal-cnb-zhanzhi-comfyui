@@ -19,7 +19,7 @@ from comfy_api.latest import io
 import re
 import latent_preview
 
-from ..helper               import initialize_or_scale, get_res4lyf_scheduler_list, OptionsManager, ExtraOptions, extract_cond_from_guider
+from ..helper               import initialize_or_scale, get_res4lyf_scheduler_list, OptionsManager, ExtraOptions, extract_cond_from_guider, clamp_dtype, get_torch_device
 from ..res4lyf              import RESplain
 from ..latents              import normalize_zscore, get_orthogonal
 from ..sigmas               import get_sigmas
@@ -79,6 +79,7 @@ def generate_init_noise(x, seed, noise_type_init, noise_stdev, noise_mean, noise
         noise_dtype = EO("noise_dtype", EO("default_dtype", torch.float64, debugMode=2), debugMode=2)
     else:
         noise_dtype = torch.float64
+    noise_dtype = clamp_dtype(noise_dtype, x.device)
     x = x.to(noise_dtype)
 
     if EO is not None and EO("bypass_noise_norm") and noise_type_init == "gaussian":
@@ -250,9 +251,7 @@ class SharkSampler:
                         
             extra_options  += "\n" + options_mgr.get('extra_options', "")
             EO              = ExtraOptions(extra_options)
-            default_dtype   = EO("default_dtype", torch.float64)
-            work_dtype      = EO("work_dtype",    torch.float32)   # latent-sized tensors; sigmas stay at default_dtype
-            default_device  = EO("work_device", "cuda" if torch.cuda.is_available() else "cpu")
+            default_device  = EO("work_device", str(get_torch_device()))
             
             noise_stdev     = options_mgr.get('noise_init_stdev', noise_stdev)
             noise_mean      = options_mgr.get('noise_init_mean',  noise_mean)
@@ -351,6 +350,9 @@ class SharkSampler:
             else:
                 guider = None
                 work_model = model
+
+            default_dtype   = clamp_dtype(EO("default_dtype", torch.float64), default_device, work_model.load_device)
+            work_dtype      = clamp_dtype(EO("work_dtype",    torch.float32), default_device, work_model.load_device)   # latent-sized tensors; sigmas stay at default_dtype
             
             if latent_image is not None:
                 latent_image = latent_image.copy()
@@ -458,7 +460,7 @@ class SharkSampler:
                     x_lr        = latent_image['samples'].clone() if latent_image is not None else None
                     x_lr_bs     = 1                               if x_lr         is     None else x_lr.shape[-4]
                     x_lr_dtype  = default_dtype                   if x_lr         is     None else x_lr.dtype
-                    x_lr_device = 'cuda'                          if x_lr         is     None else x_lr.device
+                    x_lr_device = get_torch_device()              if x_lr         is     None else x_lr.device
                     
                     ultracascade_stage_up_upscale_align_corners = EO("ultracascade_stage_up_upscale_align_corners", False)
                     ultracascade_stage_up_upscale_mode          = EO("ultracascade_stage_up_upscale_mode",         "bicubic")

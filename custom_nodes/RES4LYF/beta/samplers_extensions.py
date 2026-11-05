@@ -289,7 +289,7 @@ class ClownOptions_DetailBoost_Beta:
         options = options if options is not None else {}
         
         default_dtype = torch.float64
-        default_device = torch.device('cuda')
+        default_device = torch.device('cpu')
         
         if noise_scaling_type.endswith("_normal"):
             sampler_scaling_normalize = True
@@ -298,11 +298,15 @@ class ClownOptions_DetailBoost_Beta:
         if noise_scaling_end_step == -1:
             noise_scaling_end_step = MAX_STEPS
         
-        if noise_scaling_weights == None: 
+        if noise_scaling_weights is None:
             noise_scaling_weights = initialize_or_scale(None, noise_scaling_weight, MAX_STEPS).to(default_dtype).to(default_device)
+        else:
+            noise_scaling_weights = noise_scaling_weights.to(device=default_device, dtype=default_dtype)
         
-        if noise_scaling_etas == None: 
+        if noise_scaling_etas is None:
             noise_scaling_etas = initialize_or_scale(None, noise_scaling_eta, MAX_STEPS).to(default_dtype).to(default_device)
+        else:
+            noise_scaling_etas = noise_scaling_etas.to(device=default_device, dtype=default_dtype)
         
         noise_scaling_prepend = torch.zeros((noise_scaling_start_step,), dtype=default_dtype, device=default_device)
         
@@ -398,12 +402,7 @@ class ClownOptions_SigmaScaling_Beta:
             ):
         
         options = options if options is not None else {}
-        
-        default_dtype = torch.float64
-        default_device = torch.device('cuda')
-        
-        
-        
+
         options['noise_anchor']           = noise_anchor_sde
         options['s_noise']                = s_noise
         options['s_noise_substep']        = s_noise_substep
